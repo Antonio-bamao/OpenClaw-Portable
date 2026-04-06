@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Provider 设置说明</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+        background: #f4f7fb;
+        color: #15253a;
+        padding: 48px;
+      }
+      article {
+        max-width: 920px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 28px;
+        border: 1px solid rgba(21, 37, 58, 0.08);
+        padding: 32px;
+        box-shadow: 0 24px 72px rgba(18, 37, 58, 0.08);
+      }
+      h1 { margin-top: 0; }
+      h2 { margin-top: 32px; }
+      p, li { line-height: 1.8; color: #5b6b7e; }
+      code { background: rgba(15, 108, 189, 0.08); padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <article>
+      <h1>Provider 与 API Key 设置说明</h1>
+      <p>首版开发版内置 4 个 Provider 模板：通义千问、DeepSeek、OpenRouter、自定义。</p>
+      <h2>推荐默认</h2>
+      <p>推荐先使用通义千问模板，默认 Base URL 会自动填成 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>。</p>
+      <h2>离线模式</h2>
+      <p>如果你暂时没有 API Key，可以在首次向导中留空并进入离线模式。主面板仍可启动 mock runtime 并查看本地 WebUI 占位页。</p>
+    </article>
+  </body>
+</html>

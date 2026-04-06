@@ -1,0 +1,7 @@
+{
+  "id": "dashscope",
+  "displayName": "通义千问",
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "defaultModel": "qwen-max",
+  "order": 10
+}

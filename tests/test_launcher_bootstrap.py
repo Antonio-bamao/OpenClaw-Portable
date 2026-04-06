@@ -1,0 +1,84 @@
+import os
+import shutil
+import unittest
+import uuid
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication
+
+from launcher.bootstrap import AppRoute, LauncherBootstrap
+from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
+from launcher.core.paths import PortablePaths
+from launcher.ui.main_window import OpenClawLauncherWindow
+from launcher.ui.wizard import SetupWizardWindow
+
+
+def make_workspace_temp_dir() -> Path:
+    temp_root = Path.cwd() / "tmp"
+    temp_root.mkdir(exist_ok=True)
+    created = temp_root / f"bootstrap-{uuid.uuid4().hex[:8]}"
+    created.mkdir(parents=True, exist_ok=True)
+    return created
+
+
+def make_paths(temp_dir: Path) -> PortablePaths:
+    return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+
+
+def make_config(port: int = 18789) -> LauncherConfig:
+    return LauncherConfig(
+        admin_password="demo-pass",
+        provider_id="dashscope",
+        provider_name="通义千问",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model="qwen-max",
+        gateway_port=port,
+        bind_host="127.0.0.1",
+        first_run_completed=True,
+    )
+
+
+class LauncherBootstrapTests(unittest.TestCase):
+    def test_routes_to_setup_wizard_on_first_run(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            bootstrap = LauncherBootstrap(make_paths(temp_dir))
+            self.assertEqual(bootstrap.initial_route(), AppRoute.SETUP_WIZARD)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_routes_to_main_dashboard_when_config_exists(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            store = LauncherConfigStore(paths)
+            store.save(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            bootstrap = LauncherBootstrap(paths)
+            self.assertEqual(bootstrap.initial_route(), AppRoute.MAIN_DASHBOARD)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class LauncherUiSmokeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_builds_main_window_with_primary_actions(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.windowTitle(), "OpenClaw Portable")
+        self.assertEqual(window.primary_action_texts(), ["启动服务", "停止服务", "重新启动"])
+        self.assertEqual(window.secondary_action_texts(), ["打开 WebUI", "重新配置"])
+
+    def test_builds_wizard_with_expected_steps(self) -> None:
+        window = SetupWizardWindow()
+
+        self.assertEqual(window.step_titles(), ["设置密码", "选择 Provider", "填写 API Key", "测试连接", "完成配置"])
+
+
+if __name__ == "__main__":
+    unittest.main()

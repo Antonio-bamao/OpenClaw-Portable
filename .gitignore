@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+build/
+dist/
+*.spec
+*.log
+tmp/
+
+# Local portable runtime state
+state/.env
+state/openclaw.json
+state/sessions/
+state/channels/
+state/backups/
+state/workspace/memory/
+
+# Temporary brainstorming output
+.superpowers/
+.worktrees/
