@@ -1,4 +1,5 @@
 import shutil
+import socket
 import time
 import unittest
 import uuid
@@ -23,17 +24,32 @@ def make_paths(temp_dir: Path) -> PortablePaths:
     return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
 
 
-def make_config(port: int = 18789) -> LauncherConfig:
+def make_config(
+    port: int = 18789,
+    *,
+    provider_id: str = "dashscope",
+    provider_name: str = "通义千问",
+    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: str = "qwen-max",
+) -> LauncherConfig:
     return LauncherConfig(
         admin_password="demo-pass",
-        provider_id="dashscope",
-        provider_name="通义千问",
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model="qwen-max",
+        provider_id=provider_id,
+        provider_name=provider_name,
+        base_url=base_url,
+        model=model,
         gateway_port=port,
         bind_host="127.0.0.1",
         first_run_completed=True,
     )
+
+
+def reserve_free_port() -> int:
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
 
 
 def stage_mock_runtime(paths: PortablePaths) -> None:
@@ -113,6 +129,73 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertIn("API Key", state.message)
             self.assertIn("重新配置", state.message)
             self.assertIn("通义千问", state.message)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_pending_start_view_state_warns_about_openclaw_startup_delay(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            config = make_config(reserve_free_port())
+            controller.configure(config, SensitiveConfig(api_key="sk-demo"))
+
+            state = controller.load_pending_runtime_view_state()
+
+            self.assertEqual(state.status_label, "启动中")
+            self.assertIn("20-60 秒", state.status_detail)
+            self.assertIn("请勿关闭", state.message)
+            self.assertEqual(state.port_label, f"127.0.0.1:{config.gateway_port}")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_view_state_warns_when_custom_provider_config_is_incomplete(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            controller.configure(
+                make_config(
+                    provider_id="custom",
+                    provider_name="自定义",
+                    base_url="",
+                    model="",
+                ),
+                SensitiveConfig(api_key="sk-demo"),
+            )
+
+            state = controller.load_view_state()
+
+            self.assertIn("自定义 Provider", state.message)
+            self.assertIn("接口地址", state.message)
+            self.assertIn("模型名", state.message)
+            self.assertIn("重新配置", state.message)
+            self.assertEqual(state.provider_label, "自定义 / 待补充模型")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_pending_state_warns_before_start_when_custom_provider_config_is_incomplete(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            controller.configure(
+                make_config(
+                    port=reserve_free_port(),
+                    provider_id="custom",
+                    provider_name="自定义",
+                    base_url="",
+                    model="",
+                ),
+                SensitiveConfig(api_key="sk-demo"),
+            )
+
+            state = controller.load_pending_runtime_view_state()
+
+            self.assertEqual(state.status_label, "启动中")
+            self.assertIn("自定义 Provider", state.message)
+            self.assertIn("接口地址", state.message)
+            self.assertIn("重新配置", state.message)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

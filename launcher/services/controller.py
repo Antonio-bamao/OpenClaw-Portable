@@ -69,6 +69,26 @@ class LauncherController:
             offline_mode=not bool(sensitive.api_key),
         )
 
+    def load_pending_runtime_view_state(self, action: str = "start") -> LauncherViewState:
+        if self.store.is_first_run():
+            return self.load_view_state()
+
+        config, sensitive = self.store.load()
+        self._prepare_if_needed()
+        runtime_status = self.runtime_adapter.status()
+        port = runtime_status.port or config.gateway_port
+
+        return LauncherViewState(
+            status_label="重启中" if action == "restart" else "启动中",
+            status_detail=self._pending_status_detail(action),
+            port_label=f"{config.bind_host}:{port}",
+            runtime_detail=self._runtime_detail(),
+            provider_label=f"{config.provider_name} / {config.model}",
+            message=self._pending_runtime_message(config, sensitive, action),
+            webui_url="",
+            offline_mode=not bool(sensitive.api_key),
+        )
+
     def _prepare_if_needed(self) -> None:
         if self._prepared or self.store.is_first_run():
             return
@@ -95,6 +115,18 @@ class LauncherController:
             return "当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。"
         return "当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。"
 
+    def _pending_runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig, action: str) -> str:
+        if self.runtime_mode == "openclaw":
+            message = (
+                "正在重新启动真实 OpenClaw gateway，请勿关闭窗口。"
+                if action == "restart"
+                else "正在启动真实 OpenClaw gateway，首次启动可能需要 20-60 秒，请勿关闭窗口。"
+            )
+            if not sensitive.api_key:
+                return f"{message} 当前未配置 {config.provider_name} 的 API Key，启动后仍需通过“重新配置”补充。"
+            return message
+        return "正在启动本地 mock runtime，请稍候。"
+
     def _map_status_label(self, runtime_status: RuntimeStatus) -> str:
         mapping = {
             "running": "运行中",
@@ -112,6 +144,13 @@ class LauncherController:
             "idle": "请先完成配置。",
         }
         return mapping.get(runtime_status.state, "服务状态暂不可用。")
+
+    def _pending_status_detail(self, action: str) -> str:
+        if self.runtime_mode == "openclaw":
+            if action == "restart":
+                return "正在重新连接本地 gateway，请稍等。"
+            return "正在等待本地 gateway 就绪，首次启动可能需要 20-60 秒。"
+        return "正在启动本地 mock runtime，通常会在几秒内完成。"
 
     def _build_status_detail(self, runtime_status: RuntimeStatus) -> str:
         duration_label = self._runtime_duration_label(runtime_status.uptime_seconds)

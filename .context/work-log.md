@@ -127,3 +127,10 @@
 - 结果：主面板不再只显示高层 message，运行中的 runtime 会在状态细节里展示已运行时长，界面信息更接近真实控制台。
 - 验证：python -m unittest tests.test_launcher_controller tests.test_launcher_bootstrap 通过 12 个测试；python -m unittest discover -s tests 通过 36 个测试。
 - 下一步：继续补充真实 runtime 首启等待状态和进一步的 Provider 配置诊断，并评估 runtime/openclaw 的瘦身空间。
+
+## 2026-04-09 / Phase 2 Step 12｜补充真实运行时首启/重启时的等待状态提示
+- 目标：补充真实运行时首启/重启时的等待状态提示
+- 动作：按 TDD 为 LauncherController 新增 pending runtime view state 测试，并为 OpenClawLauncherApplication 新增启动/重启前先应用 pending 视图的顺序测试；实现 load_pending_runtime_view_state()，在 openclaw 模式下提供启动中/重启中、20-60 秒等待提示和请勿关闭窗口文案；在 app 层先刷新等待态并调用 processEvents，再执行同步 start/restart。
+- 结果：用户点击启动或重启后，主面板会先切换到启动中或重启中的等待状态，不再在真实 OpenClaw 首次启动的几十秒内显得像没有响应。
+- 验证：python -m unittest tests.test_launcher_controller tests.test_launcher_app 通过 10 个测试；python -m unittest discover -s tests 通过 39 个测试。
+- 下一步：继续补充真实 runtime 的进一步 Provider 配置诊断，并评估 runtime/openclaw 的瘦身空间与 U 盘读写性能。

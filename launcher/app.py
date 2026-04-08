@@ -66,6 +66,7 @@ class OpenClawLauncherApplication:
         self.show_main_window()
 
     def _handle_start(self) -> None:
+        self._show_pending_runtime_state("start")
         self._run_with_error_boundary(self.controller.start_runtime)
         self._refresh_main_view()
 
@@ -74,6 +75,7 @@ class OpenClawLauncherApplication:
         self._refresh_main_view()
 
     def _handle_restart(self) -> None:
+        self._show_pending_runtime_state("restart")
         self._run_with_error_boundary(self.controller.restart_runtime)
         self._refresh_main_view()
 
@@ -87,6 +89,11 @@ class OpenClawLauncherApplication:
     def _refresh_main_view(self) -> None:
         if self.main_window:
             self.main_window.apply_view_state(self.controller.load_view_state())
+
+    def _show_pending_runtime_state(self, action: str) -> None:
+        if self.main_window:
+            self.main_window.apply_view_state(self.controller.load_pending_runtime_view_state(action))
+            self.app.processEvents()
 
     def _run_with_error_boundary(self, action) -> None:
         try:
