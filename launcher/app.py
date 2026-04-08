@@ -10,16 +10,19 @@ from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.paths import PortablePaths
 from launcher.services.controller import LauncherController
 from launcher.services.provider_registry import ProviderTemplateRegistry
+from launcher.services.runtime_errors import format_runtime_error
+from launcher.services.runtime_mode import resolve_runtime_mode
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.theme import preferred_font
 from launcher.ui.wizard import SetupWizardWindow
 
 
 class OpenClawLauncherApplication:
-    def __init__(self, project_root: Path | None = None, node_command: str = "node") -> None:
+    def __init__(self, project_root: Path | None = None, node_command: str = "node", runtime_mode: str | None = None) -> None:
         self.project_root = project_root or Path(__file__).resolve().parent.parent
         self.paths = PortablePaths.for_root(self.project_root)
-        self.controller = LauncherController(self.paths, node_command=node_command)
+        selected_runtime_mode = resolve_runtime_mode(self.paths, requested_mode=runtime_mode)
+        self.controller = LauncherController(self.paths, node_command=node_command, runtime_mode=selected_runtime_mode)
         self.registry = ProviderTemplateRegistry(self.paths.provider_templates_dir)
         self.app = QApplication.instance() or QApplication(sys.argv)
         self.app.setFont(preferred_font())
@@ -89,7 +92,7 @@ class OpenClawLauncherApplication:
         try:
             action()
         except Exception as exc:  # noqa: BLE001
-            self._show_error(str(exc))
+            self._show_error(format_runtime_error(exc))
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self.main_window or self.wizard_window, "OpenClaw Portable", message)

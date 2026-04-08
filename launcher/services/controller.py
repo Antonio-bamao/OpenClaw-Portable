@@ -5,6 +5,7 @@ from launcher.core.paths import PortablePaths
 from launcher.models import LauncherViewState
 from launcher.runtime.base import RuntimeAdapter, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
+from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 
 
 class LauncherController:
@@ -12,11 +13,13 @@ class LauncherController:
         self,
         paths: PortablePaths,
         runtime_adapter: RuntimeAdapter | None = None,
+        runtime_mode: str = "mock",
         node_command: str = "node",
     ) -> None:
         self.paths = paths
         self.store = LauncherConfigStore(paths)
-        self.runtime_adapter = runtime_adapter or MockRuntimeAdapter(node_command=node_command)
+        self.runtime_mode = runtime_mode
+        self.runtime_adapter = runtime_adapter or self._build_runtime_adapter(runtime_mode, node_command)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
@@ -59,9 +62,9 @@ class LauncherController:
             status_label=status_label,
             status_detail=status_detail,
             port_label=f"{config.bind_host}:{port}",
-            runtime_detail="Node mock runtime / Phase 1 开发版",
+            runtime_detail=self._runtime_detail(),
             provider_label=f"{config.provider_name} / {config.model}",
-            message="当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。",
+            message=self._runtime_message(),
             webui_url=self.runtime_adapter.webui_url(),
             offline_mode=not bool(sensitive.api_key),
         )
@@ -72,6 +75,23 @@ class LauncherController:
         config, _ = self.store.load()
         self.runtime_adapter.prepare(config, self.paths)
         self._prepared = True
+
+    def _build_runtime_adapter(self, runtime_mode: str, node_command: str) -> RuntimeAdapter:
+        if runtime_mode == "mock":
+            return MockRuntimeAdapter(node_command=node_command)
+        if runtime_mode == "openclaw":
+            return OpenClawRuntimeAdapter(node_command=node_command)
+        raise ValueError(f"Unsupported runtime_mode: {runtime_mode}")
+
+    def _runtime_detail(self) -> str:
+        if self.runtime_mode == "openclaw":
+            return "OpenClaw gateway / v2026.4.8"
+        return "Node mock runtime / Phase 1 开发版"
+
+    def _runtime_message(self) -> str:
+        if self.runtime_mode == "openclaw":
+            return "当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。"
+        return "当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。"
 
     def _map_status_label(self, runtime_status: RuntimeStatus) -> str:
         mapping = {

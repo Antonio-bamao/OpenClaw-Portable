@@ -5,6 +5,8 @@ from pathlib import Path
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
 from launcher.core.paths import PortablePaths
+from launcher.runtime.mock_runtime import MockRuntimeAdapter
+from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.controller import LauncherController
 
 
@@ -42,6 +44,32 @@ def stage_mock_runtime(paths: PortablePaths) -> None:
 
 
 class LauncherControllerTests(unittest.TestCase):
+    def test_defaults_to_mock_runtime_adapter(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            controller = LauncherController(make_paths(temp_dir), node_command="node")
+
+            self.assertIsInstance(controller.runtime_adapter, MockRuntimeAdapter)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_can_select_real_openclaw_runtime_adapter(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            controller = LauncherController(make_paths(temp_dir), runtime_mode="openclaw", node_command="node")
+
+            self.assertIsInstance(controller.runtime_adapter, OpenClawRuntimeAdapter)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_unknown_runtime_mode(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            with self.assertRaisesRegex(ValueError, "runtime_mode"):
+                LauncherController(make_paths(temp_dir), runtime_mode="docker", node_command="node")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_loads_default_view_state_before_runtime_starts(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -54,6 +82,20 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertEqual(state.status_label, "已就绪")
             self.assertIn("通义千问", state.provider_label)
             self.assertIn("127.0.0.1", state.port_label)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_view_state_labels_real_openclaw_runtime_mode(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            state = controller.load_view_state()
+
+            self.assertEqual(state.runtime_detail, "OpenClaw gateway / v2026.4.8")
+            self.assertIn("真实 OpenClaw", state.message)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

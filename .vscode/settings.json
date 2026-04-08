@@ -1,0 +1,29 @@
+{
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/runtime/node": true,
+    "**/runtime/openclaw": true,
+    "**/tmp": true
+  },
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/runtime/node/**": true,
+    "**/runtime/openclaw/**": true,
+    "**/tmp/**": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/runtime/node": true,
+    "**/runtime/openclaw": true,
+    "**/tmp": true
+  }
+}

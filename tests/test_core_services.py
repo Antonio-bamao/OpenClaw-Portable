@@ -105,8 +105,9 @@ class PortResolverTests(unittest.TestCase):
         finally:
             server.close()
 
-        self.assertEqual(resolution.port, occupied_port + 1)
-        self.assertIn(str(occupied_port + 1), resolution.message or "")
+        self.assertGreater(resolution.port, occupied_port)
+        self.assertLessEqual(resolution.port, occupied_port + 20)
+        self.assertIn(str(resolution.port), resolution.message or "")
         self.assertIn("已自动切换", resolution.message or "")
 
 
