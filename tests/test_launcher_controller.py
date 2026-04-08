@@ -1,4 +1,5 @@
 import shutil
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -99,6 +100,22 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_view_state_warns_when_real_openclaw_api_key_is_missing(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            controller.configure(make_config(), SensitiveConfig(api_key=""))
+
+            state = controller.load_view_state()
+
+            self.assertTrue(state.offline_mode)
+            self.assertIn("API Key", state.message)
+            self.assertIn("重新配置", state.message)
+            self.assertIn("通义千问", state.message)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_starts_and_stops_runtime_through_controller(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -108,10 +125,12 @@ class LauncherControllerTests(unittest.TestCase):
             controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
 
             controller.start_runtime()
+            time.sleep(1.1)
             running = controller.load_view_state()
 
             self.assertEqual(running.status_label, "运行中")
             self.assertTrue(running.webui_url.startswith("http://127.0.0.1:"))
+            self.assertIn("已运行", running.status_detail)
 
             controller.stop_runtime()
             stopped = controller.load_view_state()

@@ -62,6 +62,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.runtime_card.set_value(view_state.runtime_detail)
         self.provider_card.set_value(view_state.provider_label)
         self.message_label.setText(view_state.message)
+        self.status_detail_label.setText(view_state.status_detail)
         self.footnote_label.setText(
             f"地址 {view_state.webui_url or '尚未启动'}  ·  "
             f"{'离线模式已开启' if view_state.offline_mode else '已配置 API Key，可进入联调'}"
@@ -106,6 +107,8 @@ class OpenClawLauncherWindow(QMainWindow):
         control_layout.addWidget(make_label("主控制台", "HeroTitle", size=18, weight=700))
         self.message_label = make_label(self.view_state.message, "MutedText")
         control_layout.addWidget(self.message_label)
+        self.status_detail_label = make_label(self.view_state.status_detail, "MutedText")
+        control_layout.addWidget(self.status_detail_label)
 
         button_row = QHBoxLayout()
         button_row.setSpacing(12)

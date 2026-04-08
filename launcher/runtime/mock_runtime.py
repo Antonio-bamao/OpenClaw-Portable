@@ -25,6 +25,7 @@ class MockRuntimeAdapter(RuntimeAdapter):
         self._stdout_log: Path | None = None
         self._stderr_log: Path | None = None
         self._last_state = "idle"
+        self._started_at_monotonic: float | None = None
 
     def prepare(self, config: LauncherConfig, paths: PortablePaths) -> None:
         paths.ensure_directories()
@@ -60,6 +61,7 @@ class MockRuntimeAdapter(RuntimeAdapter):
             )
         self._wait_until_ready()
         self._last_state = "running"
+        self._started_at_monotonic = time.monotonic()
 
     def stop(self) -> None:
         if not self._process:
@@ -73,6 +75,7 @@ class MockRuntimeAdapter(RuntimeAdapter):
                 self._process.wait(timeout=5)
         self._process = None
         self._last_state = "stopped"
+        self._started_at_monotonic = None
 
     def restart(self) -> None:
         self.stop()
@@ -87,6 +90,7 @@ class MockRuntimeAdapter(RuntimeAdapter):
                 port=self._port_resolution.port,
                 message=self._port_resolution.message,
                 pid=self._process.pid,
+                uptime_seconds=self._uptime_seconds(),
             )
         if self._process and self._process.poll() is not None:
             return RuntimeStatus(
@@ -96,6 +100,11 @@ class MockRuntimeAdapter(RuntimeAdapter):
                 pid=self._process.pid,
             )
         return RuntimeStatus(state=self._last_state, port=self._port_resolution.port, message=self._port_resolution.message)
+
+    def _uptime_seconds(self) -> int | None:
+        if self._started_at_monotonic is None:
+            return None
+        return max(0, int(time.monotonic() - self._started_at_monotonic))
 
     def webui_url(self) -> str:
         if not self._config or not self._port_resolution:

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
+from launcher.models import LauncherViewState
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.wizard import SetupWizardWindow
 
@@ -73,6 +74,24 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertEqual(window.windowTitle(), "OpenClaw Portable")
         self.assertEqual(window.primary_action_texts(), ["启动服务", "停止服务", "重新启动"])
         self.assertEqual(window.secondary_action_texts(), ["打开 WebUI", "重新配置"])
+        self.assertIn("mock runtime", window.status_detail_label.text())
+
+    def test_main_window_updates_status_detail_text(self) -> None:
+        window = OpenClawLauncherWindow()
+        updated_state = LauncherViewState(
+            status_label="运行中",
+            status_detail="本地运行时正在响应请求，已运行 01:05。",
+            port_label="127.0.0.1:18789",
+            runtime_detail="OpenClaw gateway / v2026.4.8",
+            provider_label="通义千问 / qwen-max",
+            message="当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。",
+            webui_url="http://127.0.0.1:18791",
+            offline_mode=False,
+        )
+
+        window.apply_view_state(updated_state)
+
+        self.assertEqual(window.status_detail_label.text(), updated_state.status_detail)
 
     def test_builds_wizard_with_expected_steps(self) -> None:
         window = SetupWizardWindow()

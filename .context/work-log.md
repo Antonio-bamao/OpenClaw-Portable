@@ -113,3 +113,17 @@
 - 结果：启动器弹窗不再直接暴露 package.json、healthy 等英文技术异常，真实 OpenClaw 缺运行时、首启超时和提前退出会给出可执行的中文处理建议，并指向 openclaw-runtime.err.log 供售后排查。
 - 验证：python -m unittest tests.test_runtime_errors 通过 5 个测试；python -m unittest discover -s tests 通过 34 个测试。
 - 下一步：继续补充真实运行时首启等待状态、Key 缺失/Provider 配置诊断和运行时瘦身评估。
+
+## 2026-04-08 / Phase 2 Step 10｜补充真实运行时 API Key 缺失时的主面板诊断提示
+- 目标：补充真实运行时 API Key 缺失时的主面板诊断提示
+- 动作：按 TDD 在 tests/test_launcher_controller.py 中新增真实 openclaw 模式且 API Key 为空的视图状态测试；确认 RED 后调整 LauncherController 的 runtime message 生成逻辑，让主面板在离线状态显示 Provider 名称、API Key 缺失和重新配置建议。
+- 结果：主面板在真实 OpenClaw 模式下不再用通用运行时文案掩盖空 Key 状态；用户可以直接看到当前 Provider 的 Key 未配置，并知道需要通过重新配置补充。
+- 验证：python -m unittest tests.test_launcher_controller 通过 7 个测试；python -m unittest discover -s tests 通过 35 个测试。
+- 下一步：继续补充真实 runtime 首启等待状态、运行时长展示，并评估 runtime/openclaw 的瘦身空间与 U 盘读写性能。
+
+## 2026-04-09 / Phase 2 Step 11｜在主面板展示运行时长并收口 status_detail 渲染
+- 目标：在主面板展示运行时长并收口 status_detail 渲染
+- 动作：按 TDD 扩展 tests/test_launcher_controller.py 与 tests/test_launcher_bootstrap.py，先锁住运行中状态需要出现已运行时长、主面板需要真正渲染 status_detail；为 RuntimeStatus 增加 uptime_seconds，给 mock/openclaw adapter 记录启动后运行秒数，控制器把秒数格式化为 mm:ss 或 hh:mm:ss，并在主面板显示 status_detail。
+- 结果：主面板不再只显示高层 message，运行中的 runtime 会在状态细节里展示已运行时长，界面信息更接近真实控制台。
+- 验证：python -m unittest tests.test_launcher_controller tests.test_launcher_bootstrap 通过 12 个测试；python -m unittest discover -s tests 通过 36 个测试。
+- 下一步：继续补充真实 runtime 首启等待状态和进一步的 Provider 配置诊断，并评估 runtime/openclaw 的瘦身空间。

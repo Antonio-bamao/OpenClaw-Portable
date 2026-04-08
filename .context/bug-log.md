@@ -136,3 +136,12 @@
 - 解决方案：新增项目级 `.vscode/settings.json`，在 `files.exclude`、`search.exclude` 和 `files.watcherExclude` 中排除 runtime/openclaw、runtime/node、dist、build、tmp、__pycache__ 与 .pytest_cache。
 - 预防措施：后续只要在仓库内保留大型构建产物，必须同时维护 `.gitignore` 与 IDE workspace exclude；长期仍需要评估 runtime 瘦身或外置缓存策略。
 - 状态：Resolved
+
+## OpenClaw adapter 测试把固定端口 18789 误当成永远空闲
+- 现象：完整测试在 test_openclaw_runtime_adapter 中偶发失败，OPENCLAW_GATEWAY_PORT 和 status().port 断言到 18789，但实际解析到了 18790。
+- 触发条件：运行 python -m unittest discover -s tests 时，宿主机上已有进程占用了 127.0.0.1:18789。
+- 影响：完整测试结果受机器端口占用影响而不稳定，会掩盖真实回归结果并降低验证可信度。
+- 根因：测试把固定端口写死为 18789，并隐含假设该端口永远可用；实际 adapter 契约允许 PortResolver 在端口被占用时回退到下一个可用端口。
+- 解决方案：为 tests/test_openclaw_runtime_adapter.py 增加 reserve_free_port()，改用动态空闲端口构造配置和断言，避免依赖宿主机固定端口状态。
+- 预防措施：后续凡是涉及端口的测试都优先使用动态空闲端口或显式占用/释放策略，不把固定端口当成可重复前提。
+- 状态：Resolved

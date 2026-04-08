@@ -56,7 +56,7 @@ class LauncherController:
         runtime_status = self.runtime_adapter.status()
         status_label = self._map_status_label(runtime_status)
         port = runtime_status.port or config.gateway_port
-        status_detail = runtime_status.message or self._map_status_detail(runtime_status)
+        status_detail = self._build_status_detail(runtime_status)
 
         return LauncherViewState(
             status_label=status_label,
@@ -64,7 +64,7 @@ class LauncherController:
             port_label=f"{config.bind_host}:{port}",
             runtime_detail=self._runtime_detail(),
             provider_label=f"{config.provider_name} / {config.model}",
-            message=self._runtime_message(),
+            message=self._runtime_message(config, sensitive),
             webui_url=self.runtime_adapter.webui_url(),
             offline_mode=not bool(sensitive.api_key),
         )
@@ -88,7 +88,9 @@ class LauncherController:
             return "OpenClaw gateway / v2026.4.8"
         return "Node mock runtime / Phase 1 开发版"
 
-    def _runtime_message(self) -> str:
+    def _runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig) -> str:
+        if not sensitive.api_key:
+            return f"{config.provider_name} 的 API Key 尚未配置。可以先预览本地控制台；需要真实对话时请点击“重新配置”补充 Key。"
         if self.runtime_mode == "openclaw":
             return "当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。"
         return "当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。"
@@ -110,3 +112,20 @@ class LauncherController:
             "idle": "请先完成配置。",
         }
         return mapping.get(runtime_status.state, "服务状态暂不可用。")
+
+    def _build_status_detail(self, runtime_status: RuntimeStatus) -> str:
+        duration_label = self._runtime_duration_label(runtime_status.uptime_seconds)
+        if runtime_status.state == "running" and duration_label:
+            if runtime_status.message:
+                return f"{runtime_status.message} 当前会话已运行 {duration_label}。"
+            return f"本地运行时正在响应请求，已运行 {duration_label}。"
+        return runtime_status.message or self._map_status_detail(runtime_status)
+
+    def _runtime_duration_label(self, uptime_seconds: int | None) -> str | None:
+        if uptime_seconds is None:
+            return None
+        minutes, seconds = divmod(uptime_seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"

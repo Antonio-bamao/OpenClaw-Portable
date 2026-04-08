@@ -1,5 +1,6 @@
 import os
 import shutil
+import socket
 import unittest
 import uuid
 from pathlib import Path
@@ -28,6 +29,14 @@ def make_config(port: int = 18789) -> LauncherConfig:
         bind_host="127.0.0.1",
         first_run_completed=True,
     )
+
+
+def reserve_free_port() -> int:
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
 
 
 class OpenClawRuntimeAdapterTests(unittest.TestCase):
@@ -64,12 +73,13 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
             paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
             paths.ensure_directories()
             paths.env_file.write_text("OPENCLAW_API_KEY=sk-demo\n", encoding="utf-8")
+            config = make_config(reserve_free_port())
             adapter = OpenClawRuntimeAdapter()
-            adapter.prepare(make_config(), paths)
+            adapter.prepare(config, paths)
 
             environment = adapter.build_environment()
 
-            self.assertEqual(environment["OPENCLAW_GATEWAY_PORT"], "18789")
+            self.assertEqual(environment["OPENCLAW_GATEWAY_PORT"], str(config.gateway_port))
             self.assertEqual(environment["OPENCLAW_BIND_HOST"], "127.0.0.1")
             self.assertEqual(environment["OPENCLAW_HOME"], str(paths.state_dir))
             self.assertEqual(environment["HOME"], str(paths.state_dir))
@@ -87,15 +97,16 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
         try:
             paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
             adapter = OpenClawRuntimeAdapter()
+            config = make_config(reserve_free_port())
             entrypoint = paths.runtime_dir / "openclaw" / "openclaw.mjs"
             entrypoint.parent.mkdir(parents=True, exist_ok=True)
             entrypoint.write_text("#!/usr/bin/env node\n", encoding="utf-8")
 
-            adapter.prepare(make_config(18789), paths)
+            adapter.prepare(config, paths)
 
             self.assertEqual(adapter.status().state, "ready")
-            self.assertEqual(adapter.status().port, 18789)
-            self.assertEqual(adapter.webui_url(), "http://127.0.0.1:18791")
+            self.assertEqual(adapter.status().port, config.gateway_port)
+            self.assertEqual(adapter.webui_url(), f"http://127.0.0.1:{config.gateway_port + 2}")
             self.assertEqual(
                 adapter.build_command(),
                 [
@@ -104,7 +115,7 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
                     "gateway",
                     "run",
                     "--port",
-                    "18789",
+                    str(config.gateway_port),
                     "--bind",
                     "loopback",
                     "--allow-unconfigured",

@@ -21,6 +21,7 @@ class RuntimeStatus:
     port: int | None = None
     message: str | None = None
     pid: int | None = None
+    uptime_seconds: int | None = None
 
 
 class RuntimeAdapter(ABC):

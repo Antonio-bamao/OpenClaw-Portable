@@ -15,7 +15,9 @@
    - 已准备内置 Node 24，并验证 onedir 便携包可携带真实 runtime 启动 gateway
    - 已补充自动 `runtime_mode` 选择入口，完整 dist 默认进入真实 OpenClaw，开发态缺失 runtime 时回退 mock
    - 已补充缺少运行时、启动超时、提前退出的中文错误提示映射
-   - 下一步补充真实 runtime 首启等待状态、Key 缺失/Provider 配置诊断和运行时瘦身评估
+   - 已补充真实模式下 API Key 缺失的主面板诊断提示
+   - 已补充主面板 `status_detail` 渲染与运行时长展示
+   - 下一步补充真实 runtime 首启等待状态、进一步的 Provider 配置诊断和运行时瘦身评估
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
