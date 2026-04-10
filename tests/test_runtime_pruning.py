@@ -84,6 +84,41 @@ class RuntimePruningTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_cli_script_accepts_custom_patterns_without_changing_defaults(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runtime_root = temp_dir / "runtime" / "openclaw"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            (runtime_root / "notes.md").write_text("# keep defaults out\n", encoding="utf-8")
+            (runtime_root / "server.ts").write_text("export {};\n", encoding="utf-8")
+            (runtime_root / "server.mts").write_text("export {};\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python",
+                    str(Path.cwd() / "scripts" / "prune-portable-runtime.py"),
+                    "--runtime-path",
+                    str(runtime_root),
+                    "--pattern",
+                    "*.ts",
+                    "--pattern",
+                    "*.mts",
+                ],
+                cwd=Path.cwd(),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse((runtime_root / "server.ts").exists())
+            self.assertFalse((runtime_root / "server.mts").exists())
+            self.assertTrue((runtime_root / "notes.md").exists())
+            self.assertIn('"patterns": ["*.ts", "*.mts"]', completed.stdout)
+            self.assertIn('"files_removed": 2', completed.stdout)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

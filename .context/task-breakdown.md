@@ -22,7 +22,10 @@
    - 已重新完成源码态真实 adapter smoke、PyInstaller onedir 构建与 dist 侧真实 adapter smoke
    - 已量化 runtime/openclaw 体积分布：node_modules 约 0.807GB、dist 约 0.17GB、.ts + .map + .md 约 295MB
    - 已在 dist 构建阶段安全裁剪 `.map/.md/.d.ts`，累计释放约 243.21MB，裁剪后 dist/runtime/openclaw 约 0.754GB / 52875 文件
-   - 下一步继续评估首次冷启动超时边界、plain `.ts` / `.mts` / `.cts` 等可裁剪产物与 U 盘读写性能
+   - 已先将真实 OpenClaw 默认冷启动预算放宽到 90 秒并同步等待态提示
+   - 已补充 pruning CLI 的实验性 `--pattern` 入口，并完成 `plain .ts / .mts / .cts` 的首轮 dry-run 与单次 dist smoke
+   - 已补充主界面“导出诊断”入口与脱敏诊断包导出
+   - 下一步优先做“恢复出厂 / 重置配置”入口，把售后闭环先接起来；体积进一步瘦身后移
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本

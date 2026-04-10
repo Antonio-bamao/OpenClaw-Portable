@@ -46,6 +46,7 @@ class OpenClawLauncherApplication:
                 on_stop=self._handle_stop,
                 on_restart=self._handle_restart,
                 on_open_webui=self._handle_open_webui,
+                on_export_diagnostics=self._handle_export_diagnostics,
                 on_reconfigure=self.show_setup_wizard,
             )
         self.main_window.apply_view_state(view_state)
@@ -79,6 +80,11 @@ class OpenClawLauncherApplication:
         self._run_with_error_boundary(self.controller.restart_runtime)
         self._refresh_main_view()
 
+    def _handle_export_diagnostics(self) -> None:
+        bundle_path = self._run_with_error_boundary(self.controller.export_diagnostics_bundle)
+        if bundle_path:
+            self._show_info(f"诊断包已导出到：{bundle_path}")
+
     def _handle_open_webui(self) -> None:
         view_state = self.controller.load_view_state()
         if not view_state.webui_url:
@@ -95,11 +101,15 @@ class OpenClawLauncherApplication:
             self.main_window.apply_view_state(self.controller.load_pending_runtime_view_state(action))
             self.app.processEvents()
 
-    def _run_with_error_boundary(self, action) -> None:
+    def _run_with_error_boundary(self, action):
         try:
-            action()
+            return action()
         except Exception as exc:  # noqa: BLE001
             self._show_error(format_runtime_error(exc))
+            return None
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self.main_window or self.wizard_window, "OpenClaw Portable", message)
+
+    def _show_info(self, message: str) -> None:
+        QMessageBox.information(self.main_window or self.wizard_window, "OpenClaw Portable", message)

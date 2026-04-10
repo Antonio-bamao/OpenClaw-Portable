@@ -40,6 +40,10 @@ class FakeController:
         self.calls.append("load_view_state")
         return self.final_state
 
+    def export_diagnostics_bundle(self) -> str:
+        self.calls.append("export_diagnostics_bundle")
+        return "C:/tmp/openclaw-diagnostics.zip"
+
 
 class FakeWindow:
     def __init__(self, calls: list[str]) -> None:
@@ -91,6 +95,24 @@ class LauncherAppTests(unittest.TestCase):
             calls,
             ["pending:restart", "apply:重启中", "process_events", "restart_runtime", "load_view_state", "apply:运行中"],
         )
+
+
+    def test_handle_export_diagnostics_shows_success_message(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+
+        application._handle_export_diagnostics()
+
+        self.assertEqual(calls, ["export_diagnostics_bundle"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("openclaw-diagnostics.zip", info_messages[0])
 
 
 if __name__ == "__main__":

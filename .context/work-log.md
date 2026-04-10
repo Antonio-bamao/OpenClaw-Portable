@@ -169,3 +169,24 @@
 - 结果：便携包构建阶段现在默认裁剪 .map/.md/.d.ts，共移除 40611 个文件、释放 243.21MB；裁剪后 dist/runtime/openclaw 降到约 0.754GB / 52875 文件，第二轮 fresh-state smoke 仍能在 23.09 秒成功，说明 .d.ts 裁剪未破坏真实 runtime。
 - 验证：python -m unittest tests.test_runtime_pruning 通过 3 个测试；python -m unittest discover -s tests 通过 44 个测试；build-launcher.ps1 成功并输出 freed_mb=243.21；裁剪后 dist smoke 为 [61.0 Timeout, 23.09 ok]。
 - 下一步：继续评估 plain .ts / .mts / .cts 等更激进候选产物，或改为基于新的冷启动样本审视 60 秒等待策略。
+
+## 2026-04-11 / Phase 2 Step 18｜放宽真实 OpenClaw 首轮冷启动等待预算到 90 秒
+- 目标：用最小改动先缓解首轮冷启动偶发撞到 60 秒阈值的问题
+- 动作：按 TDD 先为 `OpenClawRuntimeAdapter` 新增默认 90 秒超时测试，并把 controller / app 的等待态测试文案改为 20-90 秒；确认 RED 后，将真实 runtime 默认 `startup_timeout_seconds` 从 60 调整为 90，并同步更新启动中的等待提示。
+- 结果：产品侧不再沿用已被 fresh-state 样本证明偏紧的 60 秒默认窗口；用户在主界面会看到更贴近实际冷启动波动的 20-90 秒提示，降低首启被误判失败的概率。
+- 验证：python -m unittest tests.test_openclaw_runtime_adapter tests.test_launcher_controller tests.test_launcher_app 通过 17 个测试；python -m unittest discover -s tests 通过 45 个测试；validate_context.py --project-root . 返回 context is valid。
+- 下一步：继续评估 plain `.ts` / `.mts` / `.cts` 等更激进候选产物，并在 90 秒预算下补采样冷启动表现与 U 盘读写成本。
+
+## 2026-04-11 / Phase 2 Step 19｜为更激进的 TypeScript 候选裁剪补实验性入口并做首轮验证
+- 目标：验证 `plain .ts / .mts / .cts` 是否值得进入下一轮正式瘦身评估，同时不改动当前默认构建规则
+- 动作：按 TDD 先为 `prune-portable-runtime.py` 新增自定义 `--pattern` 参数测试，确认 RED 后补上 CLI 能力；随后对源码态 `runtime/openclaw` 执行 `*.ts/*.mts/*.cts` dry-run，记录候选体积；再只在当前 `dist/runtime/openclaw` 上做一次实验性实删与 smoke，最后重新执行 `build-launcher.ps1` 恢复正式默认 `.map/.md/.d.ts` 裁剪结果。
+- 结果：实验性模式下，源码态 `*.ts/*.mts/*.cts` 约可再释放 178.34MB；当前默认裁剪后的 dist 上实删这些候选文件后，又额外释放了 62.59MB，并且单次真实 adapter smoke 可在 21.12 秒成功。由于样本尚不足以证明稳定性，本轮只保留为正向证据，不把规则直接纳入正式构建；恢复正式默认规则后的 dist smoke 仍出现 58.49 秒冷启动，说明冷启动波动问题依然存在。
+- 验证：python -m unittest tests.test_runtime_pruning 通过 4 个测试；python -m unittest discover -s tests 通过 46 个测试；python scripts/prune-portable-runtime.py --runtime-path runtime\\openclaw --dry-run --pattern *.ts --pattern *.mts --pattern *.cts 输出 freed_mb=178.34；实验性 dist 实删输出 freed_mb=62.59；实验性 dist smoke 成功，elapsed_seconds=21.12, health_ok=True；恢复正式默认规则后 build-launcher.ps1 成功，默认 dist smoke 成功，elapsed_seconds=58.49, health_ok=True；validate_context.py --project-root . 返回 context is valid。
+- 下一步：继续补采样实验性 `*.ts/*.mts/*.cts` 裁剪后的 fresh-state smoke，并与默认规则基线对照，决定是否可以把更激进的裁剪规则纳入正式构建。
+
+## 2026-04-11 / Phase 2 Step 20｜补充主界面诊断导出入口与最小可用诊断包
+- 目标：提供一个不依赖命令行的售后排障入口，让用户能直接导出可用的诊断包
+- 动作：按 TDD 先新增 `DiagnosticsExporter` 脱敏导出测试、主界面新增“导出诊断”按钮的 UI 烟雾测试，以及应用层导出成功提示测试；确认 RED 后新增 `launcher/services/diagnostics_export.py`，把脱敏后的配置摘要、版本信息和 `logs/*.log` 打包到 `state/backups/openclaw-diagnostics-*.zip`；随后在 `LauncherController`、`OpenClawLauncherApplication` 和主界面按钮上接线。
+- 结果：主界面现在可以一键导出诊断包，里面默认包含 `manifest.json`、`config-summary.json`、`version.json` 和关键日志；诊断包不会导出原始 `.env`、明文 API Key 或明文管理密码，已经足够支撑当前阶段的售后排障。
+- 验证：python -m unittest tests.test_diagnostics_export tests.test_launcher_app tests.test_launcher_bootstrap 通过 10 个测试；python -m unittest discover -s tests 通过 49 个测试；validate_context.py --project-root . 返回 context is valid。
+- 下一步：继续补“恢复出厂 / 重置配置”入口，让诊断导出和重置入口一起组成更完整的售后闭环。

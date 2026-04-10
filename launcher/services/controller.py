@@ -6,6 +6,7 @@ from launcher.models import LauncherViewState
 from launcher.runtime.base import RuntimeAdapter, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
+from launcher.services.diagnostics_export import DiagnosticsExporter
 
 
 class LauncherController:
@@ -13,6 +14,7 @@ class LauncherController:
         self,
         paths: PortablePaths,
         runtime_adapter: RuntimeAdapter | None = None,
+        diagnostics_exporter: DiagnosticsExporter | None = None,
         runtime_mode: str = "mock",
         node_command: str = "node",
     ) -> None:
@@ -20,6 +22,11 @@ class LauncherController:
         self.store = LauncherConfigStore(paths)
         self.runtime_mode = runtime_mode
         self.runtime_adapter = runtime_adapter or self._build_runtime_adapter(runtime_mode, node_command)
+        self.diagnostics_exporter = diagnostics_exporter or DiagnosticsExporter(
+            paths,
+            store=self.store,
+            runtime_mode=runtime_mode,
+        )
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
@@ -37,6 +44,9 @@ class LauncherController:
     def restart_runtime(self) -> None:
         self._prepare_if_needed()
         self.runtime_adapter.restart()
+
+    def export_diagnostics_bundle(self) -> Path:
+        return self.diagnostics_exporter.export_bundle()
 
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():
