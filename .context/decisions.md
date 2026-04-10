@@ -85,3 +85,11 @@
 - 理由：auto 策略可以同时满足开发和交付：检测到 `runtime/openclaw/openclaw.mjs` 与 `runtime/node/node.exe` 时使用真实 OpenClaw，否则回退 mock；同时保留 `OPENCLAW_PORTABLE_RUNTIME_MODE` 环境变量和显式参数覆盖能力。
 - 影响范围：`OpenClawLauncherApplication` 启动策略、开发调试、PyInstaller dist 行为、售后排障。
 - 后续约束：后续如果新增 UI 设置项或命令行参数切换 runtime mode，必须继续复用 `resolve_runtime_mode()`，避免多处判断漂移。
+
+## 2026-04-10｜便携包 dist 默认裁剪 `runtime/openclaw` 中的 `.map`、`.md` 与 `.d.ts`
+
+- 背景：Step 7 量化后发现 `runtime/openclaw` 约 0.992GB，其中 `.map` 与 `.md` 约 127MB，而 `*.d.ts` 另占约 115.75MB；这三类文件都更偏发布冗余或类型声明，比直接动 plain `.ts` 更稳妥。
+- 理由：source runtime 仍保留完整产物，便于后续排障和进一步分析；而便携包 dist 更关注体积与拷贝成本，移除 source map 与 markdown 文档对运行时行为影响最小。
+- 理由：source runtime 仍保留完整产物，便于后续排障和进一步分析；而便携包 dist 更关注体积与拷贝成本，移除 source map、markdown 文档与 TypeScript 类型声明对运行时行为影响最小。
+- 影响范围：`scripts/build-launcher.ps1`、`scripts/prune-portable-runtime.py`、便携包体积、后续 smoke 验证流程。
+- 后续约束：当前仅允许自动裁剪 `.map`、`.md` 与 `.d.ts`；若要继续裁剪 plain `.ts`、`.mts`、`.cts`、测试快照或其他候选文件，必须先补 smoke/回归证据，不得直接扩大裁剪范围。

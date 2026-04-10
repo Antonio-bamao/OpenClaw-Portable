@@ -83,6 +83,8 @@
 验收：
 
 - 部分完成：完整单元测试重新通过 41 个测试；源码态真实 adapter smoke 成功（20.12 秒，health_ok=True）；`build-launcher.ps1` 构建成功；dist 侧真实 adapter smoke 成功（21.12 秒，health_ok=True）。
-- 已记录：源码态与 dist 侧首次冷启动都各出现过一次 60 秒超时，已登记到 `bug-log.md`，后续继续结合瘦身与等待策略评估。
+- 已记录：3 轮 fresh-state 采样中，源码态为 60.22 秒超时 / 42.66 秒成功 / 22.59 秒成功，dist 侧为 60.25 秒超时 / 31.66 秒成功 / 23.09 秒成功，已登记到 `bug-log.md`，后续继续结合瘦身与等待策略评估。
+- 已量化：`runtime/openclaw` 当前约 0.992GB、93486 文件，其中 `node_modules` 约 0.807GB、`dist` 约 0.17GB，`.ts + .map + .md` 约 295MB，可作为后续瘦身候选。
+- 已验证：dist 构建阶段自动裁剪 `.map/.md/.d.ts` 共移除 40611 个文件、释放 243.21MB；裁剪后 `dist/runtime/openclaw` 约 0.754GB、52875 文件，二次 fresh-state smoke 可在 23.09 秒成功。
 - 测试通过或失败项都有记录。
 - `.context` 校验通过。

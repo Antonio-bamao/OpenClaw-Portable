@@ -1,0 +1,89 @@
+import shutil
+import subprocess
+import unittest
+import uuid
+from pathlib import Path
+
+from launcher.services.runtime_pruning import prune_runtime_tree
+
+
+def make_workspace_temp_dir() -> Path:
+    temp_root = Path.cwd() / "tmp"
+    temp_root.mkdir(exist_ok=True)
+    created = temp_root / f"runtime-pruning-{uuid.uuid4().hex[:8]}"
+    created.mkdir(parents=True, exist_ok=True)
+    return created
+
+
+class RuntimePruningTests(unittest.TestCase):
+    def test_prunes_only_map_and_markdown_files_by_default(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runtime_root = temp_dir / "runtime" / "openclaw"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            (runtime_root / "dist").mkdir(parents=True, exist_ok=True)
+            (runtime_root / "docs").mkdir(parents=True, exist_ok=True)
+            (runtime_root / "dist" / "entry.js").write_text("console.log('ok')\n", encoding="utf-8")
+            (runtime_root / "dist" / "entry.js.map").write_text("{}", encoding="utf-8")
+            (runtime_root / "docs" / "README.md").write_text("# docs\n", encoding="utf-8")
+            (runtime_root / "dist" / "types.d.ts").write_text("export interface Demo {}\n", encoding="utf-8")
+            (runtime_root / "dist" / "server.ts").write_text("export {};\n", encoding="utf-8")
+            (runtime_root / "package.json").write_text("{}", encoding="utf-8")
+
+            result = prune_runtime_tree(runtime_root)
+
+            self.assertEqual(result.files_removed, 3)
+            self.assertGreater(result.bytes_freed, 0)
+            self.assertFalse((runtime_root / "dist" / "entry.js.map").exists())
+            self.assertFalse((runtime_root / "docs" / "README.md").exists())
+            self.assertFalse((runtime_root / "dist" / "types.d.ts").exists())
+            self.assertTrue((runtime_root / "dist" / "entry.js").exists())
+            self.assertTrue((runtime_root / "dist" / "server.ts").exists())
+            self.assertTrue((runtime_root / "package.json").exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_supports_dry_run_without_deleting_files(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runtime_root = temp_dir / "runtime" / "openclaw"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            candidate = runtime_root / "artifact.js.map"
+            candidate.write_text("{}", encoding="utf-8")
+
+            result = prune_runtime_tree(runtime_root, dry_run=True)
+
+            self.assertEqual(result.files_removed, 1)
+            self.assertTrue(candidate.exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_cli_script_can_prune_runtime_tree_from_repo_root(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runtime_root = temp_dir / "runtime" / "openclaw"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            (runtime_root / "artifact.js.map").write_text("{}", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    "python",
+                    str(Path.cwd() / "scripts" / "prune-portable-runtime.py"),
+                    "--runtime-path",
+                    str(runtime_root),
+                ],
+                cwd=Path.cwd(),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse((runtime_root / "artifact.js.map").exists())
+            self.assertIn('"files_removed": 1', completed.stdout)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

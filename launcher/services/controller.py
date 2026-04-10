@@ -126,7 +126,7 @@ class LauncherController:
             message = (
                 "正在重新启动真实 OpenClaw gateway，请勿关闭窗口。"
                 if action == "restart"
-                else "正在启动真实 OpenClaw gateway，首次启动可能需要 20-60 秒，请勿关闭窗口。"
+                else "正在启动真实 OpenClaw gateway，首次启动可能需要 20-90 秒，请勿关闭窗口。"
             )
             if not sensitive.api_key:
                 return f"{message} 当前未配置 {config.provider_name} 的 API Key，启动后仍需通过“重新配置”补充。"
@@ -155,7 +155,7 @@ class LauncherController:
         if self.runtime_mode == "openclaw":
             if action == "restart":
                 return "正在重新连接本地 gateway，请稍等。"
-            return "正在等待本地 gateway 就绪，首次启动可能需要 20-60 秒。"
+            return "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。"
         return "正在启动本地 mock runtime，通常会在几秒内完成。"
 
     def _provider_label(self, config: LauncherConfig) -> str:

@@ -143,7 +143,7 @@ class LauncherControllerTests(unittest.TestCase):
             state = controller.load_pending_runtime_view_state()
 
             self.assertEqual(state.status_label, "启动中")
-            self.assertIn("20-60 秒", state.status_detail)
+            self.assertIn("20-90 秒", state.status_detail)
             self.assertIn("请勿关闭", state.message)
             self.assertEqual(state.port_label, f"127.0.0.1:{config.gateway_port}")
         finally:

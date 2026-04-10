@@ -79,3 +79,4 @@ Copy-DirectoryRobust (Join-Path $root "tools") (Join-Path $portableDist "tools")
 Copy-Item (Join-Path $root "README.txt") $portableDist -Force
 Copy-Item (Join-Path $root "version.json") $portableDist -Force
 Copy-DirectoryRobust (Join-Path $root "state\\provider-templates") (Join-Path $portableDist "state\\provider-templates")
+& $PythonExe (Join-Path $root "scripts\\prune-portable-runtime.py") --runtime-path (Join-Path $portableDist "runtime\\openclaw")

@@ -148,3 +148,24 @@
 - 结果：源码态真实 adapter 烟雾、PyInstaller onedir 构建与 dist 侧真实 adapter 烟雾均重新跑通；同时确认冷启动耗时仍存在边界波动，需要继续结合 runtime/openclaw 瘦身和超时策略评估。
 - 验证：源码态 smoke 成功：elapsed_seconds=20.12, status=running, port=19884, health_ok=True；powershell -ExecutionPolicy Bypass -File .\\scripts\\build-launcher.ps1 构建成功；dist smoke 成功：elapsed_seconds=21.12, status=running, port=19940, health_ok=True；python -m unittest discover -s tests 通过 41 个测试。
 - 下一步：继续评估首次冷启动的超时边界、runtime/openclaw 瘦身空间与 U 盘读写性能，并决定是否需要调整启动等待策略。
+
+## 2026-04-10 / Phase 2 Step 15｜量化真实 OpenClaw 冷启动波动与 runtime/openclaw 体积结构
+- 目标：量化真实 OpenClaw 冷启动波动与 runtime/openclaw 体积结构
+- 动作：统计 runtime/openclaw 总文件数、目录体积分布和扩展名体积分布；重点确认 node_modules、dist、.ts、.map、.md 的占比；随后对源码态与 dist 侧各执行 3 轮 fresh-state 真实 OpenClawRuntimeAdapter 冷启动采样，并刷新完整单元测试。
+- 结果：runtime/openclaw 当前约 0.992 GB / 93486 文件，其中 node_modules 约 0.807 GB、dist 约 0.17 GB，.ts + .map + .md 约 295 MB；fresh-state 冷启动在源码态和 dist 侧都呈现首轮 60 秒超时、后续 42/22 秒与 31/23 秒的回落模式，进一步支持冷缓存首启波动的判断。
+- 验证：体积统计：runtime/openclaw=0.992 GB/93486 files；源码态 3 轮采样=[60.22 Timeout, 42.66 ok, 22.59 ok]；dist 3 轮采样=[60.25 Timeout, 31.66 ok, 23.09 ok]；python -m unittest discover -s tests 通过 41 个测试。
+- 下一步：评估是否可以安全裁剪 runtime/openclaw 中的 .map/.md/.ts 等候选产物，并基于新的冷启动样本决定是否需要调整启动等待策略。
+
+## 2026-04-10 / Phase 2 Step 16｜对便携包 dist 执行首轮安全瘦身并验证不破坏真实 runtime
+- 目标：对便携包 dist 执行首轮安全瘦身并验证不破坏真实 runtime
+- 动作：按 TDD 新增 runtime pruning 模块与 CLI 脚本测试，只允许默认裁剪 .map 和 .md；新增 scripts/prune-portable-runtime.py，并让 build-launcher.ps1 在复制 runtime 后自动执行；重跑 PyInstaller onedir 构建、完整单元测试，并对裁剪后的 dist 执行真实 OpenClaw adapter smoke。
+- 结果：便携包构建阶段会自动从 dist/runtime/openclaw 删除 .map/.md，共移除 15743 个文件、释放 127.46 MB；裁剪后 dist/runtime/openclaw 下降到约 0.868 GB / 77743 文件，第二轮 fresh-state smoke 仍可在 27.61 秒内成功启动真实 gateway。
+- 验证：python -m unittest tests.test_runtime_pruning 通过 3 个测试；python -m unittest discover -s tests 通过 44 个测试；build-launcher.ps1 成功并输出 freed_mb=127.46；裁剪后 dist smoke 先出现一次 60 秒超时、随后 27.61 秒成功，health_ok=True。
+- 下一步：继续评估是否可以安全裁剪 .ts 等候选产物，并结合新的裁剪结果决定是否需要调整首轮冷启动等待策略。
+
+## 2026-04-11 / Phase 2 Step 17｜扩展 dist 构建裁剪规则到 .d.ts 并验证收益与风险
+- 目标：扩展 dist 构建裁剪规则到 .d.ts 并验证收益与风险
+- 动作：先在当前 dist 产物上量化 .d.ts 与 plain .ts 的体积，确认 .d.ts 约 115.75MB、plain .ts 约 52.33MB；对当前 dist 手工删除 .d.ts 并做两轮 fresh-state smoke，观察到首轮仍超时、第二轮 27.59 秒成功；随后按 TDD 扩展 runtime pruning 默认规则到 .d.ts，重跑 build-launcher.ps1、完整单元测试与裁剪后 dist smoke。
+- 结果：便携包构建阶段现在默认裁剪 .map/.md/.d.ts，共移除 40611 个文件、释放 243.21MB；裁剪后 dist/runtime/openclaw 降到约 0.754GB / 52875 文件，第二轮 fresh-state smoke 仍能在 23.09 秒成功，说明 .d.ts 裁剪未破坏真实 runtime。
+- 验证：python -m unittest tests.test_runtime_pruning 通过 3 个测试；python -m unittest discover -s tests 通过 44 个测试；build-launcher.ps1 成功并输出 freed_mb=243.21；裁剪后 dist smoke 为 [61.0 Timeout, 23.09 ok]。
+- 下一步：继续评估 plain .ts / .mts / .cts 等更激进候选产物，或改为基于新的冷启动样本审视 60 秒等待策略。

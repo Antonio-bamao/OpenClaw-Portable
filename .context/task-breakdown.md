@@ -20,7 +20,9 @@
    - 已补充真实 runtime 首启/重启时的等待状态提示
    - 已补充自定义 Provider 缺少接口地址/模型名时的配置诊断
    - 已重新完成源码态真实 adapter smoke、PyInstaller onedir 构建与 dist 侧真实 adapter smoke
-   - 下一步继续评估首次冷启动超时边界、运行时瘦身与 U 盘读写性能
+   - 已量化 runtime/openclaw 体积分布：node_modules 约 0.807GB、dist 约 0.17GB、.ts + .map + .md 约 295MB
+   - 已在 dist 构建阶段安全裁剪 `.map/.md/.d.ts`，累计释放约 243.21MB，裁剪后 dist/runtime/openclaw 约 0.754GB / 52875 文件
+   - 下一步继续评估首次冷启动超时边界、plain `.ts` / `.mts` / `.cts` 等可裁剪产物与 U 盘读写性能
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本

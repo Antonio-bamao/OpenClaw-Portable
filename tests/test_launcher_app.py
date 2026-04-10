@@ -62,7 +62,7 @@ class FakeQtApp:
 class LauncherAppTests(unittest.TestCase):
     def test_handle_start_applies_pending_state_before_runtime_starts(self) -> None:
         calls: list[str] = []
-        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-60 秒。", "请勿关闭窗口。")
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
         final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
         application = object.__new__(OpenClawLauncherApplication)
         application.controller = FakeController(pending_state, final_state, calls)

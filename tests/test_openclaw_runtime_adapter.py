@@ -40,6 +40,11 @@ def reserve_free_port() -> int:
 
 
 class OpenClawRuntimeAdapterTests(unittest.TestCase):
+    def test_defaults_to_90_second_startup_timeout_for_real_runtime(self) -> None:
+        adapter = OpenClawRuntimeAdapter()
+
+        self.assertEqual(adapter.startup_timeout_seconds, 90)
+
     def test_start_fails_clearly_when_openclaw_runtime_is_missing(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:

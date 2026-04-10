@@ -13,7 +13,7 @@ from launcher.runtime.base import RuntimeAdapter, RuntimeHealth, RuntimeStatus
 
 
 class OpenClawRuntimeAdapter(RuntimeAdapter):
-    def __init__(self, node_command: str = "node", startup_timeout_seconds: float = 60) -> None:
+    def __init__(self, node_command: str = "node", startup_timeout_seconds: float = 90) -> None:
         self.node_command = node_command
         self.startup_timeout_seconds = startup_timeout_seconds
         self._config: LauncherConfig | None = None
