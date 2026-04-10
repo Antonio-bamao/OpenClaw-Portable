@@ -134,3 +134,17 @@
 - 结果：用户点击启动或重启后，主面板会先切换到启动中或重启中的等待状态，不再在真实 OpenClaw 首次启动的几十秒内显得像没有响应。
 - 验证：python -m unittest tests.test_launcher_controller tests.test_launcher_app 通过 10 个测试；python -m unittest discover -s tests 通过 39 个测试。
 - 下一步：继续补充真实 runtime 的进一步 Provider 配置诊断，并评估 runtime/openclaw 的瘦身空间与 U 盘读写性能。
+
+## 2026-04-09 / Phase 2 Step 13｜补充自定义 Provider 配置不完整时的主面板诊断提示
+- 目标：补充自定义 Provider 配置不完整时的主面板诊断提示
+- 动作：按 TDD 为 LauncherController 新增自定义 Provider 缺少 base_url/model 的视图状态与等待状态测试；扩展 make_config 测试夹具支持覆盖 Provider 字段；在 controller 中增加 Provider 配置诊断、Provider label 回退与等待态文案优先级，让缺少接口地址或模型名时明确提示重新配置。
+- 结果：主面板和启动前等待态都能直接指出自定义 Provider 缺少接口地址或模型名，并把 Provider 卡片显示为“自定义 / 待补充模型”，降低用户在真实 OpenClaw 模式下看到空白模型字段时的困惑。
+- 验证：python -m unittest tests.test_launcher_controller 通过 10 个测试；python -m unittest discover -s tests 通过 41 个测试。
+- 下一步：进入 Phase 2 Step 7 的回归与记录：补充真实 runtime 开发态烟雾、PyInstaller onedir 烟雾与 runtime/openclaw 瘦身、U 盘读写性能评估。
+
+## 2026-04-10 / Phase 2 Step 14｜执行 Step 7 的回归与烟雾验证
+- 目标：执行 Step 7 的回归与烟雾验证
+- 动作：复核 build-launcher.ps1 与本地 runtime/dist 产物，先用自定义 PortablePaths 将源码态真实 OpenClawRuntimeAdapter 的 state/logs/cache 指向 tmp 做隔离烟雾，再用同样方式验证 dist/OpenClaw-Portable/runtime；首次尝试在源码态和 dist 侧都各出现过一次 60 秒超时，于是保留日志重跑并补充成功证据；随后刷新完整单元测试。
+- 结果：源码态真实 adapter 烟雾、PyInstaller onedir 构建与 dist 侧真实 adapter 烟雾均重新跑通；同时确认冷启动耗时仍存在边界波动，需要继续结合 runtime/openclaw 瘦身和超时策略评估。
+- 验证：源码态 smoke 成功：elapsed_seconds=20.12, status=running, port=19884, health_ok=True；powershell -ExecutionPolicy Bypass -File .\\scripts\\build-launcher.ps1 构建成功；dist smoke 成功：elapsed_seconds=21.12, status=running, port=19940, health_ok=True；python -m unittest discover -s tests 通过 41 个测试。
+- 下一步：继续评估首次冷启动的超时边界、runtime/openclaw 瘦身空间与 U 盘读写性能，并决定是否需要调整启动等待策略。

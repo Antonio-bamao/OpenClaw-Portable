@@ -63,7 +63,7 @@ class LauncherController:
             status_detail=status_detail,
             port_label=f"{config.bind_host}:{port}",
             runtime_detail=self._runtime_detail(),
-            provider_label=f"{config.provider_name} / {config.model}",
+            provider_label=self._provider_label(config),
             message=self._runtime_message(config, sensitive),
             webui_url=self.runtime_adapter.webui_url(),
             offline_mode=not bool(sensitive.api_key),
@@ -83,7 +83,7 @@ class LauncherController:
             status_detail=self._pending_status_detail(action),
             port_label=f"{config.bind_host}:{port}",
             runtime_detail=self._runtime_detail(),
-            provider_label=f"{config.provider_name} / {config.model}",
+            provider_label=self._provider_label(config),
             message=self._pending_runtime_message(config, sensitive, action),
             webui_url="",
             offline_mode=not bool(sensitive.api_key),
@@ -109,6 +109,9 @@ class LauncherController:
         return "Node mock runtime / Phase 1 开发版"
 
     def _runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig) -> str:
+        provider_issue = self._provider_configuration_issue(config)
+        if provider_issue:
+            return provider_issue
         if not sensitive.api_key:
             return f"{config.provider_name} 的 API Key 尚未配置。可以先预览本地控制台；需要真实对话时请点击“重新配置”补充 Key。"
         if self.runtime_mode == "openclaw":
@@ -116,6 +119,9 @@ class LauncherController:
         return "当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。"
 
     def _pending_runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig, action: str) -> str:
+        provider_issue = self._provider_configuration_issue(config)
+        if provider_issue:
+            return f"{provider_issue} 建议先点击“重新配置”补全后再启动。"
         if self.runtime_mode == "openclaw":
             message = (
                 "正在重新启动真实 OpenClaw gateway，请勿关闭窗口。"
@@ -151,6 +157,21 @@ class LauncherController:
                 return "正在重新连接本地 gateway，请稍等。"
             return "正在等待本地 gateway 就绪，首次启动可能需要 20-60 秒。"
         return "正在启动本地 mock runtime，通常会在几秒内完成。"
+
+    def _provider_label(self, config: LauncherConfig) -> str:
+        model_label = config.model or "待补充模型"
+        return f"{config.provider_name} / {model_label}"
+
+    def _provider_configuration_issue(self, config: LauncherConfig) -> str | None:
+        missing_fields: list[str] = []
+        if not config.base_url.strip():
+            missing_fields.append("接口地址")
+        if not config.model.strip():
+            missing_fields.append("模型名")
+        if not missing_fields:
+            return None
+        missing_summary = "和".join(missing_fields)
+        return f"{config.provider_name} Provider 还没配置完整，缺少{missing_summary}。请点击“重新配置”补全。"
 
     def _build_status_detail(self, runtime_status: RuntimeStatus) -> str:
         duration_label = self._runtime_duration_label(runtime_status.uptime_seconds)

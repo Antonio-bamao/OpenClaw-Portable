@@ -145,3 +145,12 @@
 - 解决方案：为 tests/test_openclaw_runtime_adapter.py 增加 reserve_free_port()，改用动态空闲端口构造配置和断言，避免依赖宿主机固定端口状态。
 - 预防措施：后续凡是涉及端口的测试都优先使用动态空闲端口或显式占用/释放策略，不把固定端口当成可重复前提。
 - 状态：Resolved
+
+## 真实 OpenClaw 首次冷启动在 smoke 验证中逼近 60 秒超时阈值
+- 现象：源码态和 dist 侧 smoke 的首次尝试都各出现过一次 OpenClaw runtime did not become healthy in time；保留日志后重跑，同样路径又能在约 20-31 秒内成功完成健康检查。
+- 触发条件：Step 7 使用全新 tmp state 目录执行真实 OpenClawRuntimeAdapter 烟雾验证时触发。
+- 影响：当前 60 秒等待窗口在冷启动边界上存在不确定性，会让便携包首启体验显得偶发失败，也影响 Step 7 烟雾结果的稳定性。
+- 根因：初步证据指向真实 OpenClaw 在全新 state/logs/cache 环境下存在冷启动时延波动；首次尝试可能还要生成额外缓存或初始化插件，而后续同配置重试会显著变快。当前尚未确认是 runtime/openclaw 体积、磁盘热缓存还是其他 sidecar 初始化造成。
+- 解决方案：本轮未改代码，先保留成功/失败证据并将问题纳入后续瘦身与等待策略评估；当前 smoke 通过依赖重试后的成功结果。
+- 预防措施：后续继续做 runtime/openclaw 瘦身、首启耗时采样与 U 盘读写测试；如果证据持续表明 60 秒窗口过紧，再通过测试先行调整等待策略，而不是凭感觉直接放大 timeout。
+- 状态：Open

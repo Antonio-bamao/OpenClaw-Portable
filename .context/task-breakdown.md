@@ -18,7 +18,9 @@
    - 已补充真实模式下 API Key 缺失的主面板诊断提示
    - 已补充主面板 `status_detail` 渲染与运行时长展示
    - 已补充真实 runtime 首启/重启时的等待状态提示
-   - 下一步补充真实 runtime 的进一步 Provider 配置诊断和运行时瘦身评估
+   - 已补充自定义 Provider 缺少接口地址/模型名时的配置诊断
+   - 已重新完成源码态真实 adapter smoke、PyInstaller onedir 构建与 dist 侧真实 adapter smoke
+   - 下一步继续评估首次冷启动超时边界、运行时瘦身与 U 盘读写性能
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
