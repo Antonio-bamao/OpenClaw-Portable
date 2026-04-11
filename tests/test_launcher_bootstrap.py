@@ -73,7 +73,7 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertEqual(window.windowTitle(), "OpenClaw Portable")
         self.assertEqual(window.primary_action_texts(), ["启动服务", "停止服务", "重新启动"])
-        self.assertEqual(window.secondary_action_texts(), ["打开 WebUI", "导出诊断", "重新配置"])
+        self.assertEqual(window.secondary_action_texts(), ["打开 WebUI", "导出诊断", "导入更新包", "恢复出厂", "重新配置"])
         self.assertIn("mock runtime", window.status_detail_label.text())
 
     def test_main_window_updates_status_detail_text(self) -> None:

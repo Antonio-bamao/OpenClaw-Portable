@@ -40,6 +40,8 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restart_button: QPushButton | None = None
         self.open_webui_button: QPushButton | None = None
         self.export_diagnostics_button: QPushButton | None = None
+        self.import_update_button: QPushButton | None = None
+        self.factory_reset_button: QPushButton | None = None
         self.reconfigure_button: QPushButton | None = None
         self._build_ui()
 
@@ -49,12 +51,14 @@ class OpenClawLauncherWindow(QMainWindow):
     def secondary_action_texts(self) -> list[str]:
         return [button.text() for button in self._secondary_buttons]
 
-    def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_reconfigure) -> None:
+    def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_import_update, on_factory_reset, on_reconfigure) -> None:
         self.start_button.clicked.connect(on_start)
         self.stop_button.clicked.connect(on_stop)
         self.restart_button.clicked.connect(on_restart)
         self.open_webui_button.clicked.connect(on_open_webui)
         self.export_diagnostics_button.clicked.connect(on_export_diagnostics)
+        self.import_update_button.clicked.connect(on_import_update)
+        self.factory_reset_button.clicked.connect(on_factory_reset)
         self.reconfigure_button.clicked.connect(on_reconfigure)
 
     def apply_view_state(self, view_state: LauncherViewState) -> None:
@@ -119,9 +123,17 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restart_button = make_button("重新启动")
         self.open_webui_button = make_button("打开 WebUI", subtle=True)
         self.export_diagnostics_button = make_button("导出诊断")
+        self.import_update_button = make_button("导入更新包")
+        self.factory_reset_button = make_button("恢复出厂")
         self.reconfigure_button = make_button("重新配置")
         self._primary_buttons = [self.start_button, self.stop_button, self.restart_button]
-        self._secondary_buttons = [self.open_webui_button, self.export_diagnostics_button, self.reconfigure_button]
+        self._secondary_buttons = [
+            self.open_webui_button,
+            self.export_diagnostics_button,
+            self.import_update_button,
+            self.factory_reset_button,
+            self.reconfigure_button,
+        ]
         for button in self._primary_buttons + self._secondary_buttons:
             button_row.addWidget(button)
         button_row.addStretch(1)

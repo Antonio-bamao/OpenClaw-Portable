@@ -114,3 +114,17 @@
 - 理由：当前阶段的售后定位主要需要版本信息、运行模式、配置摘要和关键日志，并不需要原始 `.env` 或明文 API Key；先做最小可用且默认脱敏的导出，比“全量打包再人工筛查”更稳妥。
 - 影响范围：`launcher/services/diagnostics_export.py`、主界面“导出诊断”入口、售后排障流程与后续诊断包格式约束。
 - 后续约束：诊断包默认不得包含明文 API Key、明文管理密码或原始 `.env`；后续若要扩大导出范围，必须先补脱敏规则与回归测试。
+
+## 2026-04-11｜恢复出厂先采用“安全重置”策略，不删除 runtime、workspace 与诊断备份
+
+- 背景：项目需要一个非命令行的“恢复出厂 / 重置配置”入口，但便携版同时承载真实 runtime、用户工作目录和已导出的诊断包，误删代价较高。
+- 理由：当前最常见的售后场景是“配置错了、状态乱了、需要重新走向导”，并不是“把整个 U 盘内容抹掉”；因此先把恢复出厂限制在启动器配置和本地临时状态上，既能解决大多数排障问题，也更符合小白用户的心理预期。
+- 影响范围：`launcher/services/factory_reset.py`、`LauncherController.reset_factory_state()`、主界面“恢复出厂”入口、售后排障与重新初始化流程。
+- 后续约束：恢复出厂默认只清理 `state/openclaw.json`、`state/.env`、provider templates、临时日志/缓存和 sessions/channels；不得删除 `runtime/`、`state/workspace/` 或 `state/backups/`，除非后续单独设计并测试更激进的重置模式。
+
+## 2026-04-11｜本地导入更新包默认只替换分发内容，更新前自动备份且永不覆盖 `state/`
+
+- 背景：当前项目需要先把“更新 / 回滚”做成可落地的本地闭环，但仓库里还没有现成的在线 updater；同时 `risk-register.md` 已明确更新失败回滚和保护用户状态目录是高优先级约束。
+- 理由：先支持用户手动选择新的便携包目录导入更新，可以最小成本补上“安全替换 + 自动回滚”闭环；而把更新范围严格限制在启动器本体、`_internal/`、`runtime/`、`assets/`、`tools/`、`README.txt` 与 `version.json`，可以避免误覆盖 `state/` 下的配置、诊断包和 workspace。
+- 影响范围：`launcher/services/local_update.py`、`LauncherController.import_update_package()`、主界面“导入更新包”入口、`state/backups/updates/` 备份目录结构，以及后续更新 / 回滚策略设计。
+- 后续约束：本地导入更新包默认不得复制或覆盖 `state/`；更新前必须先把即将替换的旧内容备份到 `state/backups/updates/`，复制过程中任一步失败都必须自动回滚；后续如果要支持在线下载或更广的替换范围，必须先补更新包合法性校验与恢复路径测试。

@@ -89,5 +89,7 @@
 - 已缓解：基于现有冷启动证据，将真实 `OpenClawRuntimeAdapter` 默认 `startup_timeout_seconds` 从 60 秒调整为 90 秒，并把启动等待提示同步为“20-90 秒”，先降低首启偶发误判失败的风险。
 - 已试验：pruning CLI 已支持通过 `--pattern` 注入实验性候选规则；`*.ts/*.mts/*.cts` dry-run 在源码态约可释放 178.34MB，在当前默认裁剪后的 dist 上实删约可再释放 62.59MB；单次实验性 dist smoke 在 21.12 秒成功，但由于样本还少，暂不进入正式默认规则。
 - 已补充：主界面新增“导出诊断”入口，当前可导出脱敏后的配置摘要、版本信息与关键日志 zip 到 `state/backups/`，供售后排障使用。
+- 已补充：主界面新增“恢复出厂”入口，当前会清空 `state/openclaw.json`、`state/.env`、provider templates、临时日志/缓存以及 sessions/channels，并返回首次向导；`workspace/`、`state/backups/` 与 `runtime/` 保留。
+- 已补充：主界面新增“导入更新包”入口，当前支持从本地选择新的便携包目录，只替换 `OpenClawLauncher.exe`、`_internal/`、`runtime/`、`assets/`、`tools/`、`README.txt` 与 `version.json`，更新前自动备份到 `state/backups/updates/`，复制失败时自动回滚，且不会覆盖 `state/`。
 - 测试通过或失败项都有记录。
 - `.context` 校验通过。

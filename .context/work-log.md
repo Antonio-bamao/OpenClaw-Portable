@@ -190,3 +190,17 @@
 - 结果：主界面现在可以一键导出诊断包，里面默认包含 `manifest.json`、`config-summary.json`、`version.json` 和关键日志；诊断包不会导出原始 `.env`、明文 API Key 或明文管理密码，已经足够支撑当前阶段的售后排障。
 - 验证：python -m unittest tests.test_diagnostics_export tests.test_launcher_app tests.test_launcher_bootstrap 通过 10 个测试；python -m unittest discover -s tests 通过 49 个测试；validate_context.py --project-root . 返回 context is valid。
 - 下一步：继续补“恢复出厂 / 重置配置”入口，让诊断导出和重置入口一起组成更完整的售后闭环。
+
+## 2026-04-11 / Phase 2 Step 21｜补充主界面恢复出厂入口与安全范围内的本地状态重置
+- 目标：让用户无需命令行即可回到首次向导，同时避免误删 runtime、workspace 和诊断备份
+- 动作：按 TDD 先新增 `FactoryResetService` 的安全范围测试、主界面新增“恢复出厂”按钮的 UI 烟雾测试，以及应用层确认后返回首次向导的测试；确认 RED 后新增 `launcher/services/factory_reset.py`，仅清空 `state/openclaw.json`、`state/.env`、provider templates、临时日志/缓存和 sessions/channels；随后在 `LauncherController`、`OpenClawLauncherApplication` 与主界面按钮上接线，并加入确认弹窗。
+- 结果：主界面现在可以一键恢复到首次配置状态；当前实现会保留 `workspace/`、`state/backups/` 和 `runtime/`，因此适合作为售后排障或重新初始化入口，不会把用户工作资料和运行时本体一并抹掉。
+- 验证：python -m unittest tests.test_factory_reset tests.test_launcher_app tests.test_launcher_bootstrap tests.test_launcher_controller 通过 22 个测试；python -m unittest discover -s tests 通过 53 个测试。
+- 下一步：继续推进更新 / 回滚闭环，或为恢复出厂补“从备份恢复”策略。
+
+## 2026-04-11 / Phase 2 Step 22｜补充主界面导入更新包入口与本地更新回滚闭环
+- 目标：先完成不依赖联网的“本地更新包导入 + 自动备份 + 失败回滚”最小闭环，同时明确永不覆盖 `state/`
+- 动作：按 TDD 先新增 `LocalUpdateImportService` 的导入成功与中途复制失败回滚测试，再为主界面新增“导入更新包”按钮的 UI 烟雾测试与应用层成功提示测试；确认 RED 后新增 `launcher/services/local_update.py`，只接管 `OpenClawLauncher.exe`、`_internal/`、`runtime/`、`assets/`、`tools/`、`README.txt` 与 `version.json` 的替换，并在更新前把旧内容备份到 `state/backups/updates/<timestamp>/`；随后在 `LauncherController`、`OpenClawLauncherApplication` 和主界面按钮上接线，失败时自动按备份还原。
+- 结果：主界面现在可以手动选择新的便携包目录导入更新；更新流程会显式保留 `state/`，不会覆盖现有配置、诊断包或 workspace；复制过程中一旦失败，会把已经替换的旧内容恢复回来，先把“安全更新”这个最关键的本地闭环补齐。
+- 验证：python -m unittest tests.test_local_update tests.test_launcher_app tests.test_launcher_bootstrap 通过 12 个测试；python -m unittest discover -s tests 通过 56 个测试。
+- 下一步：继续补“从备份恢复旧版本”与更新包合法性校验，再考虑是否进入在线检查更新。

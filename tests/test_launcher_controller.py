@@ -222,5 +222,28 @@ class LauncherControllerTests(unittest.TestCase):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+    def test_reset_factory_state_returns_controller_to_first_run_but_keeps_workspace_and_backups(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
+            controller.configure(make_config(reserve_free_port()), SensitiveConfig(api_key="sk-demo"))
+            paths.ensure_directories()
+            (paths.workspace_dir / "notes.txt").write_text("keep me\n", encoding="utf-8")
+            (paths.state_dir / "backups" / "support.zip").write_text("keep me too\n", encoding="utf-8")
+            (paths.logs_dir / "openclaw-runtime.err.log").write_text("runtime failed\n", encoding="utf-8")
+
+            controller.reset_factory_state()
+            state = controller.load_view_state()
+
+            self.assertTrue(controller.store.is_first_run())
+            self.assertEqual(state.webui_url, "")
+            self.assertTrue((paths.workspace_dir / "notes.txt").exists())
+            self.assertTrue((paths.state_dir / "backups" / "support.zip").exists())
+            self.assertFalse((paths.logs_dir / "openclaw-runtime.err.log").exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

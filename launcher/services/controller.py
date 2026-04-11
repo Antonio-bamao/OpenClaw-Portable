@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
 from launcher.models import LauncherViewState
@@ -7,6 +9,8 @@ from launcher.runtime.base import RuntimeAdapter, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.diagnostics_export import DiagnosticsExporter
+from launcher.services.factory_reset import FactoryResetService
+from launcher.services.local_update import LocalUpdateImportService
 
 
 class LauncherController:
@@ -15,6 +19,8 @@ class LauncherController:
         paths: PortablePaths,
         runtime_adapter: RuntimeAdapter | None = None,
         diagnostics_exporter: DiagnosticsExporter | None = None,
+        factory_reset_service: FactoryResetService | None = None,
+        local_update_service: LocalUpdateImportService | None = None,
         runtime_mode: str = "mock",
         node_command: str = "node",
     ) -> None:
@@ -27,6 +33,8 @@ class LauncherController:
             store=self.store,
             runtime_mode=runtime_mode,
         )
+        self.factory_reset_service = factory_reset_service or FactoryResetService(paths)
+        self.local_update_service = local_update_service or LocalUpdateImportService(paths)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
@@ -47,6 +55,18 @@ class LauncherController:
 
     def export_diagnostics_bundle(self) -> Path:
         return self.diagnostics_exporter.export_bundle()
+
+    def reset_factory_state(self) -> bool:
+        self.runtime_adapter.stop()
+        self.factory_reset_service.reset()
+        self._prepared = False
+        return True
+
+    def import_update_package(self, package_root: Path) -> str:
+        self.runtime_adapter.stop()
+        result = self.local_update_service.import_package(package_root)
+        self._prepared = False
+        return result.imported_version
 
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():

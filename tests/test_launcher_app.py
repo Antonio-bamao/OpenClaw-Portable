@@ -1,5 +1,6 @@
 import os
 import unittest
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -43,6 +44,14 @@ class FakeController:
     def export_diagnostics_bundle(self) -> str:
         self.calls.append("export_diagnostics_bundle")
         return "C:/tmp/openclaw-diagnostics.zip"
+
+    def reset_factory_state(self) -> None:
+        self.calls.append("reset_factory_state")
+        return True
+
+    def import_update_package(self, package_root: Path) -> str:
+        self.calls.append(f"import_update_package:{package_root}")
+        return "v2026.04.2"
 
 
 class FakeWindow:
@@ -113,6 +122,43 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(calls, ["export_diagnostics_bundle"])
         self.assertEqual(len(info_messages), 1)
         self.assertIn("openclaw-diagnostics.zip", info_messages[0])
+
+    def test_handle_factory_reset_returns_to_setup_wizard_after_confirmation(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+        application._confirm_factory_reset = lambda: True
+        application.show_setup_wizard = lambda: calls.append("show_setup_wizard")
+
+        application._handle_factory_reset()
+
+        self.assertEqual(calls, ["reset_factory_state", "show_setup_wizard"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("已恢复到首次配置状态", info_messages[0])
+
+    def test_handle_import_update_shows_restart_prompt_after_success(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+        application._select_update_package_dir = lambda: "C:/tmp/update-package"
+
+        application._handle_import_update()
+
+        self.assertEqual(calls, ["import_update_package:C:\\tmp\\update-package"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("v2026.04.2", info_messages[0])
 
 
 if __name__ == "__main__":

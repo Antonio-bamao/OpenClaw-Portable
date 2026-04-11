@@ -4,7 +4,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.paths import PortablePaths
@@ -47,6 +47,8 @@ class OpenClawLauncherApplication:
                 on_restart=self._handle_restart,
                 on_open_webui=self._handle_open_webui,
                 on_export_diagnostics=self._handle_export_diagnostics,
+                on_import_update=self._handle_import_update,
+                on_factory_reset=self._handle_factory_reset,
                 on_reconfigure=self.show_setup_wizard,
             )
         self.main_window.apply_view_state(view_state)
@@ -85,6 +87,22 @@ class OpenClawLauncherApplication:
         if bundle_path:
             self._show_info(f"诊断包已导出到：{bundle_path}")
 
+    def _handle_import_update(self) -> None:
+        selected_dir = self._select_update_package_dir()
+        if not selected_dir:
+            return
+        imported_version = self._run_with_error_boundary(lambda: self.controller.import_update_package(Path(selected_dir)))
+        if imported_version:
+            self._show_info(f"已导入更新包：{imported_version}。请重新启动启动器完成切换。")
+
+    def _handle_factory_reset(self) -> None:
+        if not self._confirm_factory_reset():
+            return
+        reset_ok = self._run_with_error_boundary(self.controller.reset_factory_state)
+        if reset_ok:
+            self._show_info("已恢复到首次配置状态，正在返回首次向导。")
+            self.show_setup_wizard()
+
     def _handle_open_webui(self) -> None:
         view_state = self.controller.load_view_state()
         if not view_state.webui_url:
@@ -113,3 +131,20 @@ class OpenClawLauncherApplication:
 
     def _show_info(self, message: str) -> None:
         QMessageBox.information(self.main_window or self.wizard_window, "OpenClaw Portable", message)
+
+    def _select_update_package_dir(self) -> str:
+        return QFileDialog.getExistingDirectory(
+            self.main_window or self.wizard_window,
+            "选择更新包目录",
+            str(self.paths.project_root.parent),
+        )
+
+    def _confirm_factory_reset(self) -> bool:
+        result = QMessageBox.question(
+            self.main_window or self.wizard_window,
+            "OpenClaw Portable",
+            "这会清空当前启动器配置、临时日志和缓存，并返回首次向导。是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return result == QMessageBox.StandardButton.Yes
