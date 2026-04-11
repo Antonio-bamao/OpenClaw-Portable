@@ -199,3 +199,12 @@
 - 解决方案：在审计服务中新增 release state 清洁策略，只允许 `state/provider-templates`；发布 zip 生成前调用该策略，发现任何可变 state 条目就拒绝打包并列出路径。本地 `v2026.04.2` 已生成 zip 经验证仅包含 provider templates，未被污染。
 - 预防措施：正式发版统一运行 `scripts/build-release-assets.ps1` 重新构建干净 dist；不要在真实 smoke 之后直接手动对同一个 dist 调 `scripts/build-release-assets.py`；如必须 smoke，smoke 后重新构建发布资产。
 - 状态：Resolved
+
+## runtime prune 实验入口与审计口径对 `test_artifacts` 不一致
+- 现象：`python .\\scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 8` 报告 `test_artifacts` 为 `740` 个文件、约 `3.88MB`，但现有 `python .\\scripts\\prune-portable-runtime.py --runtime-path dist\\OpenClaw-Portable\\runtime\\openclaw --dry-run --pattern *.test.* --pattern *.spec.*` 只能命中 `338` 个文件、约 `2.27MB`。
+- 触发条件：在 clean dist 上按 `.context` 的下一步执行 test artifacts 实验性 dry-run/裁剪时，同时依赖审计报告和 prune CLI 作为实验入口。
+- 影响：我们无法用现有脚本完整复现实验目标，也就不能基于同一口径判断 `test_artifacts` 是否适合提升为默认 prune 规则。
+- 根因：`portable_audit.py` 的 `test_artifacts` 规则除了文件名模式外，还把 `__tests__` / `test` 目录下的文件算入候选；而 `runtime_pruning.py` 只支持简单 glob pattern，不支持按目录名命中后代文件，因此漏掉了目录型测试产物。
+- 解决方案：按 TDD 扩展 `tests/test_runtime_pruning.py`，随后在 `launcher/services/runtime_pruning.py` 增加目录名匹配能力，并让 `scripts/prune-portable-runtime.py` 新增实验性 `--directory-name` 参数；修复后 dry-run 与审计对齐为 `740` 个文件 / `3.88MB`。
+- 预防措施：后续新增审计候选分组时，实验入口必须同步具备等价的命中语义；至少补一条“审计统计值与 prune dry-run 命中值一致”的回归验证，避免再次出现“报告可见、工具删不到”的半闭环。
+- 状态：Resolved

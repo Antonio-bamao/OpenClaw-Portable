@@ -74,3 +74,19 @@
 - Verified: the verifier now preserves runtime-native `state/openclaw.json` and optional `.env` instead of writing launcher-schema config into the isolated state root.
 - Verified: `python -m unittest discover -s tests` now passes `120` tests, and the real `dist/OpenClaw-Portable` verification run passed `3` cold starts plus `2` restarts with a max startup time of `28.62s`.
 - Next: keep runtime stability verification in the delivery checklist, continue with stability-first hardening and packaging discipline, and defer any new release rebuild until the remaining delivery work is complete.
+
+## 2026-04-12 Runtime Prune Experiment Update
+
+- Completed: runtime prune experiments now support both filename patterns and explicit directory-name matching through `scripts/prune-portable-runtime.py --directory-name ...`, so the experiment tool can match `portable_audit.py`'s `test_artifacts` semantics instead of under-counting directory-based test files.
+- Verified: on a rebuilt clean `dist/OpenClaw-Portable`, TypeScript dry-run matches `4961` files / `22.49MB`, and test-artifact dry-run matches `740` files / `3.88MB`.
+- Verified: the combined experiment package `tmp/prune-experiments/ts-and-tests` removed `5381` files / `24.26MB`, stayed audit-clean, and passed `3` cold starts plus `2` restarts with max startup time `28.62s` and average `22.50s`.
+- Verified: `python -m unittest discover -s tests` now passes `122` tests after the prune tooling extension.
+- Next: if we want to convert this evidence into a shipping improvement, promote `typescript_sources` + `test_artifacts` into the default prune path, rebuild a clean dist, and rerun the release-grade stability gate before touching the next release.
+
+## 2026-04-12 Default Runtime Prune Update
+
+- Completed: default runtime pruning now includes `typescript_sources` and `test_artifacts`, with CLI semantics kept safe as “no args => default prune, explicit args => experiment-only overrides”.
+- Verified: `powershell -ExecutionPolicy Bypass -File .\\scripts\\build-launcher.ps1` now reports default prune removal of `30904` files / `165.19MB`, and the rebuilt clean `dist/OpenClaw-Portable` audits at about `558.52MB / 25837` files with no mutable state or write-risk warnings.
+- Verified: `python .\\scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 3 --restart-runs 2 --output tmp\\runtime-stability-report-default-prune.json` passed `3` cold starts plus `2` restarts with max `26.64s` and average `24.77s`.
+- Verified: `python -m unittest discover -s tests` remains green at `122` tests.
+- Next: shift the active delivery focus to U-disk read/write performance and anti-virus false-positive risk assessment; when ready to cut the next release, reuse this default-pruned clean dist as the new build baseline.

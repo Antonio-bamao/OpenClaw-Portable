@@ -183,3 +183,10 @@
 - Context: The first Ed25519 signing pass used a single embedded `keyId` and public key. That is safe for the initial release, but makes future key rotation awkward because replacing the only trusted key would break compatibility with packages signed during the transition.
 - Decision: Keep `update-signature.json` unchanged and use its existing `keyId` field to select from a trusted public key map in the launcher. The single-key API remains available as a compatibility path for tests and existing call sites.
 - Consequence: Future releases can ship a launcher that trusts both the old key and the new key, then later remove the old key after the transition window. We are not adding remote key fetching, revocation lists, or automatic rotation in this pass.
+
+## 2026-04-12｜默认 runtime prune 正式纳入 `typescript_sources` 与 `test_artifacts`
+
+- 背景：在 runtime 裁剪候选审计后，`typescript_sources` 约 `22.49MB / 4961` 文件、`test_artifacts` 约 `3.88MB / 740` 文件，被识别为下一层中风险瘦身候选；随后我们已在 clean dist 实验包上验证联合裁剪不会破坏真实 OpenClaw runtime 的冷启动与重启稳定性。
+- 理由：既然实验包与正式 clean dist 的验证都已证明这两组文件可以安全移除，那么继续把它们保留在默认交付包里，只会增加 U 盘拷贝体积、IDE 扫描噪声和发布资产大小，而不会为真实运行提供价值。将其升级为默认 prune 规则，能把 clean dist 稳定收敛到约 `558.52MB / 25837` 文件，并把真实稳定性 gate 维持在 max `26.64s`、avg `24.77s` 的水平。
+- 影响范围：`launcher/services/runtime_pruning.py` 的默认裁剪常量、`scripts/prune-portable-runtime.py` 的默认行为、`scripts/build-launcher.ps1` 产出的 clean dist 基线，以及所有后续 release 资产构建与审计结果。
+- 后续约束：默认构建必须持续移除 `.map/.md/.d.ts`、`*.ts/*.mts/*.cts`、`*.test.*/*.spec.*` 与 `__tests__/test` 目录后代文件；任何未来想撤回或新增默认 prune 规则的改动，都必须先在 clean dist 上完成审计、真实 runtime 稳定性验证和回归测试，不能只凭候选报告直接改默认值；CLI 显式传参时仍应保持“实验覆盖默认”的语义，避免实验命令意外混入正式默认规则。
