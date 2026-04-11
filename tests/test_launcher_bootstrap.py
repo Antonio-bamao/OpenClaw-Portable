@@ -93,6 +93,36 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertEqual(window.status_detail_label.text(), updated_state.status_detail)
 
+    def test_main_window_disables_check_update_button_while_busy(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        window.set_action_busy("check_update", True)
+
+        self.assertFalse(window.check_update_button.isEnabled())
+        self.assertEqual(window.check_update_button.text(), "正在检查...")
+
+        window.set_action_busy("check_update", False)
+
+        self.assertTrue(window.check_update_button.isEnabled())
+        self.assertEqual(window.check_update_button.text(), "检查更新")
+
+    def test_main_window_disables_runtime_buttons_while_starting(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        window.set_action_busy("start_runtime", True)
+
+        self.assertFalse(window.start_button.isEnabled())
+        self.assertFalse(window.stop_button.isEnabled())
+        self.assertFalse(window.restart_button.isEnabled())
+        self.assertEqual(window.start_button.text(), "启动中...")
+
+        window.set_action_busy("start_runtime", False)
+
+        self.assertTrue(window.start_button.isEnabled())
+        self.assertTrue(window.stop_button.isEnabled())
+        self.assertTrue(window.restart_button.isEnabled())
+        self.assertEqual(window.start_button.text(), "启动服务")
+
     def test_builds_wizard_with_expected_steps(self) -> None:
         window = SetupWizardWindow()
 

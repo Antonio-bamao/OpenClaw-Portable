@@ -34,7 +34,8 @@
   - 已补充真实更新源接入配置：在线更新源地址已集中到 `launcher/services/update_feed.py`，按“显式传入 URL -> `OPENCLAW_PORTABLE_UPDATE_FEED_URL` -> 内置默认地址”解析，默认正式地址与联调覆盖不再散落在业务代码里
   - 已补充 GitHub Releases 发布资产生成：新增发布侧脚本与共享元数据模块，当前可以为仓库 `Antonio-bamao/OpenClaw-Portable` 自动生成 `OpenClaw-Portable-<version>.zip` 和 `update.json`，并把默认更新源指向当前仓库 `releases/latest/download/update.json`
   - 已补充更新包数字签名：新增 `update-signature.json`、Ed25519 验签模块、本地忽略的私钥文件路径 `.local/update-signing-private-key.txt`、以及发布脚本里的签名步骤；更新导入现在会先验签再验 manifest
-  - 已补发布维护手册 `docs/release-maintenance-playbook.md`：覆盖 GitHub Release 资产上传、发布说明维护、签名私钥备份/恢复与 keyId 轮换；已完成 `v2026.04.2` GitHub latest release 演练并验证匿名 `update.json` 与 zip 资产可访问；下一步可验证 GUI“检查更新”入口，或转回体积瘦身与 U 盘读写性能评估
+  - 已补发布维护手册 `docs/release-maintenance-playbook.md`：覆盖 GitHub Release 资产上传、发布说明维护、签名私钥备份/恢复与 keyId 轮换；已完成 `v2026.04.2` GitHub latest release 演练并验证匿名 `update.json` 与 zip 资产可访问
+  - 已补启动器长耗时按钮的后台执行与重复点击保护：真实 runtime 启停、在线检查更新、下载导入、导入更新包和恢复更新备份不再直接阻塞 UI 主线程
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
@@ -61,5 +62,5 @@
 
 ## 2026-04-11 Update
 
-- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, and `v2026.04.2` has been published/verified through GitHub latest release assets.
-- Next: validate the launcher GUI update flow, or return to runtime slimming / U disk performance work.
+- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, and the launcher now protects long-running buttons with background execution plus busy states.
+- Next: publish a `v2026.04.3` hotfix if the release package needs the UI responsiveness fix, or return to runtime slimming / U disk performance work.

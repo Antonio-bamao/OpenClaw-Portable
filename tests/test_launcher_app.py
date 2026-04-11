@@ -80,10 +80,15 @@ class FakeWindow:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
         self.states: list[LauncherViewState] = []
+        self.busy_actions: list[tuple[str, bool]] = []
 
     def apply_view_state(self, state: LauncherViewState) -> None:
         self.states.append(state)
         self.calls.append(f"apply:{state.status_label}")
+
+    def set_action_busy(self, action: str, busy: bool) -> None:
+        self.busy_actions.append((action, busy))
+        self.calls.append(f"busy:{action}:{busy}")
 
 
 class FakeQtApp:
@@ -110,6 +115,20 @@ class LauncherAppTests(unittest.TestCase):
             calls,
             ["pending:start", "apply:启动中", "process_events", "start_runtime", "load_view_state", "apply:运行中"],
         )
+
+    def test_handle_start_ignores_duplicate_click_while_busy(self) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._busy_actions = {"start_runtime"}
+
+        application._handle_start()
+
+        self.assertNotIn("start_runtime", calls)
 
     def test_handle_restart_applies_pending_state_before_runtime_restarts(self) -> None:
         calls: list[str] = []
@@ -241,6 +260,21 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(calls, ["check_for_updates", "download_and_import_update:v2026.04.2"])
         self.assertEqual(len(info_messages), 1)
         self.assertIn("v2026.04.2", info_messages[0])
+
+    def test_handle_check_update_ignores_duplicate_click_while_busy(self) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._busy_actions = {"check_update"}
+        application._confirm_online_update = lambda metadata: False
+
+        application._handle_check_update()
+
+        self.assertNotIn("check_for_updates", calls)
 
 
 if __name__ == "__main__":

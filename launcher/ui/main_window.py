@@ -45,6 +45,8 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restore_update_backup_button: QPushButton | None = None
         self.factory_reset_button: QPushButton | None = None
         self.reconfigure_button: QPushButton | None = None
+        self._buttons_by_action: dict[str, QPushButton] = {}
+        self._default_button_texts: dict[QPushButton, str] = {}
         self._build_ui()
 
     def primary_action_texts(self) -> list[str]:
@@ -77,6 +79,31 @@ class OpenClawLauncherWindow(QMainWindow):
             f"地址 {view_state.webui_url or '尚未启动'}  ·  "
             f"{'离线模式已开启' if view_state.offline_mode else '已配置 API Key，可进入联调'}"
         )
+
+    def set_action_busy(self, action: str, busy: bool) -> None:
+        runtime_actions = {
+            "start_runtime": (self.start_button, "启动中..."),
+            "stop_runtime": (self.stop_button, "停止中..."),
+            "restart_runtime": (self.restart_button, "重启中..."),
+        }
+        if action in runtime_actions:
+            active_button, busy_text = runtime_actions[action]
+            for button in (self.start_button, self.stop_button, self.restart_button):
+                button.setEnabled(not busy)
+                button.setText(self._default_button_texts[button])
+            if busy:
+                active_button.setText(busy_text)
+            return
+        button = self._buttons_by_action.get(action)
+        if not button:
+            return
+        button.setEnabled(not busy)
+        if action == "check_update":
+            button.setText("正在检查..." if busy else "检查更新")
+        elif action == "import_update":
+            button.setText("正在导入..." if busy else "导入更新包")
+        elif action == "restore_update_backup":
+            button.setText("正在恢复..." if busy else "恢复更新备份")
 
     def _build_ui(self) -> None:
         self.setWindowTitle("OpenClaw Portable")
@@ -132,6 +159,22 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restore_update_backup_button = make_button("恢复更新备份")
         self.factory_reset_button = make_button("恢复出厂")
         self.reconfigure_button = make_button("重新配置")
+        self._default_button_texts = {
+            button: button.text()
+            for button in (
+                self.start_button,
+                self.stop_button,
+                self.restart_button,
+                self.check_update_button,
+                self.import_update_button,
+                self.restore_update_backup_button,
+            )
+        }
+        self._buttons_by_action = {
+            "check_update": self.check_update_button,
+            "import_update": self.import_update_button,
+            "restore_update_backup": self.restore_update_backup_button,
+        }
         self._primary_buttons = [self.start_button, self.stop_button, self.restart_button]
         self._secondary_buttons = [
             self.open_webui_button,

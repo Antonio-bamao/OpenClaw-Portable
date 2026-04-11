@@ -276,3 +276,11 @@
 - 结果：GitHub Releases latest 更新入口已可匿名访问，`OnlineUpdateService` 可发现 `v2026.04.2`，zip 资产 HEAD 返回 200 且 `Content-Length` 与本地包一致。
 - 验证：`python -m unittest discover -s tests` 通过 103 个测试；dist 真实 runtime smoke 成功 `elapsed_seconds=37.01`、`health_ok=True`；latest `update.json` 返回 200 且 `version=v2026.04.2`；`OnlineUpdateService.check_for_updates("v2026.04.1")` 返回 `update_available=True`；zip HEAD 返回 200、`Content-Length=212380004`。
 - 下一步：继续验证启动器 GUI 的“检查更新”入口，或转回 runtime 瘦身、U 盘读写性能与商业交付文档。
+
+## 2026-04-12 / Phase 2 Step 33｜修复启动器按钮慢响应与重复点击卡死风险
+
+- 目标：修复真实 runtime 和在线更新链路下，按钮点击后 UI 主线程被长耗时动作阻塞、多次点击容易让 Windows 标记为“未响应”的问题。
+- 动作：按 TDD 先补 `tests/test_launcher_app.py` 的重复点击保护测试，以及 `tests/test_launcher_bootstrap.py` 的按钮 busy 态 UI 测试；随后在 `OpenClawLauncherApplication` 中加入单线程后台执行器和 Qt signal 回到 UI 线程的完成回调，把启动、停止、重启、导入更新包、检查更新、下载导入更新和恢复更新备份改为后台执行；同时在主窗口为运行时按钮、检查更新、导入更新包、恢复更新备份增加禁用与“正在...”文案。
+- 结果：慢操作不再直接堵住 PySide 主线程；同一动作在进行中会被按钮禁用和应用层 busy 集合双重拦截，避免用户多点几下把多个网络下载、启动 runtime 或导入更新任务堆进事件队列。
+- 验证：`python -m unittest tests.test_launcher_app tests.test_launcher_bootstrap -v` 通过 17 个测试；`python -m unittest discover -s tests` 通过 107 个测试。
+- 下一步：若要让已发布的 `v2026.04.2` 用户拿到该修复，需要准备 `v2026.04.3` 热修复 release，重新构建并上传 zip 与 `update.json`。

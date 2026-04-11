@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import sys
 import webbrowser
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
@@ -18,6 +20,10 @@ from launcher.ui.theme import preferred_font
 from launcher.ui.wizard import SetupWizardWindow
 
 
+class BackgroundTaskSignals(QObject):
+    completed = Signal(str, object, object, bool)
+
+
 class OpenClawLauncherApplication:
     def __init__(self, project_root: Path | None = None, node_command: str = "node", runtime_mode: str | None = None) -> None:
         self.project_root = project_root or Path(__file__).resolve().parent.parent
@@ -29,6 +35,11 @@ class OpenClawLauncherApplication:
         self.app.setFont(preferred_font())
         self.main_window: OpenClawLauncherWindow | None = None
         self.wizard_window: SetupWizardWindow | None = None
+        self._busy_actions: set[str] = set()
+        self._background_executor = ThreadPoolExecutor(max_workers=1)
+        self._background_signals = BackgroundTaskSignals()
+        self._background_signals.completed.connect(self._finish_background_action)
+        self.app.aboutToQuit.connect(self._shutdown_background_executor)
 
     def run(self) -> int:
         route = LauncherBootstrap(self.paths).initial_route()
@@ -72,18 +83,19 @@ class OpenClawLauncherApplication:
         self.show_main_window()
 
     def _handle_start(self) -> None:
+        if self._is_action_busy("start_runtime"):
+            return
         self._show_pending_runtime_state("start")
-        self._run_with_error_boundary(self.controller.start_runtime)
-        self._refresh_main_view()
+        self._run_background_action("start_runtime", self.controller.start_runtime, lambda _: self._refresh_main_view(), call_on_none=True)
 
     def _handle_stop(self) -> None:
-        self._run_with_error_boundary(self.controller.stop_runtime)
-        self._refresh_main_view()
+        self._run_background_action("stop_runtime", self.controller.stop_runtime, lambda _: self._refresh_main_view(), call_on_none=True)
 
     def _handle_restart(self) -> None:
+        if self._is_action_busy("restart_runtime"):
+            return
         self._show_pending_runtime_state("restart")
-        self._run_with_error_boundary(self.controller.restart_runtime)
-        self._refresh_main_view()
+        self._run_background_action("restart_runtime", self.controller.restart_runtime, lambda _: self._refresh_main_view(), call_on_none=True)
 
     def _handle_export_diagnostics(self) -> None:
         bundle_path = self._run_with_error_boundary(self.controller.export_diagnostics_bundle)
@@ -94,12 +106,16 @@ class OpenClawLauncherApplication:
         selected_dir = self._select_update_package_dir()
         if not selected_dir:
             return
-        imported_version = self._run_with_error_boundary(lambda: self.controller.import_update_package(Path(selected_dir)))
-        if imported_version:
-            self._show_info(f"已导入更新包：{imported_version}。请重新启动启动器完成切换。")
+        self._run_background_action(
+            "import_update",
+            lambda: self.controller.import_update_package(Path(selected_dir)),
+            lambda imported_version: self._show_info(f"已导入更新包：{imported_version}。请重新启动启动器完成切换。"),
+        )
 
     def _handle_check_update(self) -> None:
-        metadata = self._run_with_error_boundary(self.controller.check_for_updates)
+        self._run_background_action("check_update", self.controller.check_for_updates, self._handle_update_metadata)
+
+    def _handle_update_metadata(self, metadata: UpdateCheckResult) -> None:
         if metadata is None:
             return
         if not metadata.update_available:
@@ -107,9 +123,11 @@ class OpenClawLauncherApplication:
             return
         if not self._confirm_online_update(metadata):
             return
-        imported_version = self._run_with_error_boundary(lambda: self.controller.download_and_import_update(metadata))
-        if imported_version:
-            self._show_info(f"已更新到 {imported_version}。请重新启动启动器完成切换。")
+        self._run_background_action(
+            "check_update",
+            lambda: self.controller.download_and_import_update(metadata),
+            lambda imported_version: self._show_info(f"已更新到 {imported_version}。请重新启动启动器完成切换。"),
+        )
 
     def _handle_restore_update_backup(self) -> None:
         if not self._confirm_restore_update_backup():
@@ -118,7 +136,13 @@ class OpenClawLauncherApplication:
         if not selected_dir:
             return
         backup_dir = Path(selected_dir)
-        restored_version = self._run_with_error_boundary(lambda: self.controller.restore_update_backup(backup_dir))
+        self._run_background_action(
+            "restore_update_backup",
+            lambda: self.controller.restore_update_backup(backup_dir),
+            lambda restored_version: self._show_restore_update_backup_result(restored_version, backup_dir),
+        )
+
+    def _show_restore_update_backup_result(self, restored_version: str | None, backup_dir: Path) -> None:
         if restored_version is not None:
             version_label = restored_version or backup_dir.name
             self._show_info(f"已恢复更新备份：{version_label}。请重新启动启动器完成切换。")
@@ -153,6 +177,46 @@ class OpenClawLauncherApplication:
         except Exception as exc:  # noqa: BLE001
             self._show_error(format_runtime_error(exc))
             return None
+
+    def _run_background_action(self, action_key: str, action, on_success, *, call_on_none: bool = False) -> bool:
+        if not hasattr(self, "_busy_actions"):
+            self._busy_actions = set()
+        if action_key in self._busy_actions:
+            return False
+        has_background_runner = hasattr(self, "_background_executor") and hasattr(self, "_background_signals")
+        self._busy_actions.add(action_key)
+        if has_background_runner:
+            self._set_action_busy(action_key, True)
+        if not has_background_runner:
+            result = self._run_with_error_boundary(action)
+            self._busy_actions.discard(action_key)
+            if result is not None or call_on_none:
+                on_success(result)
+            return True
+        future = self._background_executor.submit(action)
+        future.add_done_callback(lambda completed: self._background_signals.completed.emit(action_key, completed, on_success, call_on_none))
+        return True
+
+    def _finish_background_action(self, action_key: str, future: Future, on_success, call_on_none: bool) -> None:
+        self._busy_actions.discard(action_key)
+        self._set_action_busy(action_key, False)
+        try:
+            result = future.result()
+        except Exception as exc:  # noqa: BLE001
+            self._show_error(format_runtime_error(exc))
+            return
+        if result is not None or call_on_none:
+            on_success(result)
+
+    def _is_action_busy(self, action_key: str) -> bool:
+        return action_key in getattr(self, "_busy_actions", set())
+
+    def _set_action_busy(self, action_key: str, busy: bool) -> None:
+        if self.main_window and hasattr(self.main_window, "set_action_busy"):
+            self.main_window.set_action_busy(action_key, busy)
+
+    def _shutdown_background_executor(self) -> None:
+        self._background_executor.shutdown(wait=False, cancel_futures=True)
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self.main_window or self.wizard_window, "OpenClaw Portable", message)
