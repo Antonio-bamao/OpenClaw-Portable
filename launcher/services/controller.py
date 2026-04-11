@@ -10,7 +10,7 @@ from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.diagnostics_export import DiagnosticsExporter
 from launcher.services.factory_reset import FactoryResetService
-from launcher.services.local_update import LocalUpdateImportService
+from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 
 
 class LauncherController:
@@ -21,6 +21,7 @@ class LauncherController:
         diagnostics_exporter: DiagnosticsExporter | None = None,
         factory_reset_service: FactoryResetService | None = None,
         local_update_service: LocalUpdateImportService | None = None,
+        restore_update_backup_service: RestoreUpdateBackupService | None = None,
         runtime_mode: str = "mock",
         node_command: str = "node",
     ) -> None:
@@ -35,6 +36,7 @@ class LauncherController:
         )
         self.factory_reset_service = factory_reset_service or FactoryResetService(paths)
         self.local_update_service = local_update_service or LocalUpdateImportService(paths)
+        self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
@@ -67,6 +69,12 @@ class LauncherController:
         result = self.local_update_service.import_package(package_root)
         self._prepared = False
         return result.imported_version
+
+    def restore_update_backup(self, backup_root: Path) -> str:
+        self.runtime_adapter.stop()
+        result = self.restore_update_backup_service.restore_backup(backup_root)
+        self._prepared = False
+        return result.restored_version
 
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():

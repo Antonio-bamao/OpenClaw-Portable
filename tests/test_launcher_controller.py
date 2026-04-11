@@ -3,10 +3,12 @@ import socket
 import time
 import unittest
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
 from launcher.core.paths import PortablePaths
+from launcher.runtime.base import RuntimeHealth, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.controller import LauncherController
@@ -58,6 +60,47 @@ def stage_mock_runtime(paths: PortablePaths) -> None:
     target = paths.runtime_dir / "mock-runtime" / "server.js"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, target)
+
+
+@dataclass
+class FakeRestoreResult:
+    restored_version: str
+
+
+class FakeRuntimeAdapter:
+    def __init__(self) -> None:
+        self.stop_calls = 0
+
+    def prepare(self, config: LauncherConfig, paths: PortablePaths) -> None:
+        return None
+
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+
+    def restart(self) -> None:
+        return None
+
+    def status(self) -> RuntimeStatus:
+        return RuntimeStatus(state="ready", port=18789, message="ready")
+
+    def webui_url(self) -> str:
+        return "http://127.0.0.1:18789"
+
+    def healthcheck(self) -> RuntimeHealth:
+        return RuntimeHealth(ok=True)
+
+
+class FakeRestoreUpdateBackupService:
+    def __init__(self, restored_version: str = "v1") -> None:
+        self.restored_version = restored_version
+        self.called_with: Path | None = None
+
+    def restore_backup(self, backup_root: Path) -> FakeRestoreResult:
+        self.called_with = backup_root
+        return FakeRestoreResult(restored_version=self.restored_version)
 
 
 class LauncherControllerTests(unittest.TestCase):
@@ -241,6 +284,29 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertTrue((paths.workspace_dir / "notes.txt").exists())
             self.assertTrue((paths.state_dir / "backups" / "support.zip").exists())
             self.assertFalse((paths.logs_dir / "openclaw-runtime.err.log").exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_restore_update_backup_stops_runtime_and_resets_prepared_state(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            restore_service = FakeRestoreUpdateBackupService(restored_version="v2026.04.01")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                restore_update_backup_service=restore_service,
+                node_command="node",
+            )
+            controller.configure(make_config(reserve_free_port()), SensitiveConfig(api_key="sk-demo"))
+
+            restored_version = controller.restore_update_backup(Path("C:/tmp/update-backup"))
+
+            self.assertEqual(restored_version, "v2026.04.01")
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(restore_service.called_with, Path("C:/tmp/update-backup"))
+            self.assertFalse(controller._prepared)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

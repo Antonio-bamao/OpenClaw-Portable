@@ -5,7 +5,8 @@ import uuid
 from pathlib import Path
 
 from launcher.core.paths import PortablePaths
-from launcher.services.local_update import LocalUpdateImportService
+from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
+from launcher.services.update_manifest import write_update_manifest
 
 
 def make_workspace_temp_dir() -> Path:
@@ -20,41 +21,62 @@ def make_paths(temp_dir: Path) -> PortablePaths:
     return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
 
 
-def stage_target_portable(paths: PortablePaths) -> None:
+def stage_target_portable(paths: PortablePaths, *, version: str = "v1", label: str = "old") -> None:
     paths.ensure_directories()
-    (paths.project_root / "version.json").write_text(json.dumps({"version": "v1"}), encoding="utf-8")
-    (paths.project_root / "README.txt").write_text("old readme\n", encoding="utf-8")
-    (paths.project_root / "OpenClawLauncher.exe").write_text("old exe\n", encoding="utf-8")
+    (paths.project_root / "version.json").write_text(json.dumps({"version": version}), encoding="utf-8")
+    (paths.project_root / "README.txt").write_text(f"{label} readme\n", encoding="utf-8")
+    (paths.project_root / "OpenClawLauncher.exe").write_text(f"{label} exe\n", encoding="utf-8")
     (paths.project_root / "_internal").mkdir(parents=True, exist_ok=True)
-    (paths.project_root / "_internal" / "core.dll").write_text("old dll\n", encoding="utf-8")
+    (paths.project_root / "_internal" / "core.dll").write_text(f"{label} dll\n", encoding="utf-8")
     (paths.runtime_dir / "openclaw").mkdir(parents=True, exist_ok=True)
-    (paths.runtime_dir / "openclaw" / "openclaw.mjs").write_text("old runtime\n", encoding="utf-8")
-    (paths.assets_dir / "logo.txt").write_text("old asset\n", encoding="utf-8")
-    (paths.tools_dir / "helper.txt").write_text("old tool\n", encoding="utf-8")
+    (paths.runtime_dir / "openclaw" / "openclaw.mjs").write_text(f"{label} runtime\n", encoding="utf-8")
+    (paths.assets_dir / "logo.txt").write_text(f"{label} asset\n", encoding="utf-8")
+    (paths.tools_dir / "helper.txt").write_text(f"{label} tool\n", encoding="utf-8")
     (paths.state_dir / "openclaw.json").write_text("keep state\n", encoding="utf-8")
     (paths.state_dir / ".env").write_text("OPENCLAW_API_KEY=keep\n", encoding="utf-8")
 
 
-def stage_source_package(root: Path) -> None:
-    (root / "version.json").write_text(json.dumps({"version": "v2"}), encoding="utf-8")
-    (root / "README.txt").write_text("new readme\n", encoding="utf-8")
-    (root / "OpenClawLauncher.exe").write_text("new exe\n", encoding="utf-8")
+def stage_source_package(root: Path, *, version: str = "v2", label: str = "new") -> None:
+    (root / "version.json").write_text(json.dumps({"version": version}), encoding="utf-8")
+    (root / "README.txt").write_text(f"{label} readme\n", encoding="utf-8")
+    (root / "OpenClawLauncher.exe").write_text(f"{label} exe\n", encoding="utf-8")
     (root / "_internal").mkdir(parents=True, exist_ok=True)
-    (root / "_internal" / "core.dll").write_text("new dll\n", encoding="utf-8")
+    (root / "_internal" / "core.dll").write_text(f"{label} dll\n", encoding="utf-8")
     (root / "runtime" / "openclaw").mkdir(parents=True, exist_ok=True)
-    (root / "runtime" / "openclaw" / "openclaw.mjs").write_text("new runtime\n", encoding="utf-8")
+    (root / "runtime" / "openclaw" / "openclaw.mjs").write_text(f"{label} runtime\n", encoding="utf-8")
     (root / "assets" / "logo.txt").parent.mkdir(parents=True, exist_ok=True)
-    (root / "assets" / "logo.txt").write_text("new asset\n", encoding="utf-8")
+    (root / "assets" / "logo.txt").write_text(f"{label} asset\n", encoding="utf-8")
     (root / "tools" / "helper.txt").parent.mkdir(parents=True, exist_ok=True)
-    (root / "tools" / "helper.txt").write_text("new tool\n", encoding="utf-8")
+    (root / "tools" / "helper.txt").write_text(f"{label} tool\n", encoding="utf-8")
     (root / "state").mkdir(parents=True, exist_ok=True)
     (root / "state" / "openclaw.json").write_text("must not copy\n", encoding="utf-8")
+
+
+def finalize_source_package(root: Path) -> None:
+    write_update_manifest(root)
+
+
+def stage_version_only_package(root: Path, version: str) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "version.json").write_text(json.dumps({"version": version}), encoding="utf-8")
 
 
 class FailingLocalUpdateImportService(LocalUpdateImportService):
     def _copy_entry(self, source: Path, destination: Path) -> None:
         if source.name == "tools":
             raise RuntimeError("simulated copy failure")
+        super()._copy_entry(source, destination)
+
+
+class FailingRestoreUpdateBackupService(RestoreUpdateBackupService):
+    def __init__(self, paths: PortablePaths) -> None:
+        super().__init__(paths)
+        self._has_failed = False
+
+    def _copy_entry(self, source: Path, destination: Path) -> None:
+        if not self._has_failed and source.name == "tools" and destination == self.paths.project_root / "tools":
+            self._has_failed = True
+            raise RuntimeError("simulated restore failure")
         super()._copy_entry(source, destination)
 
 
@@ -67,6 +89,7 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root)
+            finalize_source_package(source_root)
 
             result = LocalUpdateImportService(paths).import_package(source_root)
 
@@ -91,6 +114,7 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root)
+            finalize_source_package(source_root)
 
             with self.assertRaisesRegex(RuntimeError, "simulated copy failure"):
                 FailingLocalUpdateImportService(paths).import_package(source_root)
@@ -100,5 +124,207 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             self.assertEqual((paths.project_root / "_internal" / "core.dll").read_text(encoding="utf-8"), "old dll\n")
             self.assertEqual((paths.runtime_dir / "openclaw" / "openclaw.mjs").read_text(encoding="utf-8"), "old runtime\n")
             self.assertEqual((paths.tools_dir / "helper.txt").read_text(encoding="utf-8"), "old tool\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_package_with_invalid_version_json(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1-dev")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            (source_root / "version.json").write_text("{bad json", encoding="utf-8")
+            (source_root / "runtime" / "openclaw").mkdir(parents=True, exist_ok=True)
+            (source_root / "runtime" / "openclaw" / "openclaw.mjs").write_text("new runtime\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "version.json 不是合法 JSON"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_package_without_distribution_entries(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1-dev")
+            source_root = temp_dir / "incoming-package"
+            stage_version_only_package(source_root, "v2026.04.2")
+
+            with self.assertRaisesRegex(FileNotFoundError, "没有可导入的程序文件"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_same_version_package(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.2")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="same")
+            finalize_source_package(source_root)
+
+            with self.assertRaisesRegex(ValueError, "无需重复导入"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_older_version_package_and_guides_restore_flow(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.2")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.1", label="older")
+            finalize_source_package(source_root)
+
+            with self.assertRaisesRegex(ValueError, "恢复更新备份"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_release_version_is_newer_than_same_dev_version(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1-dev", label="dev")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.1", label="release")
+            finalize_source_package(source_root)
+
+            result = LocalUpdateImportService(paths).import_package(source_root)
+
+            self.assertEqual(result.imported_version, "v2026.04.1")
+            self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "release readme\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_restores_distribution_content_from_backup_without_overwriting_state(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2", label="current")
+            backup_root = paths.state_dir / "backups" / "updates" / "20260411-120000"
+            backup_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(backup_root, version="v1", label="restored")
+            finalize_source_package(backup_root)
+
+            result = RestoreUpdateBackupService(paths).restore_backup(backup_root)
+
+            self.assertEqual(result.restored_version, "v1")
+            self.assertEqual(result.source_backup_dir, backup_root.resolve())
+            self.assertTrue(result.backup_dir.exists())
+            self.assertIn("runtime", result.restored_entries)
+            self.assertEqual((paths.project_root / "version.json").read_text(encoding="utf-8"), json.dumps({"version": "v1"}))
+            self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "restored readme\n")
+            self.assertEqual((paths.project_root / "OpenClawLauncher.exe").read_text(encoding="utf-8"), "restored exe\n")
+            self.assertEqual((paths.project_root / "_internal" / "core.dll").read_text(encoding="utf-8"), "restored dll\n")
+            self.assertEqual((paths.runtime_dir / "openclaw" / "openclaw.mjs").read_text(encoding="utf-8"), "restored runtime\n")
+            self.assertEqual((paths.state_dir / "openclaw.json").read_text(encoding="utf-8"), "keep state\n")
+            self.assertEqual((paths.state_dir / ".env").read_text(encoding="utf-8"), "OPENCLAW_API_KEY=keep\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_restore_rolls_back_when_copy_fails_mid_restore(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2", label="current")
+            backup_root = paths.state_dir / "backups" / "updates" / "20260411-120000"
+            backup_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(backup_root, version="v1", label="restored")
+            finalize_source_package(backup_root)
+
+            with self.assertRaisesRegex(RuntimeError, "simulated restore failure"):
+                FailingRestoreUpdateBackupService(paths).restore_backup(backup_root)
+
+            self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "current readme\n")
+            self.assertEqual((paths.project_root / "OpenClawLauncher.exe").read_text(encoding="utf-8"), "current exe\n")
+            self.assertEqual((paths.project_root / "_internal" / "core.dll").read_text(encoding="utf-8"), "current dll\n")
+            self.assertEqual((paths.runtime_dir / "openclaw" / "openclaw.mjs").read_text(encoding="utf-8"), "current runtime\n")
+            self.assertEqual((paths.tools_dir / "helper.txt").read_text(encoding="utf-8"), "current tool\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_restore_requires_at_least_one_distribution_entry(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2", label="current")
+            backup_root = paths.state_dir / "backups" / "updates" / "20260411-120000"
+            backup_root.mkdir(parents=True, exist_ok=True)
+
+            with self.assertRaisesRegex(FileNotFoundError, "备份目录中没有可恢复的分发内容"):
+                RestoreUpdateBackupService(paths).restore_backup(backup_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_without_manifest(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+
+            with self.assertRaisesRegex(FileNotFoundError, "update-manifest.json"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_when_manifest_version_mismatches_version_json(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            manifest_path = write_update_manifest(source_root)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["packageVersion"] = "v2026.04.3"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "版本信息与完整性清单不一致"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_when_manifest_hash_does_not_match(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            finalize_source_package(source_root)
+            (source_root / "README.txt").write_text("tampered readme\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "完整性校验失败"):
+                LocalUpdateImportService(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_when_manifest_lacks_entry_record(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            manifest_path = write_update_manifest(source_root)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            del manifest["entries"]["runtime"]
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "缺少必要的完整性记录"):
+                LocalUpdateImportService(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

@@ -204,3 +204,24 @@
 - 结果：主界面现在可以手动选择新的便携包目录导入更新；更新流程会显式保留 `state/`，不会覆盖现有配置、诊断包或 workspace；复制过程中一旦失败，会把已经替换的旧内容恢复回来，先把“安全更新”这个最关键的本地闭环补齐。
 - 验证：python -m unittest tests.test_local_update tests.test_launcher_app tests.test_launcher_bootstrap 通过 12 个测试；python -m unittest discover -s tests 通过 56 个测试。
 - 下一步：继续补“从备份恢复旧版本”与更新包合法性校验，再考虑是否进入在线检查更新。
+
+## 2026-04-11 / Phase 2 Step 23｜补充主界面“恢复更新备份”入口与从备份恢复旧版本闭环
+- 目标：让用户无需命令行即可从 `state/backups/updates/` 选择一份历史备份恢复旧版本，同时继续保持 `state/` 永不覆盖
+- 动作：先补设计规格与实现计划，明确恢复来源、恢复范围和再次备份策略；随后按 TDD 为 `RestoreUpdateBackupService` 新增恢复成功、空备份报错和中途复制失败自动回滚测试，再为 controller 补“恢复前 stop runtime 且恢复后 `_prepared=False`”测试；确认 RED 后在 `launcher/services/local_update.py` 中新增恢复服务与结果对象，在 `LauncherController`、`OpenClawLauncherApplication`、`launcher/ui/main_window.py` 上接线，并补上恢复确认弹窗、备份目录选择器与成功提示；实现过程中顺手修正了分发替换流程的回滚粒度，让“已删但尚未复制成功”的当前条目也能被自动恢复。
+- 结果：主界面现在具备“恢复更新备份”入口，用户可从 `state/backups/updates/` 选一份历史备份恢复旧版本；恢复动作会先再次备份当前分发内容，再只恢复启动器本体、`_internal/`、`runtime/`、`assets/`、`tools/`、`README.txt` 与 `version.json`，不会覆盖 `state/`；一旦恢复途中失败，流程会自动把当前版本还原回来。
+- 验证：docs/superpowers/specs/2026-04-11-restore-update-backup-design.md 与 docs/superpowers/plans/2026-04-11-restore-update-backup.md 已创建；python -m unittest tests.test_local_update tests.test_launcher_controller -v 通过 17 个测试；当前环境缺少 `PySide6`，因此 `tests.test_launcher_app` 与 `tests.test_launcher_bootstrap` 暂无法导入执行，待依赖具备后补跑。
+- 下一步：继续补“更新包合法性校验”，并在具备 `PySide6` 的环境下补跑 UI 回归，再评估是否进入在线检查更新。
+
+## 2026-04-11 / Phase 2 Step 24｜为“导入更新包”补严格合法性校验并收敛为升级入口
+- 目标：让“导入更新包”只承担升级职责，在真正替换文件前拦住坏包、残包、同版本包和旧版本包
+- 动作：先补短规格和实施计划，明确结构校验、版本规则和“小白用户默认走升级而非降级”的产品边界；随后按 TDD 为 `LocalUpdateImportService` 新增非法 JSON、缺少真实分发内容、同版本包、旧版本包和 `stable > same-dev` 的测试；确认 RED 后在 `launcher/services/local_update.py` 中补上 `version.json` 解析、分发内容存在性检查、当前/更新包版本读取，以及 `v2026.04.1-dev` / `v2026.04.1` 这类版本串的比较逻辑，并确保这些校验发生在创建备份和复制文件之前。
+- 结果：现在“导入更新包”会先验证 `version.json` 合法、更新包里至少有一项真实分发内容，并要求更新包版本严格高于当前版本；同版本包会提示“无需重复导入”，旧版本包会明确引导用户改用“恢复更新备份”，从而把升级和回退两条路径真正分开。
+- 验证：docs/superpowers/specs/2026-04-11-local-update-package-validation-design.md 与 docs/superpowers/plans/2026-04-11-local-update-package-validation.md 已创建；python -m unittest tests.test_local_update -v 通过 10 个测试；python -m unittest tests.test_local_update tests.test_launcher_controller -v 通过 22 个测试；python -m unittest discover -s tests 仍只因环境缺少 `PySide6` 导致 `tests.test_launcher_app`、`tests.test_launcher_bootstrap`、`tests.test_runtime_errors` 无法导入，其余 53 个测试中的非 UI 相关部分通过。
+- 下一步：评估“在线检查更新”或“更新包哈希/签名校验”作为下一层更新可信度能力，并在具备 `PySide6` 的环境下补跑 UI 回归。
+
+## 2026-04-11 / Phase 2 Step 25｜为本地更新包补 `update-manifest.json` 离线哈希校验
+- 目标：让手动导入的更新包在真正替换文件前完成离线完整性校验，拦住坏包、残包和被篡改的包
+- 动作：先补短规格和实施计划，明确 `update-manifest.json` 的格式、关键条目范围和目录摘要算法；随后按 TDD 新增 `tests/test_update_manifest.py` 覆盖文件/目录哈希稳定性、manifest 生成和写盘行为，并在 `tests/test_local_update.py` 中新增“缺少 manifest、manifest 版本不一致、条目记录缺失、哈希不匹配”测试；确认 RED 后新增 `launcher/services/update_manifest.py` 作为共享模块，实现关键分发内容的 `SHA-256` 文件/目录哈希、manifest 生成、写盘与校验；再新增 `scripts/generate-update-manifest.py`，并让 `scripts/build-launcher.ps1` 在复制和裁剪完成后自动为 `dist/OpenClaw-Portable` 生成 manifest；最后在 `LocalUpdateImportService` 中把 manifest 校验接到版本校验之后、备份和替换之前。
+- 结果：便携包构建产物现在会自动生成 `update-manifest.json`；本地导入更新包时，除了已有的版本和结构校验外，还会强制校验 manifest 存在性、`packageVersion` 与 `version.json` 一致性，以及 `OpenClawLauncher.exe`、`runtime`、`_internal`、`assets`、`tools`、`README.txt`、`version.json` 等关键条目的 `SHA-256`。任何关键条目缺失、manifest 缺失或哈希不匹配，都会在创建备份和替换文件前被拦住。
+- 验证：docs/superpowers/specs/2026-04-11-update-manifest-hash-validation-design.md 与 docs/superpowers/plans/2026-04-11-update-manifest-hash-validation.md 已创建；python -m unittest tests.test_update_manifest tests.test_local_update -v 通过 17 个测试；python -m unittest tests.test_update_manifest tests.test_local_update tests.test_launcher_controller -v 通过 29 个测试；python -m unittest discover -s tests 仍只因环境缺少 `PySide6` 导致 `tests.test_launcher_app`、`tests.test_launcher_bootstrap`、`tests.test_runtime_errors` 无法导入，其余 60 个测试中的非 UI 相关部分通过。
+- 下一步：评估“在线检查更新”或“数字签名”作为下一层更新可信度能力，并在具备 `PySide6` 的环境下补跑 UI 回归。

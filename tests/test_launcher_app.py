@@ -53,6 +53,10 @@ class FakeController:
         self.calls.append(f"import_update_package:{package_root}")
         return "v2026.04.2"
 
+    def restore_update_backup(self, backup_root: Path) -> str:
+        self.calls.append(f"restore_update_backup:{backup_root}")
+        return "v2026.03.9"
+
 
 class FakeWindow:
     def __init__(self, calls: list[str]) -> None:
@@ -159,6 +163,25 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(calls, ["import_update_package:C:\\tmp\\update-package"])
         self.assertEqual(len(info_messages), 1)
         self.assertIn("v2026.04.2", info_messages[0])
+
+    def test_handle_restore_update_backup_shows_restart_prompt_after_success(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+        application._confirm_restore_update_backup = lambda: True
+        application._select_update_backup_dir = lambda: "C:/tmp/update-backup"
+
+        application._handle_restore_update_backup()
+
+        self.assertEqual(calls, ["restore_update_backup:C:\\tmp\\update-backup"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("v2026.03.9", info_messages[0])
 
 
 if __name__ == "__main__":

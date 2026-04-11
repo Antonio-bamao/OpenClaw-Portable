@@ -48,6 +48,7 @@ class OpenClawLauncherApplication:
                 on_open_webui=self._handle_open_webui,
                 on_export_diagnostics=self._handle_export_diagnostics,
                 on_import_update=self._handle_import_update,
+                on_restore_update_backup=self._handle_restore_update_backup,
                 on_factory_reset=self._handle_factory_reset,
                 on_reconfigure=self.show_setup_wizard,
             )
@@ -95,6 +96,18 @@ class OpenClawLauncherApplication:
         if imported_version:
             self._show_info(f"已导入更新包：{imported_version}。请重新启动启动器完成切换。")
 
+    def _handle_restore_update_backup(self) -> None:
+        if not self._confirm_restore_update_backup():
+            return
+        selected_dir = self._select_update_backup_dir()
+        if not selected_dir:
+            return
+        backup_dir = Path(selected_dir)
+        restored_version = self._run_with_error_boundary(lambda: self.controller.restore_update_backup(backup_dir))
+        if restored_version is not None:
+            version_label = restored_version or backup_dir.name
+            self._show_info(f"已恢复更新备份：{version_label}。请重新启动启动器完成切换。")
+
     def _handle_factory_reset(self) -> None:
         if not self._confirm_factory_reset():
             return
@@ -139,11 +152,28 @@ class OpenClawLauncherApplication:
             str(self.paths.project_root.parent),
         )
 
+    def _select_update_backup_dir(self) -> str:
+        return QFileDialog.getExistingDirectory(
+            self.main_window or self.wizard_window,
+            "选择要恢复的更新备份目录",
+            str(self.paths.state_dir / "backups" / "updates"),
+        )
+
     def _confirm_factory_reset(self) -> bool:
         result = QMessageBox.question(
             self.main_window or self.wizard_window,
             "OpenClaw Portable",
             "这会清空当前启动器配置、临时日志和缓存，并返回首次向导。是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return result == QMessageBox.StandardButton.Yes
+
+    def _confirm_restore_update_backup(self) -> bool:
+        result = QMessageBox.question(
+            self.main_window or self.wizard_window,
+            "OpenClaw Portable",
+            "这会用历史更新备份恢复当前程序分发内容，不会覆盖 state/，并会先自动备份当前版本。是否继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
