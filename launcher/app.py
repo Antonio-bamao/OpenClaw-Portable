@@ -12,6 +12,7 @@ from launcher.services.controller import LauncherController
 from launcher.services.provider_registry import ProviderTemplateRegistry
 from launcher.services.runtime_errors import format_runtime_error
 from launcher.services.runtime_mode import resolve_runtime_mode
+from launcher.services.online_update import UpdateCheckResult
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.theme import preferred_font
 from launcher.ui.wizard import SetupWizardWindow
@@ -47,6 +48,7 @@ class OpenClawLauncherApplication:
                 on_restart=self._handle_restart,
                 on_open_webui=self._handle_open_webui,
                 on_export_diagnostics=self._handle_export_diagnostics,
+                on_check_update=self._handle_check_update,
                 on_import_update=self._handle_import_update,
                 on_restore_update_backup=self._handle_restore_update_backup,
                 on_factory_reset=self._handle_factory_reset,
@@ -95,6 +97,19 @@ class OpenClawLauncherApplication:
         imported_version = self._run_with_error_boundary(lambda: self.controller.import_update_package(Path(selected_dir)))
         if imported_version:
             self._show_info(f"已导入更新包：{imported_version}。请重新启动启动器完成切换。")
+
+    def _handle_check_update(self) -> None:
+        metadata = self._run_with_error_boundary(self.controller.check_for_updates)
+        if metadata is None:
+            return
+        if not metadata.update_available:
+            self._show_info(f"当前已经是最新版本：{metadata.latest_version}")
+            return
+        if not self._confirm_online_update(metadata):
+            return
+        imported_version = self._run_with_error_boundary(lambda: self.controller.download_and_import_update(metadata))
+        if imported_version:
+            self._show_info(f"已更新到 {imported_version}。请重新启动启动器完成切换。")
 
     def _handle_restore_update_backup(self) -> None:
         if not self._confirm_restore_update_backup():
@@ -174,6 +189,17 @@ class OpenClawLauncherApplication:
             self.main_window or self.wizard_window,
             "OpenClaw Portable",
             "这会用历史更新备份恢复当前程序分发内容，不会覆盖 state/，并会先自动备份当前版本。是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return result == QMessageBox.StandardButton.Yes
+
+    def _confirm_online_update(self, metadata: UpdateCheckResult) -> bool:
+        notes_text = "\n".join(f"- {note}" for note in metadata.notes) if metadata.notes else "- 暂无更新说明"
+        result = QMessageBox.question(
+            self.main_window or self.wizard_window,
+            "OpenClaw Portable",
+            f"发现新版本：{metadata.latest_version}\n\n更新说明：\n{notes_text}\n\n是否现在下载并导入更新？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )

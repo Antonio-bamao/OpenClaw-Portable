@@ -40,6 +40,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restart_button: QPushButton | None = None
         self.open_webui_button: QPushButton | None = None
         self.export_diagnostics_button: QPushButton | None = None
+        self.check_update_button: QPushButton | None = None
         self.import_update_button: QPushButton | None = None
         self.restore_update_backup_button: QPushButton | None = None
         self.factory_reset_button: QPushButton | None = None
@@ -52,12 +53,13 @@ class OpenClawLauncherWindow(QMainWindow):
     def secondary_action_texts(self) -> list[str]:
         return [button.text() for button in self._secondary_buttons]
 
-    def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_import_update, on_restore_update_backup, on_factory_reset, on_reconfigure) -> None:
+    def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_check_update, on_import_update, on_restore_update_backup, on_factory_reset, on_reconfigure) -> None:
         self.start_button.clicked.connect(on_start)
         self.stop_button.clicked.connect(on_stop)
         self.restart_button.clicked.connect(on_restart)
         self.open_webui_button.clicked.connect(on_open_webui)
         self.export_diagnostics_button.clicked.connect(on_export_diagnostics)
+        self.check_update_button.clicked.connect(on_check_update)
         self.import_update_button.clicked.connect(on_import_update)
         self.restore_update_backup_button.clicked.connect(on_restore_update_backup)
         self.factory_reset_button.clicked.connect(on_factory_reset)
@@ -125,6 +127,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restart_button = make_button("重新启动")
         self.open_webui_button = make_button("打开 WebUI", subtle=True)
         self.export_diagnostics_button = make_button("导出诊断")
+        self.check_update_button = make_button("检查更新")
         self.import_update_button = make_button("导入更新包")
         self.restore_update_backup_button = make_button("恢复更新备份")
         self.factory_reset_button = make_button("恢复出厂")
@@ -133,6 +136,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self._secondary_buttons = [
             self.open_webui_button,
             self.export_diagnostics_button,
+            self.check_update_button,
             self.import_update_button,
             self.restore_update_backup_button,
             self.factory_reset_button,

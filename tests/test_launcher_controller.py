@@ -103,6 +103,32 @@ class FakeRestoreUpdateBackupService:
         return FakeRestoreResult(restored_version=self.restored_version)
 
 
+@dataclass
+class FakeUpdateCheckResult:
+    update_available: bool
+    latest_version: str
+    notes: list[str]
+    package_url: str
+
+
+class FakeOnlineUpdateService:
+    def __init__(self, *, check_result: FakeUpdateCheckResult, package_dir: Path | None = None) -> None:
+        self.check_result = check_result
+        self.package_dir = package_dir
+        self.check_called_with: str | None = None
+        self.download_called_with: FakeUpdateCheckResult | None = None
+
+    def check_for_updates(self, current_version: str) -> FakeUpdateCheckResult:
+        self.check_called_with = current_version
+        return self.check_result
+
+    def download_update_package(self, metadata: FakeUpdateCheckResult) -> Path:
+        self.download_called_with = metadata
+        if self.package_dir is None:
+            raise AssertionError("package_dir not configured")
+        return self.package_dir
+
+
 class LauncherControllerTests(unittest.TestCase):
     def test_defaults_to_mock_runtime_adapter(self) -> None:
         temp_dir = make_workspace_temp_dir()
@@ -306,6 +332,72 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertEqual(restored_version, "v2026.04.01")
             self.assertEqual(runtime_adapter.stop_calls, 1)
             self.assertEqual(restore_service.called_with, Path("C:/tmp/update-backup"))
+            self.assertFalse(controller._prepared)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_check_for_updates_uses_current_version_file(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            paths.ensure_directories()
+            (paths.project_root / "version.json").write_text('{"version": "v2026.04.1"}', encoding="utf-8")
+            online_update_service = FakeOnlineUpdateService(
+                check_result=FakeUpdateCheckResult(
+                    update_available=True,
+                    latest_version="v2026.04.2",
+                    notes=["upgrade"],
+                    package_url="https://example.com/pkg.zip",
+                )
+            )
+            controller = LauncherController(paths, online_update_service=online_update_service, node_command="node")
+
+            result = controller.check_for_updates()
+
+            self.assertTrue(result.update_available)
+            self.assertEqual(online_update_service.check_called_with, "v2026.04.1")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_download_and_import_update_stops_runtime_and_resets_prepared_state(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            package_dir = Path("C:/tmp/downloaded-package")
+            online_update_service = FakeOnlineUpdateService(
+                check_result=FakeUpdateCheckResult(
+                    update_available=True,
+                    latest_version="v2026.04.2",
+                    notes=["upgrade"],
+                    package_url="https://example.com/pkg.zip",
+                ),
+                package_dir=package_dir,
+            )
+            local_update_service = type(
+                "FakeLocalUpdateService",
+                (),
+                {
+                    "__init__": lambda self: None,
+                    "called_with": None,
+                    "import_package": lambda self, root: type("Result", (), {"imported_version": "v2026.04.2"})(),
+                },
+            )()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                local_update_service=local_update_service,
+                online_update_service=online_update_service,
+                node_command="node",
+            )
+            controller._prepared = True
+            metadata = online_update_service.check_result
+
+            imported_version = controller.download_and_import_update(metadata)
+
+            self.assertEqual(imported_version, "v2026.04.2")
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(online_update_service.download_called_with, metadata)
             self.assertFalse(controller._prepared)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

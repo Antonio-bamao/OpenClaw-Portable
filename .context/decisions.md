@@ -149,3 +149,10 @@
 - 理由：相比立即引入联网签名验证，先为便携包构建产物自动生成 `update-manifest.json`，并在导入更新包前离线校验关键条目的 `SHA-256`，更贴合当前已有的手动更新链路，也足以显著降低坏包、残包和篡改包进入替换流程的概率。
 - 影响范围：`launcher/services/update_manifest.py`、`launcher/services/local_update.py`、`scripts/generate-update-manifest.py`、`scripts/build-launcher.ps1`、本地更新错误文案，以及后续在线更新/签名能力的包格式基线。
 - 后续约束：本地导入更新包默认必须存在合法的 `update-manifest.json`；manifest 中 `packageVersion` 必须与 `version.json.version` 一致；所有实际会被导入的关键分发条目都必须有 manifest 记录且哈希匹配，否则一律在创建备份和替换文件前失败。若后续要提升到发布者身份级别可信度，应在此基础上再叠加数字签名，而不是回退到仅校验版本号。
+
+## 2026-04-11｜在线更新先采用“静态 JSON 检查 + 下载到临时目录 + 复用本地导入链路”的保守方案
+
+- 背景：产品文档已将“检查更新”列为 P1 能力，但如果本轮直接实现“联网下载后自动原地替换”，会同时引入网络、下载、解压、文件占用、替换和回滚的复合风险；而项目已经拥有一套经过测试的本地导入更新安全链路。
+- 理由：把在线更新拆成“固定静态 `update.json` 地址检查版本 -> 下载 zip 到 `%TEMP%` -> 解压为临时包目录 -> 交给现有 `LocalUpdateImportService`”，可以最大化复用既有的版本校验、manifest 校验、备份、替换和回滚逻辑，用最小增量补齐用户最需要的联网更新体验。
+- 影响范围：`launcher/services/online_update.py`、`LauncherController` 在线更新编排、主界面“检查更新”入口、`OpenClawLauncherApplication` 的交互流程，以及后续真实更新源接入配置。
+- 后续约束：在线更新本轮只允许从静态 JSON 地址获取 `version`、`notes` 和 `packageUrl`；下载得到的 zip 必须先解压到 `%TEMP%\OpenClawPortable\updates\`，不得直接绕过本地导入链路原地替换；若后续要做静默更新或后台自动替换，必须单独设计和回归验证。

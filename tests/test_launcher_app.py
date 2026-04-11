@@ -26,6 +26,16 @@ class FakeController:
         self.pending_state = pending_state
         self.final_state = final_state
         self.calls = calls
+        self.update_check_result = type(
+            "UpdateCheckResult",
+            (),
+            {
+                "update_available": True,
+                "latest_version": "v2026.04.2",
+                "notes": ["升级到新的 OpenClaw runtime"],
+                "package_url": "https://example.com/pkg.zip",
+            },
+        )()
 
     def load_pending_runtime_view_state(self, action: str = "start") -> LauncherViewState:
         self.calls.append(f"pending:{action}")
@@ -56,6 +66,14 @@ class FakeController:
     def restore_update_backup(self, backup_root: Path) -> str:
         self.calls.append(f"restore_update_backup:{backup_root}")
         return "v2026.03.9"
+
+    def check_for_updates(self):
+        self.calls.append("check_for_updates")
+        return self.update_check_result
+
+    def download_and_import_update(self, metadata) -> str:
+        self.calls.append(f"download_and_import_update:{metadata.latest_version}")
+        return metadata.latest_version
 
 
 class FakeWindow:
@@ -182,6 +200,47 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(calls, ["restore_update_backup:C:\\tmp\\update-backup"])
         self.assertEqual(len(info_messages), 1)
         self.assertIn("v2026.03.9", info_messages[0])
+
+    def test_handle_check_update_shows_latest_message_when_no_update_is_available(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        controller = FakeController(pending_state, final_state, calls)
+        controller.update_check_result = type(
+            "UpdateCheckResult",
+            (),
+            {"update_available": False, "latest_version": "v2026.04.1", "notes": [], "package_url": ""},
+        )()
+        application.controller = controller
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+
+        application._handle_check_update()
+
+        self.assertEqual(calls, ["check_for_updates"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("最新版本", info_messages[0])
+
+    def test_handle_check_update_downloads_and_imports_after_confirmation(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+        application._confirm_online_update = lambda metadata: True
+
+        application._handle_check_update()
+
+        self.assertEqual(calls, ["check_for_updates", "download_and_import_update:v2026.04.2"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("v2026.04.2", info_messages[0])
 
 
 if __name__ == "__main__":

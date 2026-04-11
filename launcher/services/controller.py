@@ -11,6 +11,7 @@ from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.diagnostics_export import DiagnosticsExporter
 from launcher.services.factory_reset import FactoryResetService
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
+from launcher.services.online_update import OnlineUpdateService, UpdateCheckResult
 
 
 class LauncherController:
@@ -22,6 +23,7 @@ class LauncherController:
         factory_reset_service: FactoryResetService | None = None,
         local_update_service: LocalUpdateImportService | None = None,
         restore_update_backup_service: RestoreUpdateBackupService | None = None,
+        online_update_service: OnlineUpdateService | None = None,
         runtime_mode: str = "mock",
         node_command: str = "node",
     ) -> None:
@@ -37,6 +39,7 @@ class LauncherController:
         self.factory_reset_service = factory_reset_service or FactoryResetService(paths)
         self.local_update_service = local_update_service or LocalUpdateImportService(paths)
         self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
+        self.online_update_service = online_update_service or OnlineUpdateService(paths)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
@@ -75,6 +78,16 @@ class LauncherController:
         result = self.restore_update_backup_service.restore_backup(backup_root)
         self._prepared = False
         return result.restored_version
+
+    def check_for_updates(self) -> UpdateCheckResult:
+        return self.online_update_service.check_for_updates(self._current_package_version())
+
+    def download_and_import_update(self, metadata: UpdateCheckResult) -> str:
+        self.runtime_adapter.stop()
+        package_root = self.online_update_service.download_update_package(metadata)
+        result = self.local_update_service.import_package(package_root)
+        self._prepared = False
+        return result.imported_version
 
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():
@@ -227,3 +240,15 @@ class LauncherController:
         if hours:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         return f"{minutes:02d}:{seconds:02d}"
+
+    def _current_package_version(self) -> str:
+        version_file = self.paths.project_root / "version.json"
+        if not version_file.exists():
+            raise FileNotFoundError("当前便携包缺少 version.json，无法检查更新。")
+        import json
+
+        version_info = json.loads(version_file.read_text(encoding="utf-8"))
+        version = str(version_info.get("version") or "").strip()
+        if not version:
+            raise ValueError("当前便携包缺少有效版本号，无法检查更新。")
+        return version
