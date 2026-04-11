@@ -13,3 +13,11 @@
 - Current caveat: source now fixes slow launcher button handling by moving long-running actions to background execution, but the already published `v2026.04.2` zip does not include that fix.
 - Current audit: `scripts/audit-portable-package.py` reports the current smoke-mutated dist package at about `582.17MB` / `31221` files, with mutable `state/` entries explicitly reported; release zip creation rejects those entries before packaging; runtime prune candidates now show low-risk groups already at `0`, medium-risk TypeScript sources at about `22.49MB`, and test artifacts at about `3.88MB`.
 - Next recommended step: run experimental prune + real runtime smoke on TypeScript sources and test artifacts before promoting any new default prune rule.
+
+## 2026-04-12 Runtime Stability Update
+
+- Completed: added `launcher/services/runtime_stability.py`, `scripts/verify-portable-runtime-stability.py`, and `tests/test_runtime_stability.py` to run repeatable real-package stability verification against `dist/OpenClaw-Portable` with isolated `%TEMP%` state roots.
+- Root cause fixed: the first real verification attempt failed because the verifier wrote launcher-schema JSON into isolated `state/openclaw.json`; the runner now preserves the package's runtime `state/openclaw.json` / `.env` and prepares the runtime adapter directly without overwriting runtime config.
+- Real verification result: `python .\\scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 3 --restart-runs 2 --output tmp\\runtime-stability-report.json` passed all 5 runs. Cold starts: `27.61s`, `25.59s`, `28.62s`; restarts: `27.61s`, `25.62s`; max `28.62s`, average `27.01s`.
+- Package cleanliness note: verification logs/state were written under `%TEMP%\\OpenClawPortableVerification\\...`; a follow-up `python .\\scripts\\audit-portable-package.py --top 5` confirmed the package still only shows the previously known smoke-mutated state entries and was not additionally polluted by the verifier itself.
+- Current recommendation: keep the verifier as the default pre-release stability gate, then rebuild a clean dist only when we are ready to bundle the next release.

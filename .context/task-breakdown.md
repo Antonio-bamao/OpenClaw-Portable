@@ -67,3 +67,10 @@
 
 - Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, the launcher now protects long-running buttons with background execution plus busy states, package auditing is available through `scripts/audit-portable-package.py`, release zip generation rejects mutable state entries, and runtime prune candidates are quantified in audit output.
 - Next: experimentally prune TypeScript sources and test artifacts on a clean dist, then run real runtime smoke before promoting any new default prune rule.
+
+## 2026-04-12 Update
+
+- Completed: runtime stability verification is now an explicit task outcome, with `scripts/verify-portable-runtime-stability.py` exercising repeated cold starts and restarts against a real portable package while isolating state/logs under `%TEMP%`.
+- Verified: the verifier now preserves runtime-native `state/openclaw.json` and optional `.env` instead of writing launcher-schema config into the isolated state root.
+- Verified: `python -m unittest discover -s tests` now passes `120` tests, and the real `dist/OpenClaw-Portable` verification run passed `3` cold starts plus `2` restarts with a max startup time of `28.62s`.
+- Next: keep runtime stability verification in the delivery checklist, continue with stability-first hardening and packaging discipline, and defer any new release rebuild until the remaining delivery work is complete.
