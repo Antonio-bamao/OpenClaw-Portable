@@ -92,6 +92,35 @@ class PortableAuditTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_audit_reports_prune_candidates_by_risk_group(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "entry.js", "keep")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "entry.js.map", "map")
+            write_file(package_root / "runtime" / "openclaw" / "README.md", "markdown")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "types.d.ts", "types")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "server.ts", "ts")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "module.mts", "mts")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "script.cts", "cts")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "entry.test.js", "test")
+            write_file(package_root / "runtime" / "openclaw" / "dist" / "__tests__" / "fixture.js", "fixture")
+
+            result = audit_portable_package(package_root)
+            groups = {group.name: group for group in result.prune_candidates}
+
+            self.assertEqual(groups["source_maps"].risk, "low")
+            self.assertEqual(groups["source_maps"].total_files, 1)
+            self.assertEqual(groups["source_maps"].total_bytes, 3)
+            self.assertEqual(groups["markdown_docs"].total_files, 1)
+            self.assertEqual(groups["type_declarations"].total_files, 1)
+            self.assertEqual(groups["typescript_sources"].risk, "medium")
+            self.assertEqual(groups["typescript_sources"].total_files, 3)
+            self.assertNotIn("runtime/openclaw/dist/types.d.ts", groups["typescript_sources"].sample_paths)
+            self.assertEqual(groups["test_artifacts"].total_files, 2)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_cli_outputs_json_report_for_package_root(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -119,6 +148,7 @@ class PortableAuditTests(unittest.TestCase):
             self.assertEqual(document["total_files"], 1)
             self.assertIn("OpenClawLauncher.exe", document["required_paths_missing"])
             self.assertEqual(document["unexpected_state_paths"], [])
+            self.assertIn("prune_candidates", document)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

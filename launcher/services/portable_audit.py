@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 
 
@@ -17,6 +18,63 @@ DEFAULT_REQUIRED_PATHS = (
 DEFAULT_MIN_FREE_SPACE_BYTES = 500 * 1024 * 1024
 WRITE_RISK_DIR_NAMES = {"logs", "log", "cache", ".cache", "tmp", "temp"}
 ALLOWED_RELEASE_STATE_ENTRIES = {"provider-templates"}
+DEFAULT_PRUNE_CANDIDATE_RULES = (
+    {
+        "name": "source_maps",
+        "risk": "low",
+        "description": "Source map files already removed by the default release pruning step.",
+        "patterns": ("*.map",),
+    },
+    {
+        "name": "markdown_docs",
+        "risk": "low",
+        "description": "Markdown documentation files already removed by the default release pruning step.",
+        "patterns": ("*.md",),
+    },
+    {
+        "name": "type_declarations",
+        "risk": "low",
+        "description": "TypeScript declaration files already removed by the default release pruning step.",
+        "patterns": ("*.d.ts",),
+    },
+    {
+        "name": "typescript_sources",
+        "risk": "medium",
+        "description": "TypeScript source files that need real runtime smoke validation before becoming default pruning rules.",
+        "patterns": ("*.ts", "*.mts", "*.cts"),
+        "exclude_patterns": ("*.d.ts",),
+    },
+    {
+        "name": "test_artifacts",
+        "risk": "medium",
+        "description": "Test-like files that need validation before pruning from the packaged runtime.",
+        "patterns": ("*.test.*", "*.spec.*"),
+        "directory_names": ("__tests__", "test"),
+    },
+)
+
+
+@dataclass(frozen=True)
+class PortablePruneCandidateGroup:
+    name: str
+    risk: str
+    description: str
+    patterns: tuple[str, ...]
+    total_bytes: int
+    total_files: int
+    sample_paths: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "risk": self.risk,
+            "description": self.description,
+            "patterns": list(self.patterns),
+            "total_bytes": self.total_bytes,
+            "total_mb": round(self.total_bytes / (1024 * 1024), 2),
+            "total_files": self.total_files,
+            "sample_paths": self.sample_paths,
+        }
 
 
 @dataclass(frozen=True)
@@ -43,6 +101,7 @@ class PortablePackageAuditResult:
     required_paths_missing: list[str]
     unexpected_state_paths: list[str]
     write_risk_directories: list[str]
+    prune_candidates: list[PortablePruneCandidateGroup]
     warnings: list[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -55,6 +114,7 @@ class PortablePackageAuditResult:
             "required_paths_missing": self.required_paths_missing,
             "unexpected_state_paths": self.unexpected_state_paths,
             "write_risk_directories": self.write_risk_directories,
+            "prune_candidates": [candidate.to_dict() for candidate in self.prune_candidates],
             "warnings": self.warnings,
         }
 
@@ -76,6 +136,7 @@ def audit_portable_package(
     directory_summaries = _summarize_directories(package_root, file_sizes)
     unexpected_state_paths = find_unexpected_release_state_paths(package_root)
     write_risk_directories = _find_write_risk_directories(package_root)
+    prune_candidates = _collect_prune_candidates(package_root, file_sizes)
     warnings = _build_warnings(
         free_space_bytes=free_space_bytes,
         min_free_space_bytes=min_free_space_bytes,
@@ -91,6 +152,7 @@ def audit_portable_package(
         required_paths_missing=[relative_path for relative_path in required_paths if not (package_root / relative_path).exists()],
         unexpected_state_paths=unexpected_state_paths,
         write_risk_directories=write_risk_directories,
+        prune_candidates=prune_candidates,
         warnings=warnings,
     )
 
@@ -147,6 +209,41 @@ def _find_write_risk_directories(package_root: Path) -> list[str]:
         if path.is_dir() and _is_write_risk_directory(relative_parts):
             risky.append(_relative_posix(package_root, path))
     return sorted(risky)
+
+
+def _collect_prune_candidates(package_root: Path, file_sizes: dict[Path, int]) -> list[PortablePruneCandidateGroup]:
+    groups: list[PortablePruneCandidateGroup] = []
+    for rule in DEFAULT_PRUNE_CANDIDATE_RULES:
+        matches = [
+            path
+            for path in sorted(file_sizes.keys())
+            if _matches_prune_candidate_rule(path.relative_to(package_root), rule)
+        ]
+        groups.append(
+            PortablePruneCandidateGroup(
+                name=str(rule["name"]),
+                risk=str(rule["risk"]),
+                description=str(rule["description"]),
+                patterns=tuple(str(pattern) for pattern in rule.get("patterns", ())),
+                total_bytes=sum(file_sizes[path] for path in matches),
+                total_files=len(matches),
+                sample_paths=[path.relative_to(package_root).as_posix() for path in matches[:5]],
+            )
+        )
+    return groups
+
+
+def _matches_prune_candidate_rule(relative_path: Path, rule: dict[str, object]) -> bool:
+    relative_posix = relative_path.as_posix()
+    name = relative_path.name
+    exclude_patterns = tuple(str(pattern) for pattern in rule.get("exclude_patterns", ()))
+    if any(fnmatch(name, pattern) or fnmatch(relative_posix, pattern) for pattern in exclude_patterns):
+        return False
+    patterns = tuple(str(pattern) for pattern in rule.get("patterns", ()))
+    if any(fnmatch(name, pattern) or fnmatch(relative_posix, pattern) for pattern in patterns):
+        return True
+    directory_names = set(str(part) for part in rule.get("directory_names", ()))
+    return any(part in directory_names for part in relative_path.parts[:-1])
 
 
 def _is_write_risk_directory(relative_parts: tuple[str, ...]) -> bool:

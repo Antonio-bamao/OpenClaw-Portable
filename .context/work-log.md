@@ -300,3 +300,11 @@
 - 结果：审计报告现在能列出 `state/backups`、`state/canvas`、`state/channels`、`state/logs`、`state/openclaw.json`、`state/sessions`、`state/tasks`、`state/workspace` 这类不可发布运行态条目；`python scripts/build-release-assets.py --package-root dist\OpenClaw-Portable ...` 在当前 smoke 过的 dist 上会明确失败并列出这些路径，避免污染下一次 release。
 - 验证：`python -m unittest tests.test_portable_audit tests.test_release_assets -v` 通过 9 个测试；`python -m unittest discover -s tests` 通过 112 个测试；真实 `v2026.04.2` 本地 zip state 检查确认仅有 provider templates；当前 smoke 过的 dist 触发 release state guard 的失败符合预期。
 - 下一步：后续要生成新 release 时先运行完整 `scripts/build-release-assets.ps1` 重建干净 dist；在正式更新前可继续做 runtime 体积瘦身与 U 盘读写性能评估。
+
+## 2026-04-12 / Phase 2 Step 36｜扩展交付审计的 runtime 裁剪候选报告
+
+- 目标：在不删除文件、不改默认裁剪规则、不更新 release 的前提下，先量化下一层可裁剪候选，为 runtime 瘦身决策提供证据。
+- 动作：补 `docs/superpowers/specs/2026-04-12-runtime-prune-candidate-audit-design.md` 与 `docs/superpowers/plans/2026-04-12-runtime-prune-candidate-audit.md`；按 TDD 扩展 `tests/test_portable_audit.py`，要求审计结果包含 `prune_candidates` 分组，并确认 `.d.ts` 只归入 type declarations、不重复归入 TypeScript sources；确认 RED 后在 `launcher/services/portable_audit.py` 中新增 `PortablePruneCandidateGroup`、低/中风险候选规则和 JSON 序列化，复用已有 file-size map，不增加第二次完整扫描。
+- 结果：`python scripts/audit-portable-package.py --top 12` 现在会输出 `prune_candidates`：当前 smoke-mutated dist 中默认低风险组 `source_maps`、`markdown_docs`、`type_declarations` 都为 `0`，说明正式默认裁剪已生效；中风险候选为 `typescript_sources` 约 `22.49MB / 4961` 文件，`test_artifacts` 约 `3.88MB / 740` 文件，下一步若要继续瘦身应围绕这两组做重建与真实 runtime smoke。
+- 验证：`python -m unittest tests.test_portable_audit -v` 通过 5 个测试；`python -m unittest discover -s tests` 通过 113 个测试；`python scripts/audit-portable-package.py --top 12` 成功输出候选分组和真实体积分布。
+- 下一步：如继续瘦身，优先用实验性 `--pattern *.ts --pattern *.mts --pattern *.cts` 和测试产物 pattern 在干净 dist 上 dry-run/裁剪，然后执行真实 runtime smoke；通过多轮证据后再考虑进入默认 prune。

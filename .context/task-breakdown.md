@@ -38,6 +38,7 @@
   - 已补启动器长耗时按钮的后台执行与重复点击保护：真实 runtime 启停、在线检查更新、下载导入、导入更新包和恢复更新备份不再直接阻塞 UI 主线程
   - 已补便携交付包只读审计工具：`scripts/audit-portable-package.py` 可输出总大小、文件数、最大目录、必需路径缺失和写入风险目录；当前 dist 约 `582.17MB` / `31221` 文件，必需路径齐全，剩余写入风险为 `state/logs`
   - 已补 release zip 前运行态 state 清洁检查：审计报告会列出 smoke 后 dist 中的可变 `state/` 条目，发布 zip 生成会拒绝 `state/provider-templates` 之外的 state 内容
+  - 已补 runtime 裁剪候选报告：审计 JSON 现在按风险分组输出 `source_maps`、`markdown_docs`、`type_declarations`、`typescript_sources`、`test_artifacts`；当前中风险候选约为 TypeScript sources `22.49MB`、test artifacts `3.88MB`
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
@@ -64,5 +65,5 @@
 
 ## 2026-04-11 Update
 
-- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, the launcher now protects long-running buttons with background execution plus busy states, package auditing is available through `scripts/audit-portable-package.py`, and release zip generation rejects mutable state entries.
-- Next: continue runtime slimming / U disk performance work before publishing a later consolidated release.
+- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, the launcher now protects long-running buttons with background execution plus busy states, package auditing is available through `scripts/audit-portable-package.py`, release zip generation rejects mutable state entries, and runtime prune candidates are quantified in audit output.
+- Next: experimentally prune TypeScript sources and test artifacts on a clean dist, then run real runtime smoke before promoting any new default prune rule.
