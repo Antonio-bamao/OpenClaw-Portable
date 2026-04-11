@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from launcher.core.paths import PortablePaths
+from launcher.services.update_feed import resolve_update_feed_url
 
 
 VERSION_PATTERN = re.compile(r"^v?(?P<core>\d+(?:\.\d+)*)(?:-(?P<suffix>[A-Za-z0-9.-]+))?$")
@@ -28,12 +29,12 @@ class OnlineUpdateService:
         self,
         paths: PortablePaths,
         *,
-        update_feed_url: str = "https://example.com/openclaw-portable/update.json",
+        update_feed_url: str | None = None,
         fetch_text=None,
         fetch_bytes=None,
     ) -> None:
         self.paths = paths
-        self.update_feed_url = update_feed_url
+        self.update_feed_url = resolve_update_feed_url(update_feed_url)
         self._fetch_text = fetch_text or self._default_fetch_text
         self._fetch_bytes = fetch_bytes or self._default_fetch_bytes
 

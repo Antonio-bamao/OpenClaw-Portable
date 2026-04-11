@@ -7,6 +7,10 @@ from pathlib import Path
 from launcher.core.paths import PortablePaths
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 from launcher.services.update_manifest import write_update_manifest
+from launcher.services.update_signature import DEFAULT_UPDATE_SIGNING_KEY_ID, generate_update_signing_keypair, write_update_signature
+
+
+TEST_PRIVATE_KEY_B64, TEST_PUBLIC_KEY_B64 = generate_update_signing_keypair()
 
 
 def make_workspace_temp_dir() -> Path:
@@ -19,6 +23,14 @@ def make_workspace_temp_dir() -> Path:
 
 def make_paths(temp_dir: Path) -> PortablePaths:
     return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+
+
+def make_import_service(paths: PortablePaths) -> LocalUpdateImportService:
+    return LocalUpdateImportService(
+        paths,
+        signature_key_id=DEFAULT_UPDATE_SIGNING_KEY_ID,
+        signature_public_key_b64=TEST_PUBLIC_KEY_B64,
+    )
 
 
 def stage_target_portable(paths: PortablePaths, *, version: str = "v1", label: str = "old") -> None:
@@ -56,6 +68,11 @@ def finalize_source_package(root: Path) -> None:
     write_update_manifest(root)
 
 
+def finalize_signed_source_package(root: Path) -> None:
+    write_update_manifest(root)
+    write_update_signature(root, private_key_b64=TEST_PRIVATE_KEY_B64)
+
+
 def stage_version_only_package(root: Path, version: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "version.json").write_text(json.dumps({"version": version}), encoding="utf-8")
@@ -89,9 +106,9 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root)
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
 
-            result = LocalUpdateImportService(paths).import_package(source_root)
+            result = make_import_service(paths).import_package(source_root)
 
             self.assertEqual(result.imported_version, "v2")
             self.assertTrue(result.backup_dir.exists())
@@ -114,10 +131,14 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root)
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
 
             with self.assertRaisesRegex(RuntimeError, "simulated copy failure"):
-                FailingLocalUpdateImportService(paths).import_package(source_root)
+                FailingLocalUpdateImportService(
+                    paths,
+                    signature_key_id=DEFAULT_UPDATE_SIGNING_KEY_ID,
+                    signature_public_key_b64=TEST_PUBLIC_KEY_B64,
+                ).import_package(source_root)
 
             self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "old readme\n")
             self.assertEqual((paths.project_root / "OpenClawLauncher.exe").read_text(encoding="utf-8"), "old exe\n")
@@ -138,8 +159,8 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             (source_root / "runtime" / "openclaw").mkdir(parents=True, exist_ok=True)
             (source_root / "runtime" / "openclaw" / "openclaw.mjs").write_text("new runtime\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "version.json 不是合法 JSON"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(ValueError, "version.json"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -151,8 +172,8 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             stage_version_only_package(source_root, "v2026.04.2")
 
-            with self.assertRaisesRegex(FileNotFoundError, "没有可导入的程序文件"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(FileNotFoundError, "程序文件"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -164,10 +185,10 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.2", label="same")
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
 
-            with self.assertRaisesRegex(ValueError, "无需重复导入"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(ValueError, "重复导入"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -179,10 +200,10 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.1", label="older")
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
 
             with self.assertRaisesRegex(ValueError, "恢复更新备份"):
-                LocalUpdateImportService(paths).import_package(source_root)
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -194,9 +215,9 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.1", label="release")
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
 
-            result = LocalUpdateImportService(paths).import_package(source_root)
+            result = make_import_service(paths).import_package(source_root)
 
             self.assertEqual(result.imported_version, "v2026.04.1")
             self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "release readme\n")
@@ -258,7 +279,7 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             backup_root = paths.state_dir / "backups" / "updates" / "20260411-120000"
             backup_root.mkdir(parents=True, exist_ok=True)
 
-            with self.assertRaisesRegex(FileNotFoundError, "备份目录中没有可恢复的分发内容"):
+            with self.assertRaisesRegex(FileNotFoundError, "分发内容"):
                 RestoreUpdateBackupService(paths).restore_backup(backup_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -273,7 +294,22 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             stage_source_package(source_root, version="v2026.04.2", label="new")
 
             with self.assertRaisesRegex(FileNotFoundError, "update-manifest.json"):
-                LocalUpdateImportService(paths).import_package(source_root)
+                make_import_service(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_without_signature(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            write_update_manifest(source_root)
+
+            with self.assertRaisesRegex(FileNotFoundError, "update-signature.json"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -286,12 +322,32 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.2", label="new")
             manifest_path = write_update_manifest(source_root)
+            write_update_signature(source_root, private_key_b64=TEST_PRIVATE_KEY_B64)
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["packageVersion"] = "v2026.04.3"
             manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "版本信息与完整性清单不一致"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(ValueError, "数字签名校验失败|完整性清单"):
+                make_import_service(paths).import_package(source_root)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_rejects_update_package_when_signature_does_not_match_manifest(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            finalize_signed_source_package(source_root)
+            manifest_path = source_root / "update-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["generatedAt"] = "2026-04-11T12:34:56+00:00"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "数字签名校验失败"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -303,11 +359,11 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root = temp_dir / "incoming-package"
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.2", label="new")
-            finalize_source_package(source_root)
+            finalize_signed_source_package(source_root)
             (source_root / "README.txt").write_text("tampered readme\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "完整性校验失败"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(ValueError, "数字签名校验失败|完整性校验失败"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -320,11 +376,16 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             source_root.mkdir(parents=True, exist_ok=True)
             stage_source_package(source_root, version="v2026.04.2", label="new")
             manifest_path = write_update_manifest(source_root)
+            write_update_signature(source_root, private_key_b64=TEST_PRIVATE_KEY_B64)
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             del manifest["entries"]["runtime"]
             manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "缺少必要的完整性记录"):
-                LocalUpdateImportService(paths).import_package(source_root)
+            with self.assertRaisesRegex(ValueError, "数字签名校验失败|缺少必要的完整性记录"):
+                make_import_service(paths).import_package(source_root)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

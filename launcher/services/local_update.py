@@ -9,10 +9,14 @@ from pathlib import Path
 
 from launcher.core.paths import PortablePaths
 from launcher.services.update_manifest import DEFAULT_UPDATE_ENTRY_NAMES, validate_update_manifest
+from launcher.services.update_signature import (
+    DEFAULT_UPDATE_SIGNING_KEY_ID,
+    DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+    verify_update_signature,
+)
 
 
 UPDATE_ENTRY_NAMES = DEFAULT_UPDATE_ENTRY_NAMES
-
 PACKAGE_PAYLOAD_ENTRY_NAMES = tuple(entry_name for entry_name in UPDATE_ENTRY_NAMES if entry_name != "version.json")
 VERSION_PATTERN = re.compile(r"^v?(?P<core>\d+(?:\.\d+)*)(?:-(?P<suffix>[A-Za-z0-9.-]+))?$")
 
@@ -33,8 +37,16 @@ class RestoreUpdateBackupResult:
 
 
 class LocalUpdateImportService:
-    def __init__(self, paths: PortablePaths) -> None:
+    def __init__(
+        self,
+        paths: PortablePaths,
+        *,
+        signature_key_id: str = DEFAULT_UPDATE_SIGNING_KEY_ID,
+        signature_public_key_b64: str = DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+    ) -> None:
         self.paths = paths
+        self.signature_key_id = signature_key_id
+        self.signature_public_key_b64 = signature_public_key_b64
 
     def import_package(self, source_root: Path) -> LocalUpdateImportResult:
         self.paths.ensure_directories()
@@ -42,7 +54,7 @@ class LocalUpdateImportService:
         target_root = self.paths.project_root.resolve()
         if source_root == target_root:
             raise ValueError("更新包目录不能与当前便携包目录相同。")
-        _, incoming_version, available_entries = self._validate_import_source(source_root)
+        _, incoming_version, _ = self._validate_import_source(source_root)
 
         backup_dir = self._create_backup_dir()
         updated_entries: list[str] = []
@@ -119,6 +131,11 @@ class LocalUpdateImportService:
                 f"所选更新包版本 {incoming_version} 低于当前版本 {current_version}。"
                 "如果要回退，请改用“恢复更新备份”。"
             )
+        verify_update_signature(
+            source_root,
+            expected_key_id=self.signature_key_id,
+            public_key_b64=self.signature_public_key_b64,
+        )
         validate_update_manifest(source_root, expected_version=incoming_version, required_entries=available_entries + ["version.json"])
         return version_file, incoming_version, available_entries
 

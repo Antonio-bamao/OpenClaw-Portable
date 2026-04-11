@@ -1,13 +1,16 @@
 import io
 import json
+import os
 import shutil
 import unittest
 import uuid
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from launcher.core.paths import PortablePaths
 from launcher.services.online_update import OnlineUpdateService
+from launcher.services.update_feed import DEFAULT_UPDATE_FEED_URL
 
 
 def make_workspace_temp_dir() -> Path:
@@ -52,6 +55,27 @@ def make_package_zip_bytes() -> bytes:
 
 
 class OnlineUpdateServiceTests(unittest.TestCase):
+    def test_online_update_service_uses_resolved_feed_url_when_no_explicit_url_is_passed(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("OPENCLAW_PORTABLE_UPDATE_FEED_URL", None)
+                service = OnlineUpdateService(make_paths(temp_dir))
+
+            self.assertEqual(service.update_feed_url, DEFAULT_UPDATE_FEED_URL)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_online_update_service_prefers_environment_override_when_present(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            with patch.dict(os.environ, {"OPENCLAW_PORTABLE_UPDATE_FEED_URL": "https://staging.example.com/update.json"}, clear=False):
+                service = OnlineUpdateService(make_paths(temp_dir))
+
+            self.assertEqual(service.update_feed_url, "https://staging.example.com/update.json")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_check_update_returns_update_available_when_remote_version_is_newer(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:

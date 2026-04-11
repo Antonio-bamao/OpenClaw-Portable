@@ -31,7 +31,10 @@
   - 已补充“导入更新包”前的严格合法性校验：要求 `version.json` 合法、至少包含一项真实分发内容，且更新包版本必须严格高于当前版本；同版本与旧版本会在替换前被拦住，旧版本统一引导走“恢复更新备份”
   - 已补充 `update-manifest.json` 离线完整性清单：构建产物自动生成关键分发内容的 `SHA-256` manifest，本地导入更新包时会在替换前强制校验 manifest 版本、一致性和关键条目哈希
   - 已补充“检查更新”主链路：从固定静态 `update.json` 地址检查新版本、下载 zip 到 `%TEMP%\OpenClawPortable\updates\`、解压为临时包目录，并交给现有本地导入链路完成版本校验、manifest 校验、备份、替换和回滚
-  - 下一步优先补“真实静态更新源接入配置”或“数字签名”，再决定是否进入更完整的商用更新链路；体积进一步瘦身后移
+  - 已补充真实更新源接入配置：在线更新源地址已集中到 `launcher/services/update_feed.py`，按“显式传入 URL -> `OPENCLAW_PORTABLE_UPDATE_FEED_URL` -> 内置默认地址”解析，默认正式地址与联调覆盖不再散落在业务代码里
+  - 已补充 GitHub Releases 发布资产生成：新增发布侧脚本与共享元数据模块，当前可以为仓库 `Antonio-bamao/OpenClaw-Portable` 自动生成 `OpenClaw-Portable-<version>.zip` 和 `update.json`，并把默认更新源指向当前仓库 `releases/latest/download/update.json`
+  - 已补充更新包数字签名：新增 `update-signature.json`、Ed25519 验签模块、本地忽略的私钥文件路径 `.local/update-signing-private-key.txt`、以及发布脚本里的签名步骤；更新导入现在会先验签再验 manifest
+  - 下一步优先补“GitHub Release 资产上传流程 / 发布说明维护”或“签名私钥备份 / 轮换说明”，再决定是否进入更完整的商用更新链路；体积进一步瘦身后移
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本

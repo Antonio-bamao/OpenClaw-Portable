@@ -156,3 +156,24 @@
 - 理由：把在线更新拆成“固定静态 `update.json` 地址检查版本 -> 下载 zip 到 `%TEMP%` -> 解压为临时包目录 -> 交给现有 `LocalUpdateImportService`”，可以最大化复用既有的版本校验、manifest 校验、备份、替换和回滚逻辑，用最小增量补齐用户最需要的联网更新体验。
 - 影响范围：`launcher/services/online_update.py`、`LauncherController` 在线更新编排、主界面“检查更新”入口、`OpenClawLauncherApplication` 的交互流程，以及后续真实更新源接入配置。
 - 后续约束：在线更新本轮只允许从静态 JSON 地址获取 `version`、`notes` 和 `packageUrl`；下载得到的 zip 必须先解压到 `%TEMP%\OpenClawPortable\updates\`，不得直接绕过本地导入链路原地替换；若后续要做静默更新或后台自动替换，必须单独设计和回归验证。
+
+## 2026-04-11｜在线更新源地址采用“内置默认地址 + 环境变量覆盖”的集中解析策略
+
+- 背景：在线“检查更新”主链路已经落地，但如果更新源地址继续散落在 `OnlineUpdateService` 的默认参数、测试构造器和未来发布脚本里，后续接真实静态地址、做灰度联调或临时切换更新源时就会不断重复改代码，容易出现正式地址和测试地址混用。
+- 理由：将更新源解析提炼到独立模块，由 `OnlineUpdateService` 统一复用“显式传入 URL -> 环境变量 `OPENCLAW_PORTABLE_UPDATE_FEED_URL` -> 内置默认地址”的优先级，既能保证正式便携包开箱可用，又能保留本地联调、灰度验证和售后排查时的一次性覆盖能力，且不会把环境变量读取细节扩散到业务流程里。
+- 影响范围：`launcher/services/update_feed.py`、`launcher/services/online_update.py`、在线更新测试、后续真实更新源发布脚本与构建配置。
+- 后续约束：正式更新地址必须集中维护在 `launcher/services/update_feed.py` 的默认常量中；任何联调、灰度或临时切源都应优先通过 `OPENCLAW_PORTABLE_UPDATE_FEED_URL` 完成，而不是继续在业务代码里散落硬编码；若后续引入 GUI 配置项或远程多渠道策略，也应建立在这一集中解析层之上。
+
+## 2026-04-11｜便携版默认使用当前仓库 GitHub Releases 作为更新包托管源
+
+- 背景：在线检查更新主链路和更新源配置都已就绪，但项目仍缺少一条真正可落地、无需自建服务器的发布路径；与此同时，便携版的更新包并不是 OpenClaw 上游官方 release 结构，而是带有启动器、`version.json`、`update-manifest.json`、内置 Node 和便携目录约束的自有产物。
+- 理由：选择当前仓库 `Antonio-bamao/OpenClaw-Portable` 的 GitHub Releases 作为默认托管源，可以用最低运维成本承载 `update.json` 与便携包 zip，同时保持更新链路完全围绕自有包格式展开；相比直接链接 OpenClaw 上游官方 release，这样不会破坏启动器、manifest 校验和本地回滚边界。
+- 影响范围：`launcher/services/release_assets.py`、`launcher/services/update_feed.py`、`scripts/build-release-assets.py`、`scripts/build-release-assets.ps1`、发布文档与后续 GitHub Release 维护流程。
+- 后续约束：默认更新源固定指向当前仓库 `releases/latest/download/update.json`；每个便携版 Release 至少需要上传 `OpenClaw-Portable-<version>.zip` 与 `update.json` 两个资产；若后续迁移到自有静态站或对象存储，也应保持 `update.json -> packageUrl -> 本地导入链路` 这一主结构不变。
+
+## 2026-04-11｜更新包数字签名采用 Ed25519，签名对象固定为 `update-manifest.json`
+
+- 背景：在补齐 GitHub Releases 托管之后，更新链路已经可以校验版本、哈希清单、备份和回滚，但仍无法证明“这个包确实是发布者签出来的”；如果攻击者能同时替换包内容和 manifest，单靠哈希清单仍缺少发布者身份这一层可信度。
+- 理由：用 Ed25519 对 `update-manifest.json` 做 detached signature，可以最小增量地把“发布者身份”叠加到现有 manifest 校验链路上。只要签名可信且 manifest 校验通过，就能同时确认“这份 manifest 是我签的”和“manifest 覆盖的关键文件确实没被改”。相比签整个 zip，这种方式更贴合当前本地导入架构，也更容易测试和维护。
+- 影响范围：`launcher/services/update_signature.py`、`launcher/services/local_update.py`、`scripts/generate-update-signing-keypair.py`、`scripts/sign-update-manifest.py`、`scripts/build-release-assets.ps1`、`tests/test_update_signature.py`、`tests/test_local_update.py`、发布侧本地私钥管理。
+- 后续约束：发布资产必须包含 `update-signature.json`；本地与在线导入更新时，签名验签发生在 manifest 校验和任何文件替换之前；公钥固定内置到仓库，私钥只允许保存在本地忽略目录或外部安全介质中，绝不能提交进仓库；后续若做轮换，应在 `keyId` 层面显式设计，而不是直接替换旧 key 的语义。
