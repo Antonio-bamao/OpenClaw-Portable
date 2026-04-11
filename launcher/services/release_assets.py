@@ -4,6 +4,8 @@ import json
 import zipfile
 from pathlib import Path
 
+from launcher.services.portable_audit import assert_release_state_clean
+
 
 DEFAULT_RELEASE_REPOSITORY = "Antonio-bamao/OpenClaw-Portable"
 LATEST_RELEASE_UPDATE_JSON_NAME = "update.json"
@@ -53,6 +55,7 @@ def create_release_zip(package_root: Path, output_dir: Path) -> Path:
     version = read_package_version(package_root)
     if not (package_root / "update-signature.json").exists():
         raise FileNotFoundError("Portable package is missing update-signature.json.")
+    assert_release_state_clean(package_root)
     archive_path = output_dir / build_release_asset_name(version)
     output_dir.mkdir(parents=True, exist_ok=True)
     root_name = package_root.name

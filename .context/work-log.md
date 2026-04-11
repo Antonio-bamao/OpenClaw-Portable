@@ -292,3 +292,11 @@
 - 结果：现在可以运行 `python scripts/audit-portable-package.py --top 8` 得到 JSON 报告；当前 dist 包约 `582.17MB`、`31221` 个文件，最大目录为 `runtime` `471.09MB`、`runtime/openclaw` `383.90MB`、`runtime/openclaw/node_modules` `237.63MB`、`runtime/openclaw/dist` `135.49MB`；必需路径齐全；写入风险只剩 `state/logs`。
 - 验证：`python -m unittest tests.test_portable_audit -v` 通过 3 个测试；`python -m unittest discover -s tests` 通过 110 个测试；`python scripts/audit-portable-package.py --top 8` 成功输出审计报告。
 - 下一步：处理 `state/logs` 是否应排除在发布包之外，随后再根据审计数据决定是否继续安全裁剪 runtime 或转向商业交付文档。
+
+## 2026-04-12 / Phase 2 Step 35｜拦截 smoke 后 dist 的运行态 state 进入 release zip
+
+- 目标：修复交付审计发现的 `dist/OpenClaw-Portable/state/logs` 等运行态残留风险，防止开发者把已经真实运行过的 dist 目录直接重新打成发布 zip。
+- 动作：先定位根因：`scripts/build-launcher.ps1` 只复制 `state/provider-templates`，当前 dist 中的 `openclaw.json`、`logs`、`tasks`、`workspace` 等来自真实 runtime smoke 对 dist 的运行写入；本地已发布的 `dist/release/OpenClaw-Portable-v2026.04.2.zip` 经检查只包含 `state/provider-templates` 四个模板文件，没有包含运行态 state。随后按 TDD 为审计报告新增 `unexpected_state_paths` 测试，并为 `build_release_assets()` 新增“存在 mutable state entries 时拒绝打包”的测试；确认 RED 后在 `portable_audit.py` 中新增 release state 清洁策略，只允许 `state/provider-templates`，并让 `release_assets.py` 在创建 zip 前调用该策略；最后更新发布维护手册，提醒发布时重新运行 `build-release-assets.ps1` 从干净 dist 生成资产，不要拿 smoke 过的 dist 手动打包。
+- 结果：审计报告现在能列出 `state/backups`、`state/canvas`、`state/channels`、`state/logs`、`state/openclaw.json`、`state/sessions`、`state/tasks`、`state/workspace` 这类不可发布运行态条目；`python scripts/build-release-assets.py --package-root dist\OpenClaw-Portable ...` 在当前 smoke 过的 dist 上会明确失败并列出这些路径，避免污染下一次 release。
+- 验证：`python -m unittest tests.test_portable_audit tests.test_release_assets -v` 通过 9 个测试；`python -m unittest discover -s tests` 通过 112 个测试；真实 `v2026.04.2` 本地 zip state 检查确认仅有 provider templates；当前 smoke 过的 dist 触发 release state guard 的失败符合预期。
+- 下一步：后续要生成新 release 时先运行完整 `scripts/build-release-assets.ps1` 重建干净 dist；在正式更新前可继续做 runtime 体积瘦身与 U 盘读写性能评估。

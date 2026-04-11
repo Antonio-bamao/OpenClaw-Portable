@@ -67,8 +67,28 @@ class PortableAuditTests(unittest.TestCase):
             self.assertIn("OpenClawLauncher.exe", result.required_paths_missing)
             self.assertIn("runtime/node/node.exe", result.required_paths_missing)
             self.assertIn("runtime/openclaw/openclaw.mjs", result.required_paths_missing)
+            self.assertEqual(result.unexpected_state_paths, ["state/logs"])
             self.assertEqual(result.write_risk_directories, ["logs", "runtime/openclaw/cache", "state/logs"])
             self.assertIn("Free space is below 500.00 MB.", result.warnings)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_audit_reports_mutable_state_entries_but_allows_provider_templates(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            write_file(package_root / "state" / "provider-templates" / "qwen.json", "{}")
+            write_file(package_root / "state" / "openclaw.json", "{}")
+            write_file(package_root / "state" / "tasks" / "runs.sqlite", "sqlite")
+            write_file(package_root / "state" / "workspace" / "memory" / "memory.json", "{}")
+
+            result = audit_portable_package(package_root)
+
+            self.assertEqual(
+                result.unexpected_state_paths,
+                ["state/openclaw.json", "state/tasks", "state/workspace"],
+            )
+            self.assertIn("Package contains mutable state entries that should not be released.", result.warnings)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -98,6 +118,7 @@ class PortableAuditTests(unittest.TestCase):
             self.assertEqual(document["package_root"], str(package_root))
             self.assertEqual(document["total_files"], 1)
             self.assertIn("OpenClawLauncher.exe", document["required_paths_missing"])
+            self.assertEqual(document["unexpected_state_paths"], [])
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

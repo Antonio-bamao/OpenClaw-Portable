@@ -16,6 +16,7 @@ DEFAULT_REQUIRED_PATHS = (
 )
 DEFAULT_MIN_FREE_SPACE_BYTES = 500 * 1024 * 1024
 WRITE_RISK_DIR_NAMES = {"logs", "log", "cache", ".cache", "tmp", "temp"}
+ALLOWED_RELEASE_STATE_ENTRIES = {"provider-templates"}
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class PortablePackageAuditResult:
     total_files: int
     top_directories: list[PortableDirectorySummary]
     required_paths_missing: list[str]
+    unexpected_state_paths: list[str]
     write_risk_directories: list[str]
     warnings: list[str]
 
@@ -51,6 +53,7 @@ class PortablePackageAuditResult:
             "total_files": self.total_files,
             "top_directories": [summary.to_dict() for summary in self.top_directories],
             "required_paths_missing": self.required_paths_missing,
+            "unexpected_state_paths": self.unexpected_state_paths,
             "write_risk_directories": self.write_risk_directories,
             "warnings": self.warnings,
         }
@@ -71,10 +74,12 @@ def audit_portable_package(
 
     file_sizes = _collect_file_sizes(package_root)
     directory_summaries = _summarize_directories(package_root, file_sizes)
+    unexpected_state_paths = find_unexpected_release_state_paths(package_root)
     write_risk_directories = _find_write_risk_directories(package_root)
     warnings = _build_warnings(
         free_space_bytes=free_space_bytes,
         min_free_space_bytes=min_free_space_bytes,
+        unexpected_state_paths=unexpected_state_paths,
         write_risk_directories=write_risk_directories,
     )
 
@@ -84,9 +89,28 @@ def audit_portable_package(
         total_files=len(file_sizes),
         top_directories=directory_summaries[: max(top_limit, 0)],
         required_paths_missing=[relative_path for relative_path in required_paths if not (package_root / relative_path).exists()],
+        unexpected_state_paths=unexpected_state_paths,
         write_risk_directories=write_risk_directories,
         warnings=warnings,
     )
+
+
+def find_unexpected_release_state_paths(package_root: Path) -> list[str]:
+    state_root = package_root / "state"
+    if not state_root.exists():
+        return []
+    return [
+        _relative_posix(package_root, child)
+        for child in sorted(state_root.iterdir(), key=lambda item: item.name.lower())
+        if child.name not in ALLOWED_RELEASE_STATE_ENTRIES
+    ]
+
+
+def assert_release_state_clean(package_root: Path) -> None:
+    unexpected_paths = find_unexpected_release_state_paths(package_root)
+    if unexpected_paths:
+        paths_text = ", ".join(unexpected_paths)
+        raise ValueError(f"Portable package contains mutable state entries that should not be released: {paths_text}")
 
 
 def _collect_file_sizes(package_root: Path) -> dict[Path, int]:
@@ -138,11 +162,14 @@ def _build_warnings(
     *,
     free_space_bytes: int | None,
     min_free_space_bytes: int,
+    unexpected_state_paths: list[str],
     write_risk_directories: list[str],
 ) -> list[str]:
     warnings: list[str] = []
     if free_space_bytes is not None and free_space_bytes < min_free_space_bytes:
         warnings.append(f"Free space is below {_format_mb(min_free_space_bytes)}.")
+    if unexpected_state_paths:
+        warnings.append("Package contains mutable state entries that should not be released.")
     if write_risk_directories:
         warnings.append("Package contains cache/log/temp directories that may increase U disk writes.")
     return warnings

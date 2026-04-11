@@ -37,6 +37,7 @@
   - 已补发布维护手册 `docs/release-maintenance-playbook.md`：覆盖 GitHub Release 资产上传、发布说明维护、签名私钥备份/恢复与 keyId 轮换；已完成 `v2026.04.2` GitHub latest release 演练并验证匿名 `update.json` 与 zip 资产可访问
   - 已补启动器长耗时按钮的后台执行与重复点击保护：真实 runtime 启停、在线检查更新、下载导入、导入更新包和恢复更新备份不再直接阻塞 UI 主线程
   - 已补便携交付包只读审计工具：`scripts/audit-portable-package.py` 可输出总大小、文件数、最大目录、必需路径缺失和写入风险目录；当前 dist 约 `582.17MB` / `31221` 文件，必需路径齐全，剩余写入风险为 `state/logs`
+  - 已补 release zip 前运行态 state 清洁检查：审计报告会列出 smoke 后 dist 中的可变 `state/` 条目，发布 zip 生成会拒绝 `state/provider-templates` 之外的 state 内容
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
@@ -63,5 +64,5 @@
 
 ## 2026-04-11 Update
 
-- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, the launcher now protects long-running buttons with background execution plus busy states, and package auditing is available through `scripts/audit-portable-package.py`.
-- Next: fix `state/logs` packaging residue, then continue runtime slimming / U disk performance work before publishing a later consolidated release.
+- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, the release maintenance playbook documents release operations, `v2026.04.2` has been published/verified through GitHub latest release assets, the launcher now protects long-running buttons with background execution plus busy states, package auditing is available through `scripts/audit-portable-package.py`, and release zip generation rejects mutable state entries.
+- Next: continue runtime slimming / U disk performance work before publishing a later consolidated release.

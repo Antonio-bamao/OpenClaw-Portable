@@ -190,3 +190,12 @@
 - 解决方案：补回归测试，保留对包根、`state/` 和 `runtime/` 下非 `node_modules` 的写入风险提示，同时忽略所有 `node_modules` 内的同名代码目录。
 - 预防措施：后续新增审计规则时要先用真实 dist 报告做一次 sanity check，避免把代码目录命名误判为运行期写入路径。
 - 状态：Resolved
+
+## 真实 dist smoke 后运行态 state 可能被误打进发布 zip
+- 现象：当前 `dist/OpenClaw-Portable/state` 中出现 `openclaw.json`、`logs`、`tasks`、`workspace`、`canvas`、`channels`、`sessions`、`backups` 等运行态条目。
+- 触发条件：对 `dist/OpenClaw-Portable` 执行真实 runtime smoke 后，OpenClaw 会把运行配置、健康检查日志、任务数据库和工作区目录写入 dist 下的 `state/`；如果随后手动调用 `scripts/build-release-assets.py` 对同一个 dist 打包，就可能把这些运行态文件带进 release zip。
+- 影响：发布包可能包含开发机运行残留，既增加 U 盘写入和体积噪声，也可能混入不该交付给用户的状态文件。
+- 根因：真实 smoke 的目标目录就是 dist 便携根目录，`state/` 作为便携用户数据目录会被正常写入；发布资产生成原先没有在 zip 前检查 `state/` 是否仍是干净模板态。
+- 解决方案：在审计服务中新增 release state 清洁策略，只允许 `state/provider-templates`；发布 zip 生成前调用该策略，发现任何可变 state 条目就拒绝打包并列出路径。本地 `v2026.04.2` 已生成 zip 经验证仅包含 provider templates，未被污染。
+- 预防措施：正式发版统一运行 `scripts/build-release-assets.ps1` 重新构建干净 dist；不要在真实 smoke 之后直接手动对同一个 dist 调 `scripts/build-release-assets.py`；如必须 smoke，smoke 后重新构建发布资产。
+- 状态：Resolved

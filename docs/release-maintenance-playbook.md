@@ -43,8 +43,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-release-assets.ps1 -Not
 
 - 运行 `scripts/build-launcher.ps1`
 - 为 `dist\OpenClaw-Portable\update-manifest.json` 生成 `update-signature.json`
+- 检查 `dist\OpenClaw-Portable\state` 里是否只包含 `provider-templates`
 - 生成 `dist\release\OpenClaw-Portable-<version>.zip`
 - 生成 `dist\release\update.json`
+
+不要先对 `dist\OpenClaw-Portable` 做真实运行烟雾测试再手动调用 `scripts\build-release-assets.py` 打包。真实运行会在 `state\` 下生成 `openclaw.json`、`logs`、`tasks`、`workspace` 等运行态文件；发布资产脚本会拒绝包含这些可变状态的目录。需要发布时重新运行 `scripts\build-release-assets.ps1`，让它从干净 dist 开始生成资产。
 
 默认私钥路径是：
 

@@ -79,6 +79,30 @@ class ReleaseAssetsTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_build_release_assets_rejects_mutable_state_entries(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            output_dir = temp_dir / "release"
+            package_root.mkdir(parents=True, exist_ok=True)
+            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
+            (package_root / "update-manifest.json").write_text(json.dumps({"manifestVersion": 1}), encoding="utf-8")
+            private_key_b64, _ = generate_update_signing_keypair()
+            write_update_signature(package_root, private_key_b64=private_key_b64)
+            (package_root / "state" / "provider-templates" / "qwen.json").parent.mkdir(parents=True, exist_ok=True)
+            (package_root / "state" / "provider-templates" / "qwen.json").write_text("{}", encoding="utf-8")
+            (package_root / "state" / "openclaw.json").write_text("{}", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "mutable state entries"):
+                build_release_assets(
+                    package_root=package_root,
+                    output_dir=output_dir,
+                    repository="Antonio-bamao/OpenClaw-Portable",
+                    notes=["note a"],
+                )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
