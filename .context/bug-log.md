@@ -163,3 +163,12 @@
 - 解决方案：保留脚本失败证据，改用 `apply_patch` 按原结构写入 `work-log.md` 与 `bug-log.md`，随后执行 context 校验并确认 `context is valid`。
 - 预防措施：后续若再次遇到该问题，先关闭可能持锁的编辑器/后台 git 或索引进程后重试脚本；若仍失败，只允许用最小范围结构化补记，并在日志中说明脚本写入失败原因。
 - 状态：Documented
+
+## GitHub Releases 更新源在 private 仓库下匿名访问返回 404
+- 现象：`https://github.com/Antonio-bamao/OpenClaw-Portable/releases/latest/download/update.json` 与 tag 资产直链在发布后返回 404 / Not Found。
+- 触发条件：`v2026.04.2` Release 已创建并上传资产，但仓库仍处于 private 状态；启动器和匿名 `Invoke-WebRequest` 不带 GitHub 登录态。
+- 影响：在线更新源对真实用户不可用，启动器会把它表现为“无法连接更新服务器”或更新源不可达。
+- 根因：GitHub private 仓库的 release 资产不能作为匿名公开更新源使用；`latest/download` URL 需要用户可匿名访问仓库和 release 资产。
+- 解决方案：将仓库改为 public 后重新验证；`latest/download/update.json` 返回 200，zip 资产 HEAD 返回 200。
+- 预防措施：后续若继续用 GitHub Releases 作为默认更新源，正式发布仓库必须保持 public；如果要保留 private 仓库，需要迁移到公开对象存储/静态站或实现带认证的更新源，但后者不适合小白用户便携版默认更新。
+- 状态：Resolved

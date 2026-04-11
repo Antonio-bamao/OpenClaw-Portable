@@ -268,3 +268,11 @@
 - 结果：发布维护操作不再散落在多个设计 spec 中，维护者可以按 runbook 完成 release 资产生成、上传、私钥恢复与轮换操作。
 - 验证：已人工检查 `docs/release-maintenance-playbook.md` 的路径、命令、keyId 与发布资产命名；`python -m unittest tests.test_update_signature tests.test_release_assets -v` 通过 11 个测试；`validate_context.py --project-root .` 返回 `context is valid`。
 - 下一步：可做真实 GitHub Release 上传演练，或转回 runtime 瘦身 / U 盘性能评估。
+
+## 2026-04-12 / Phase 2 Step 32｜完成 `v2026.04.2` latest release 演练
+
+- 目标：完成 GitHub latest release 真实发版演练，并验证匿名 `update.json` 与 zip 下载链路。
+- 动作：将 `version.json` 切到 `v2026.04.2`；准备 `runtime/openclaw` 与 `runtime/node`；安装 `PySide6` / `PyInstaller`；构建 `dist/release` 资产；验证 zip 结构、签名、manifest 与 dist 真实 runtime smoke；提交并推送 `main`；创建并推送 `v2026.04.2` tag；用户在 GitHub Release 上传 zip 与 `update.json`；仓库由 private 改为 public 后重新验证 `latest/download/update.json` 与 zip HEAD。
+- 结果：GitHub Releases latest 更新入口已可匿名访问，`OnlineUpdateService` 可发现 `v2026.04.2`，zip 资产 HEAD 返回 200 且 `Content-Length` 与本地包一致。
+- 验证：`python -m unittest discover -s tests` 通过 103 个测试；dist 真实 runtime smoke 成功 `elapsed_seconds=37.01`、`health_ok=True`；latest `update.json` 返回 200 且 `version=v2026.04.2`；`OnlineUpdateService.check_for_updates("v2026.04.1")` 返回 `update_available=True`；zip HEAD 返回 200、`Content-Length=212380004`。
+- 下一步：继续验证启动器 GUI 的“检查更新”入口，或转回 runtime 瘦身、U 盘读写性能与商业交付文档。
