@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -43,10 +44,14 @@ class LocalUpdateImportService:
         *,
         signature_key_id: str = DEFAULT_UPDATE_SIGNING_KEY_ID,
         signature_public_key_b64: str = DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+        signature_public_keys: Mapping[str, str] | None = None,
     ) -> None:
         self.paths = paths
         self.signature_key_id = signature_key_id
         self.signature_public_key_b64 = signature_public_key_b64
+        self.signature_public_keys = (
+            dict(signature_public_keys) if signature_public_keys is not None else {signature_key_id: signature_public_key_b64}
+        )
 
     def import_package(self, source_root: Path) -> LocalUpdateImportResult:
         self.paths.ensure_directories()
@@ -135,6 +140,7 @@ class LocalUpdateImportService:
             source_root,
             expected_key_id=self.signature_key_id,
             public_key_b64=self.signature_public_key_b64,
+            trusted_public_keys=self.signature_public_keys,
         )
         validate_update_manifest(source_root, expected_version=incoming_version, required_entries=available_entries + ["version.json"])
         return version_file, incoming_version, available_entries

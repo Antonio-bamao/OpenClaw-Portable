@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from nacl.exceptions import BadSignatureError
@@ -10,6 +11,9 @@ from nacl.signing import SigningKey, VerifyKey
 
 DEFAULT_UPDATE_SIGNING_KEY_ID = "portable-ed25519-v1"
 DEFAULT_UPDATE_SIGNING_PUBLIC_KEY = "WN6EsYlyLFiOcSLnSlzqJfch9qTtiyscl7Og1lgk6M0="
+DEFAULT_UPDATE_SIGNING_PUBLIC_KEYS = {
+    DEFAULT_UPDATE_SIGNING_KEY_ID: DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+}
 
 
 def generate_update_signing_keypair() -> tuple[str, str]:
@@ -60,6 +64,7 @@ def verify_update_signature(
     *,
     expected_key_id: str = DEFAULT_UPDATE_SIGNING_KEY_ID,
     public_key_b64: str = DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+    trusted_public_keys: Mapping[str, str] | None = None,
 ) -> None:
     package_root = package_root.resolve()
     manifest_path = package_root / "update-manifest.json"
@@ -77,6 +82,7 @@ def verify_update_signature(
         signature_document=signature_document,
         expected_key_id=expected_key_id,
         public_key_b64=public_key_b64,
+        trusted_public_keys=trusted_public_keys,
     )
 
 
@@ -84,14 +90,19 @@ def verify_update_signature_document(
     *,
     manifest_bytes: bytes,
     signature_document: dict[str, object],
-    expected_key_id: str,
-    public_key_b64: str,
+    expected_key_id: str = DEFAULT_UPDATE_SIGNING_KEY_ID,
+    public_key_b64: str = DEFAULT_UPDATE_SIGNING_PUBLIC_KEY,
+    trusted_public_keys: Mapping[str, str] | None = None,
 ) -> None:
     algorithm = str(signature_document.get("algorithm") or "").strip()
     if algorithm != "Ed25519":
         raise ValueError("更新包的数字签名算法不受支持。")
     key_id = str(signature_document.get("keyId") or "").strip()
-    if key_id != expected_key_id:
+    if trusted_public_keys is not None:
+        public_key_b64 = str(trusted_public_keys.get(key_id) or "").strip()
+        if not public_key_b64:
+            raise ValueError("update signature keyId is not trusted.")
+    elif key_id != expected_key_id:
         raise ValueError("更新包签名 keyId 不匹配。")
     signature_b64 = str(signature_document.get("signature") or "").strip()
     if not signature_b64:

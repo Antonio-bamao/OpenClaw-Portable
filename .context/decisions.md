@@ -177,3 +177,9 @@
 - 理由：用 Ed25519 对 `update-manifest.json` 做 detached signature，可以最小增量地把“发布者身份”叠加到现有 manifest 校验链路上。只要签名可信且 manifest 校验通过，就能同时确认“这份 manifest 是我签的”和“manifest 覆盖的关键文件确实没被改”。相比签整个 zip，这种方式更贴合当前本地导入架构，也更容易测试和维护。
 - 影响范围：`launcher/services/update_signature.py`、`launcher/services/local_update.py`、`scripts/generate-update-signing-keypair.py`、`scripts/sign-update-manifest.py`、`scripts/build-release-assets.ps1`、`tests/test_update_signature.py`、`tests/test_local_update.py`、发布侧本地私钥管理。
 - 后续约束：发布资产必须包含 `update-signature.json`；本地与在线导入更新时，签名验签发生在 manifest 校验和任何文件替换之前；公钥固定内置到仓库，私钥只允许保存在本地忽略目录或外部安全介质中，绝不能提交进仓库；后续若做轮换，应在 `keyId` 层面显式设计，而不是直接替换旧 key 的语义。
+
+## 2026-04-11 - Update signing trusts a `keyId -> public key` map
+
+- Context: The first Ed25519 signing pass used a single embedded `keyId` and public key. That is safe for the initial release, but makes future key rotation awkward because replacing the only trusted key would break compatibility with packages signed during the transition.
+- Decision: Keep `update-signature.json` unchanged and use its existing `keyId` field to select from a trusted public key map in the launcher. The single-key API remains available as a compatibility path for tests and existing call sites.
+- Consequence: Future releases can ship a launcher that trusts both the old key and the new key, then later remove the old key after the transition window. We are not adding remote key fetching, revocation lists, or automatic rotation in this pass.

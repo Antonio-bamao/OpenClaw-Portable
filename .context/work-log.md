@@ -253,3 +253,18 @@
 - 结果：项目现在已经具备完整的“签名构建 -> GitHub Release 资产 -> 验签导入”链路：发布侧会为 `update-manifest.json` 生成 `update-signature.json`，导入更新包时会先用仓库内置公钥验证签名，签名通过后才继续 manifest 校验和替换流程；默认私钥路径已经建立在本地忽略目录 `.local/update-signing-private-key.txt`，不会进入版本库。
 - 验证：docs/superpowers/specs/2026-04-11-update-package-signature-design.md 与 docs/superpowers/plans/2026-04-11-update-package-signature.md 已创建；python -m unittest tests.test_update_signature tests.test_local_update tests.test_release_assets -v 通过 25 个测试；python -m unittest tests.test_update_signature tests.test_release_assets tests.test_update_feed tests.test_online_update tests.test_local_update tests.test_update_manifest tests.test_launcher_controller -v 通过 54 个测试；python -m unittest discover -s tests 仍只因环境缺少 `PySide6` 导致 `tests.test_launcher_app`、`tests.test_launcher_bootstrap`、`tests.test_runtime_errors` 无法导入，其余 82 个测试中的非 UI 相关部分通过；python scripts/generate-update-signing-keypair.py --private-key-path .local/tmp-signing-key.txt 成功后已删除测试用临时私钥；validate_context.py --project-root . 返回 `context is valid`。
 - 下一步：补“如何备份 `.local/update-signing-private-key.txt`、如何在新机器上恢复、以及如何轮换公钥 / keyId”的维护说明；待具备 `PySide6` 依赖后补跑 UI 回归。
+
+## 2026-04-11 / Phase 2 Step 30 - Add update signing key rotation support
+
+- Goal: Allow update signing keys to rotate safely by supporting multiple trusted Ed25519 public keys keyed by `keyId`.
+- Actions: Added a short spec and implementation plan for key rotation, wrote failing tests for secondary trusted keys in `tests/test_update_signature.py` and `tests/test_local_update.py`, then extended `launcher/services/update_signature.py` and `launcher/services/local_update.py` so signature verification can select the correct public key from a trusted map.
+- Result: `update-signature.json` format stays stable, while `LocalUpdateImportService` can now accept `signature_public_keys={keyId: publicKey}`. Packages signed by an explicitly trusted secondary key can import successfully; packages signed with an unknown `keyId` fail before manifest validation or file replacement.
+- Verification: `python -m unittest tests.test_update_signature tests.test_local_update -v` passed 24 tests. `python -m unittest tests.test_update_signature tests.test_release_assets tests.test_update_feed tests.test_online_update tests.test_local_update tests.test_update_manifest tests.test_launcher_controller -v` passed 57 tests. `python -m unittest discover -s tests` still only fails on the existing missing `PySide6` imports in `tests.test_launcher_app`, `tests.test_launcher_bootstrap`, and `tests.test_runtime_errors`. `validate_context.py --project-root .` returned `context is valid`.
+
+## 2026-04-11 / Phase 2 Step 31｜补发布维护手册
+
+- 目标：补齐 GitHub Release 资产上传、签名私钥备份/恢复与 keyId 轮换的发布维护说明。
+- 动作：新增 `docs/release-maintenance-playbook.md`，整理发版前检查、`build-release-assets.ps1` 产物生成、GitHub Release 上传、私钥备份/恢复、keyId 轮换、回归验证与故障处理；同步刷新 `.context/current-status.md` 与 `.context/task-breakdown.md`。尝试使用 `append_work_log.py` 追加日志时，Windows 对 `.context/work-log.md` 返回 `PermissionError`，因此改用同结构直接补记。
+- 结果：发布维护操作不再散落在多个设计 spec 中，维护者可以按 runbook 完成 release 资产生成、上传、私钥恢复与轮换操作。
+- 验证：已人工检查 `docs/release-maintenance-playbook.md` 的路径、命令、keyId 与发布资产命名；`python -m unittest tests.test_update_signature tests.test_release_assets -v` 通过 11 个测试；`validate_context.py --project-root .` 返回 `context is valid`。
+- 下一步：可做真实 GitHub Release 上传演练，或转回 runtime 瘦身 / U 盘性能评估。

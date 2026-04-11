@@ -11,6 +11,7 @@ from launcher.services.update_signature import DEFAULT_UPDATE_SIGNING_KEY_ID, ge
 
 
 TEST_PRIVATE_KEY_B64, TEST_PUBLIC_KEY_B64 = generate_update_signing_keypair()
+SECONDARY_TEST_PRIVATE_KEY_B64, SECONDARY_TEST_PUBLIC_KEY_B64 = generate_update_signing_keypair()
 
 
 def make_workspace_temp_dir() -> Path:
@@ -30,6 +31,16 @@ def make_import_service(paths: PortablePaths) -> LocalUpdateImportService:
         paths,
         signature_key_id=DEFAULT_UPDATE_SIGNING_KEY_ID,
         signature_public_key_b64=TEST_PUBLIC_KEY_B64,
+    )
+
+
+def make_rotating_import_service(paths: PortablePaths) -> LocalUpdateImportService:
+    return LocalUpdateImportService(
+        paths,
+        signature_public_keys={
+            DEFAULT_UPDATE_SIGNING_KEY_ID: TEST_PUBLIC_KEY_B64,
+            "portable-ed25519-v2": SECONDARY_TEST_PUBLIC_KEY_B64,
+        },
     )
 
 
@@ -71,6 +82,15 @@ def finalize_source_package(root: Path) -> None:
 def finalize_signed_source_package(root: Path) -> None:
     write_update_manifest(root)
     write_update_signature(root, private_key_b64=TEST_PRIVATE_KEY_B64)
+
+
+def finalize_secondary_signed_source_package(root: Path) -> None:
+    write_update_manifest(root)
+    write_update_signature(
+        root,
+        private_key_b64=SECONDARY_TEST_PRIVATE_KEY_B64,
+        key_id="portable-ed25519-v2",
+    )
 
 
 def stage_version_only_package(root: Path, version: str) -> None:
@@ -221,6 +241,23 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
 
             self.assertEqual(result.imported_version, "v2026.04.1")
             self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "release readme\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_imports_package_signed_by_secondary_trusted_key(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            stage_target_portable(paths, version="v2026.04.1", label="old")
+            source_root = temp_dir / "incoming-package"
+            source_root.mkdir(parents=True, exist_ok=True)
+            stage_source_package(source_root, version="v2026.04.2", label="new")
+            finalize_secondary_signed_source_package(source_root)
+
+            result = make_rotating_import_service(paths).import_package(source_root)
+
+            self.assertEqual(result.imported_version, "v2026.04.2")
+            self.assertEqual((paths.project_root / "README.txt").read_text(encoding="utf-8"), "new readme\n")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

@@ -34,7 +34,7 @@
   - 已补充真实更新源接入配置：在线更新源地址已集中到 `launcher/services/update_feed.py`，按“显式传入 URL -> `OPENCLAW_PORTABLE_UPDATE_FEED_URL` -> 内置默认地址”解析，默认正式地址与联调覆盖不再散落在业务代码里
   - 已补充 GitHub Releases 发布资产生成：新增发布侧脚本与共享元数据模块，当前可以为仓库 `Antonio-bamao/OpenClaw-Portable` 自动生成 `OpenClaw-Portable-<version>.zip` 和 `update.json`，并把默认更新源指向当前仓库 `releases/latest/download/update.json`
   - 已补充更新包数字签名：新增 `update-signature.json`、Ed25519 验签模块、本地忽略的私钥文件路径 `.local/update-signing-private-key.txt`、以及发布脚本里的签名步骤；更新导入现在会先验签再验 manifest
-  - 下一步优先补“GitHub Release 资产上传流程 / 发布说明维护”或“签名私钥备份 / 轮换说明”，再决定是否进入更完整的商用更新链路；体积进一步瘦身后移
+  - 已补发布维护手册 `docs/release-maintenance-playbook.md`：覆盖 GitHub Release 资产上传、发布说明维护、签名私钥备份/恢复与 keyId 轮换；下一步可做真实 Release 上传演练，或转回体积瘦身与 U 盘读写性能评估
 3. 推进 Phase 1 收尾项
    - 诊断导出脚本
    - 重置配置脚本
@@ -58,3 +58,8 @@
 - 渠道管理依赖于 Phase 2 的真实 runtime 能承载插件与状态同步。
 - 售后与更新能力依赖于 Phase 2/3 稳定后再补统一诊断模型与回滚机制。
 - 任何新的功能实施前，都依赖 `.context/current-status.md` 与 `.context/master-plan.md` 保持同步。
+
+## 2026-04-11 Update
+
+- Completed: update package signing now supports key rotation through a trusted `keyId -> public key` map, and the release maintenance playbook now documents GitHub Release asset upload, private-key backup/restore, and key rotation operations.
+- Next: run a real GitHub Release upload rehearsal, or return to runtime slimming / U disk performance work.

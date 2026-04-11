@@ -154,3 +154,12 @@
 - 解决方案：先按 TDD 将真实 `OpenClawRuntimeAdapter` 默认等待窗口从 60 秒放宽到 90 秒，并把主界面启动等待提示同步改为 20-90 秒，作为用户体验层的缓解措施；冷启动根因定位仍继续保留在 Step 7。
 - 预防措施：后续继续做 runtime/openclaw 瘦身、90 秒窗口下的首启耗时采样与 U 盘读写测试；当前实验性 `*.ts/*.mts/*.cts` 裁剪虽然单次 smoke 成功，但恢复正式默认规则后的 dist smoke 仍达到 58.49 秒，因此只有在有新的多轮 smoke 证据时才继续扩大或收紧等待策略，不凭感觉继续改 timeout。
 - 状态：Mitigated
+
+## append_work_log.py / record_bug.py 在当前 Windows 会话无法直接写入 `.context/*.md`
+- 现象：运行 `append_work_log.py` 写 `.context/work-log.md`、运行 `record_bug.py` 写 `.context/bug-log.md` 时均报 `PermissionError: [Errno 13] Permission denied`。
+- 触发条件：Phase 2 Step 31 补发布维护手册后，尝试通过 `project-context-os` 脚本追加工作日志和异常记录。
+- 影响：本轮无法使用脚本追加 `.context` 记录，改为用同结构的最小 `apply_patch` 直接补记；产品代码与发布手册本身不受影响。
+- 根因：文件属性显示不是只读，但 Windows 同时拒绝 Python `Path.write_text` 和 PowerShell `File.Open(..., ReadWrite, ...)` 对 `.context` markdown 文件的直接写打开；沙箱内 `Get-CimInstance Win32_Process` 又被拒绝，无法定位具体持锁进程。当前证据更像是编辑器、索引器或后台进程造成的环境级文件共享/权限限制，而不是 `.context` 内容格式问题。
+- 解决方案：保留脚本失败证据，改用 `apply_patch` 按原结构写入 `work-log.md` 与 `bug-log.md`，随后执行 context 校验并确认 `context is valid`。
+- 预防措施：后续若再次遇到该问题，先关闭可能持锁的编辑器/后台 git 或索引进程后重试脚本；若仍失败，只允许用最小范围结构化补记，并在日志中说明脚本写入失败原因。
+- 状态：Documented

@@ -72,6 +72,42 @@ class UpdateSignatureTests(unittest.TestCase):
                 public_key_b64=public_key,
             )
 
+    def test_verify_signature_document_accepts_secondary_trusted_key_id(self) -> None:
+        _, old_public_key = generate_update_signing_keypair()
+        new_private_key, new_public_key = generate_update_signing_keypair()
+        signature_document = build_update_signature_document(
+            manifest_bytes=b"{}",
+            private_key_b64=new_private_key,
+            key_id="portable-ed25519-v2",
+        )
+
+        verify_update_signature_document(
+            manifest_bytes=b"{}",
+            signature_document=signature_document,
+            trusted_public_keys={
+                DEFAULT_UPDATE_SIGNING_KEY_ID: old_public_key,
+                "portable-ed25519-v2": new_public_key,
+            },
+        )
+
+    def test_verify_signature_document_rejects_untrusted_key_id(self) -> None:
+        private_key, _ = generate_update_signing_keypair()
+        _, trusted_public_key = generate_update_signing_keypair()
+        signature_document = build_update_signature_document(
+            manifest_bytes=b"{}",
+            private_key_b64=private_key,
+            key_id="portable-ed25519-unknown",
+        )
+
+        with self.assertRaisesRegex(ValueError, "keyId"):
+            verify_update_signature_document(
+                manifest_bytes=b"{}",
+                signature_document=signature_document,
+                trusted_public_keys={
+                    DEFAULT_UPDATE_SIGNING_KEY_ID: trusted_public_key,
+                },
+            )
+
     def test_write_and_verify_signature_file_for_package_root(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
