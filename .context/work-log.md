@@ -284,3 +284,11 @@
 - 结果：慢操作不再直接堵住 PySide 主线程；同一动作在进行中会被按钮禁用和应用层 busy 集合双重拦截，避免用户多点几下把多个网络下载、启动 runtime 或导入更新任务堆进事件队列。
 - 验证：`python -m unittest tests.test_launcher_app tests.test_launcher_bootstrap -v` 通过 17 个测试；`python -m unittest discover -s tests` 通过 107 个测试。
 - 下一步：若要让已发布的 `v2026.04.2` 用户拿到该修复，需要准备 `v2026.04.3` 热修复 release，重新构建并上传 zip 与 `update.json`。
+
+## 2026-04-12 / Phase 2 Step 34｜新增便携交付包只读审计工具
+
+- 目标：在暂不更新 release 的前提下，先量化当前交付包大小、文件数、主要体积分布、必需文件缺失和 U 盘写入风险，为后续瘦身与交付体验优化提供证据。
+- 动作：补 `docs/superpowers/specs/2026-04-12-portable-package-audit-design.md` 与 `docs/superpowers/plans/2026-04-12-portable-package-audit.md`；按 TDD 新增 `tests/test_portable_audit.py`，先验证服务不存在的 RED，再实现 `launcher/services/portable_audit.py` 与 `scripts/audit-portable-package.py`；运行真实 `dist/OpenClaw-Portable` 审计时发现 `node_modules/**/cache` 被误报为写入风险，补回归测试后把风险判断收紧到包根、`state/` 或 `runtime/` 下的非 `node_modules` 写入目录。
+- 结果：现在可以运行 `python scripts/audit-portable-package.py --top 8` 得到 JSON 报告；当前 dist 包约 `582.17MB`、`31221` 个文件，最大目录为 `runtime` `471.09MB`、`runtime/openclaw` `383.90MB`、`runtime/openclaw/node_modules` `237.63MB`、`runtime/openclaw/dist` `135.49MB`；必需路径齐全；写入风险只剩 `state/logs`。
+- 验证：`python -m unittest tests.test_portable_audit -v` 通过 3 个测试；`python -m unittest discover -s tests` 通过 110 个测试；`python scripts/audit-portable-package.py --top 8` 成功输出审计报告。
+- 下一步：处理 `state/logs` 是否应排除在发布包之外，随后再根据审计数据决定是否继续安全裁剪 runtime 或转向商业交付文档。

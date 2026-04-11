@@ -181,3 +181,12 @@
 - 解决方案：为应用层加入后台执行器、完成 signal 和 busy action 集合；把长耗时动作移到后台线程执行，完成后再回到 UI 刷新或弹窗；主窗口在动作执行中禁用对应按钮并显示“正在...”文案。
 - 预防措施：后续新增任何可能超过 200ms 的按钮动作，默认走后台任务或明确证明不会阻塞 UI；同时补重复点击保护测试和按钮 busy 态测试。
 - 状态：Resolved
+
+## 便携包审计初版误把依赖源码 cache 目录当成 U 盘写入风险
+- 现象：运行 `python scripts/audit-portable-package.py --top 8` 时，报告把 `runtime/openclaw/node_modules/**/cache` 和 `runtime/openclaw/dist/extensions/**/node_modules/**/cache` 列为写入风险。
+- 触发条件：审计工具按目录名匹配 `cache/logs/tmp`，但真实 OpenClaw runtime 的依赖源码中存在叫 `cache` 的代码目录。
+- 影响：报告噪声较大，会误导后续优化方向，让我们以为依赖源码目录会在 U 盘运行时持续写入。
+- 根因：写入风险规则没有区分“包内源码/依赖目录名”和“实际运行期可能写入的位置”；仅凭任意层级目录名匹配过宽。
+- 解决方案：补回归测试，保留对包根、`state/` 和 `runtime/` 下非 `node_modules` 的写入风险提示，同时忽略所有 `node_modules` 内的同名代码目录。
+- 预防措施：后续新增审计规则时要先用真实 dist 报告做一次 sanity check，避免把代码目录命名误判为运行期写入路径。
+- 状态：Resolved
