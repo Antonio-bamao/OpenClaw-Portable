@@ -332,3 +332,21 @@
 - 结果：正式默认 prune 已经覆盖 source maps、markdown、type declarations、TypeScript sources 与 test artifacts；`build-launcher.ps1` 产出的 clean `dist/OpenClaw-Portable` 现在约 `558.52MB / 25837` 文件，相比上一个 clean dist 进一步减少约 `24.26MB` 与 `5381` 个文件。
 - 验证：`python -m unittest tests.test_runtime_pruning -v` 通过 6 个测试；`powershell -ExecutionPolicy Bypass -File .\\scripts\\build-launcher.ps1` 实际输出默认 prune 删除 `30904` 个文件、释放 `165.19MB`；`python .\\scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 8` 显示 `unexpected_state_paths=[]`、`write_risk_directories=[]` 且 `typescript_sources` / `test_artifacts` 候选均为 `0`；`python .\\scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 3 --restart-runs 2 --output tmp\\runtime-stability-report-default-prune.json` 通过全部 5 轮，max `26.64s`、avg `24.77s`；`python -m unittest discover -s tests` 通过 `122` 个测试。
 - 下一步：继续做 U 盘读写性能与杀软误报风险评估；若准备下一版 release，则基于这份默认 prune 后的 clean dist 继续走发布资产构建、在线更新链路复验和版本收口。
+
+## 2026-04-12 / Phase 3 Design Step 01｜完成飞书私聊渠道 MVP 设计 spec
+
+- 目标：把“渠道接入”从泛化愿景收窄成一个真正可落地的第一个渠道闭环，并在实现前锁定边界、状态模型、运行链路和验收标准。
+- 动作：按 brainstorming 流程先结合产品架构文档与 `.context` 现状，收敛出“飞书优先、启动器优先、私聊闭环、复用 OpenClaw runtime / 插件链路”的范围；随后写成正式 spec `docs/superpowers/specs/2026-04-12-feishu-private-chat-channel-design.md`，覆盖用户操作流、`state/channels/feishu/` 配置/状态分层、启动器与 runtime 分工、错误处理、诊断脱敏与验收标准。
+- 结果：渠道接入现在不再是“微信/飞书/QQ/企微一起预研”的松散任务，而是被收敛成一个可写实现计划的飞书 MVP 子项目。
+- 验证：已对 spec 做自检，确认没有 `TODO` / `TBD` 占位，范围、非目标、状态机和验收标准前后一致。
+- 下一步：请用户先 review `docs/superpowers/specs/2026-04-12-feishu-private-chat-channel-design.md`；如无修改，再进入实现计划编写。
+
+
+## 2026-04-12 / Phase 3 Planning Step 02 - Convert Feishu spec into executable implementation plan
+
+- Goal: turn the approved Feishu private-chat MVP spec into a task-by-task implementation plan before starting code changes.
+- Actions: reviewed the existing launcher controller, config store, runtime adapter, diagnostics exporter, launcher UI shell, and bundled OpenClaw Feishu plugin metadata; then wrote docs/superpowers/plans/2026-04-12-feishu-private-chat-channel.md with explicit file ownership, TDD-first tasks, runtime projection details, diagnostics/help work, and verification commands.
+- Result: the Feishu channel thread is now ready for execution as a bounded project rather than an open-ended design item.
+- Verification: self-reviewed the plan against the approved spec, removed implementation placeholders, and confirmed it stays within Feishu only, launcher-first, private-chat MVP.
+- Next: choose execution mode and begin Task 1 from the plan.
+
