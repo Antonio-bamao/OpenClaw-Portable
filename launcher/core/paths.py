@@ -20,12 +20,24 @@ class PortablePaths:
     env_file: Path
     provider_templates_dir: Path
     workspace_dir: Path
+    feishu_channel_dir: Path | None = None
+    feishu_channel_config_file: Path | None = None
+    feishu_channel_status_file: Path | None = None
+
+    def __post_init__(self) -> None:
+        feishu_channel_dir = self.feishu_channel_dir or (self.state_dir / "channels" / "feishu")
+        feishu_channel_config_file = self.feishu_channel_config_file or (feishu_channel_dir / "config.json")
+        feishu_channel_status_file = self.feishu_channel_status_file or (feishu_channel_dir / "status.json")
+        object.__setattr__(self, "feishu_channel_dir", feishu_channel_dir)
+        object.__setattr__(self, "feishu_channel_config_file", feishu_channel_config_file)
+        object.__setattr__(self, "feishu_channel_status_file", feishu_channel_status_file)
 
     @classmethod
     def for_root(cls, project_root: Path, temp_base: Path | None = None) -> "PortablePaths":
         resolved_temp_base = temp_base or Path(os.environ.get("TEMP") or tempfile.gettempdir())
         temp_root = resolved_temp_base / "OpenClawPortable"
         state_dir = project_root / "state"
+        feishu_channel_dir = state_dir / "channels" / "feishu"
         return cls(
             project_root=project_root,
             runtime_dir=project_root / "runtime",
@@ -39,6 +51,9 @@ class PortablePaths:
             env_file=state_dir / ".env",
             provider_templates_dir=state_dir / "provider-templates",
             workspace_dir=state_dir / "workspace",
+            feishu_channel_dir=feishu_channel_dir,
+            feishu_channel_config_file=feishu_channel_dir / "config.json",
+            feishu_channel_status_file=feishu_channel_dir / "status.json",
         )
 
     def ensure_directories(self) -> None:
@@ -58,6 +73,7 @@ class PortablePaths:
             self.state_dir / "sessions",
             self.state_dir / "channels",
             self.state_dir / "backups",
+            self.feishu_channel_dir,
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)

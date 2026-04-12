@@ -5,7 +5,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from launcher.app import OpenClawLauncherApplication
-from launcher.models import LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState
 
 
 def make_view_state(status_label: str, status_detail: str, message: str) -> LauncherViewState:
@@ -75,12 +75,47 @@ class FakeController:
         self.calls.append(f"download_and_import_update:{metadata.latest_version}")
         return metadata.latest_version
 
+    def save_feishu_channel(self, app_id: str, app_secret: str, bot_app_name: str) -> FeishuChannelState:
+        self.calls.append(f"save_feishu_channel:{app_id}:{app_secret}:{bot_app_name}")
+        return FeishuChannelState(
+            app_id=app_id,
+            app_secret=app_secret,
+            bot_app_name=bot_app_name,
+            enabled=False,
+            status_label="待启用",
+            status_detail="saved",
+        )
+
+    def test_feishu_channel(self) -> FeishuChannelState:
+        self.calls.append("test_feishu_channel")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "tested")
+
+    def enable_feishu_channel(self) -> FeishuChannelState:
+        self.calls.append("enable_feishu_channel")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", True, "连接中", "enabled")
+
+    def disable_feishu_channel(self) -> FeishuChannelState:
+        self.calls.append("disable_feishu_channel")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "disabled")
+
+
+class FakeInput:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    def text(self) -> str:
+        return self.value
+
 
 class FakeWindow:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
         self.states: list[LauncherViewState] = []
+        self.feishu_states: list[FeishuChannelState] = []
         self.busy_actions: list[tuple[str, bool]] = []
+        self.feishu_app_id_input = FakeInput("cli_xxx")
+        self.feishu_app_secret_input = FakeInput("secret")
+        self.feishu_bot_name_input = FakeInput("Support Bot")
 
     def apply_view_state(self, state: LauncherViewState) -> None:
         self.states.append(state)
@@ -89,6 +124,10 @@ class FakeWindow:
     def set_action_busy(self, action: str, busy: bool) -> None:
         self.busy_actions.append((action, busy))
         self.calls.append(f"busy:{action}:{busy}")
+
+    def apply_feishu_channel_state(self, state: FeishuChannelState) -> None:
+        self.feishu_states.append(state)
+        self.calls.append(f"apply_feishu:{state.status_label}")
 
 
 class FakeQtApp:
@@ -275,6 +314,33 @@ class LauncherAppTests(unittest.TestCase):
         application._handle_check_update()
 
         self.assertNotIn("check_for_updates", calls)
+
+
+    def test_handle_save_feishu_channel_reads_inputs_and_applies_state(self) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "pending", "please wait")
+        final_state = make_view_state("运行中", "running", "ready")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_save_feishu_channel()
+
+        self.assertIn("save_feishu_channel:cli_xxx:secret:Support Bot", calls)
+        self.assertEqual(application.main_window.feishu_states[-1].status_label, "待启用")
+
+    def test_handle_enable_feishu_channel_applies_enabled_state(self) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "pending", "please wait")
+        final_state = make_view_state("运行中", "running", "ready")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_enable_feishu_channel()
+
+        self.assertIn("enable_feishu_channel", calls)
+        self.assertEqual(application.main_window.feishu_states[-1].status_label, "连接中")
 
 
 if __name__ == "__main__":

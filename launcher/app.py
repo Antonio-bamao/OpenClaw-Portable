@@ -65,7 +65,15 @@ class OpenClawLauncherApplication:
                 on_factory_reset=self._handle_factory_reset,
                 on_reconfigure=self.show_setup_wizard,
             )
+            self.main_window.bind_feishu_handlers(
+                on_save=self._handle_save_feishu_channel,
+                on_test=self._handle_test_feishu_channel,
+                on_enable=self._handle_enable_feishu_channel,
+                on_disable=self._handle_disable_feishu_channel,
+                on_open_help=self._handle_open_feishu_help,
+            )
         self.main_window.apply_view_state(view_state)
+        self.main_window.apply_feishu_channel_state(self.controller.load_feishu_channel_state())
         self.main_window.show()
         if self.wizard_window:
             self.wizard_window.hide()
@@ -162,9 +170,52 @@ class OpenClawLauncherApplication:
             return
         webbrowser.open_new_tab(view_state.webui_url)
 
+    def _handle_save_feishu_channel(self) -> None:
+        if not self.main_window:
+            return
+        state = self.controller.save_feishu_channel(
+            self.main_window.feishu_app_id_input.text(),
+            self.main_window.feishu_app_secret_input.text(),
+            self.main_window.feishu_bot_name_input.text(),
+        )
+        self._apply_feishu_channel_state(state)
+
+    def _handle_test_feishu_channel(self) -> None:
+        self._handle_save_feishu_channel()
+        self._run_background_action(
+            "test_feishu_channel",
+            self.controller.test_feishu_channel,
+            self._apply_feishu_channel_state,
+        )
+
+    def _handle_enable_feishu_channel(self) -> None:
+        self._run_background_action(
+            "enable_feishu_channel",
+            self.controller.enable_feishu_channel,
+            self._apply_feishu_channel_state,
+        )
+
+    def _handle_disable_feishu_channel(self) -> None:
+        state = self._run_with_error_boundary(self.controller.disable_feishu_channel)
+        if state is not None:
+            self._apply_feishu_channel_state(state)
+
+    def _handle_open_feishu_help(self) -> None:
+        help_path = self.paths.assets_dir / "guide" / "setup-feishu.html"
+        if not help_path.exists():
+            self._show_error("飞书接入帮助页尚未打包。")
+            return
+        webbrowser.open_new_tab(help_path.as_uri())
+
+    def _apply_feishu_channel_state(self, state) -> None:
+        if self.main_window and hasattr(self.main_window, "apply_feishu_channel_state"):
+            self.main_window.apply_feishu_channel_state(state)
+
     def _refresh_main_view(self) -> None:
         if self.main_window:
             self.main_window.apply_view_state(self.controller.load_view_state())
+            if hasattr(self.controller, "load_feishu_channel_state"):
+                self._apply_feishu_channel_state(self.controller.load_feishu_channel_state())
 
     def _show_pending_runtime_state(self, action: str) -> None:
         if self.main_window:

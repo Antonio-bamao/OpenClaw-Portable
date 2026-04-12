@@ -16,6 +16,18 @@ class LauncherViewState:
 
 
 @dataclass(frozen=True)
+class FeishuChannelState:
+    app_id: str
+    app_secret: str
+    bot_app_name: str
+    enabled: bool
+    status_label: str
+    status_detail: str
+    last_validated_at: str | None = None
+    last_error: str = ""
+
+
+@dataclass(frozen=True)
 class WizardStep:
     title: str
     description: str

@@ -36,6 +36,29 @@ class PortablePathsTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_direct_construction_derives_feishu_paths_for_existing_callers(self) -> None:
+        root = Path("C:/repo/OpenClaw-Portable")
+        state_dir = root / "state"
+
+        paths = PortablePaths(
+            project_root=root,
+            runtime_dir=root / "runtime",
+            state_dir=state_dir,
+            assets_dir=root / "assets",
+            tools_dir=root / "tools",
+            temp_root=Path("C:/temp/OpenClawPortable"),
+            logs_dir=Path("C:/temp/OpenClawPortable/logs"),
+            cache_dir=Path("C:/temp/OpenClawPortable/cache"),
+            config_file=state_dir / "openclaw.json",
+            env_file=state_dir / ".env",
+            provider_templates_dir=state_dir / "provider-templates",
+            workspace_dir=state_dir / "workspace",
+        )
+
+        self.assertEqual(paths.feishu_channel_dir, state_dir / "channels" / "feishu")
+        self.assertEqual(paths.feishu_channel_config_file, state_dir / "channels" / "feishu" / "config.json")
+        self.assertEqual(paths.feishu_channel_status_file, state_dir / "channels" / "feishu" / "status.json")
+
 
 class LauncherConfigStoreTests(unittest.TestCase):
     def test_reports_first_run_when_config_does_not_exist(self) -> None:
@@ -78,6 +101,59 @@ class LauncherConfigStoreTests(unittest.TestCase):
             self.assertNotIn("api_key", raw_json)
             self.assertIn("OPENCLAW_API_KEY=sk-demo-key", env_text)
             self.assertFalse(store.is_first_run())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_preserves_runtime_supplemental_keys_when_saving_and_loading(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            root = temp_dir / "OpenClaw-Portable"
+            paths = PortablePaths.for_root(root, temp_base=temp_dir / "system-temp")
+            store = LauncherConfigStore(paths)
+            paths.ensure_directories()
+            paths.config_file.write_text(
+                json.dumps(
+                    {
+                        "admin_password": "demo-pass",
+                        "provider_id": "dashscope",
+                        "provider_name": "通义千问",
+                        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        "model": "qwen-max",
+                        "gateway_port": 18789,
+                        "bind_host": "127.0.0.1",
+                        "first_run_completed": True,
+                        "channels": {
+                            "feishu": {
+                                "enabled": True,
+                            }
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            store.save(
+                LauncherConfig(
+                    admin_password="demo-pass-2",
+                    provider_id="dashscope",
+                    provider_name="通义千问",
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    model="qwen-plus",
+                    gateway_port=18790,
+                    bind_host="127.0.0.1",
+                    first_run_completed=True,
+                ),
+                SensitiveConfig(api_key="sk-demo-key"),
+            )
+            loaded_config, loaded_sensitive = store.load()
+            raw_json = json.loads(paths.config_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(loaded_config.model, "qwen-plus")
+            self.assertEqual(loaded_config.gateway_port, 18790)
+            self.assertEqual(loaded_sensitive.api_key, "sk-demo-key")
+            self.assertTrue(raw_json["channels"]["feishu"]["enabled"])
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

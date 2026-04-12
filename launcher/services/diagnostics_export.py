@@ -7,6 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from launcher.core.config_store import LauncherConfigStore
 from launcher.core.paths import PortablePaths
+from launcher.services.feishu_channel import FeishuChannelService
 
 
 class DiagnosticsExporter:
@@ -63,7 +64,7 @@ class DiagnosticsExporter:
             }
 
         config, sensitive = self.store.load()
-        return {
+        summary = {
             "firstRun": False,
             "runtimeMode": self.runtime_mode,
             "providerId": config.provider_id,
@@ -76,3 +77,29 @@ class DiagnosticsExporter:
             "apiKeyConfigured": bool(sensitive.api_key),
             "adminPasswordConfigured": bool(config.admin_password),
         }
+        summary["feishuChannel"] = self._feishu_channel_summary()
+        return summary
+
+    def _feishu_channel_summary(self) -> dict[str, object]:
+        service = FeishuChannelService(self.paths)
+        config = service.load_config()
+        status = service.load_status()
+        return {
+            "configured": bool(config.app_id and config.app_secret),
+            "enabled": config.enabled,
+            "appId": self._redact(config.app_id),
+            "appSecretConfigured": bool(config.app_secret),
+            "botAppName": config.bot_app_name,
+            "lastValidatedAt": config.last_validated_at,
+            "status": status.state,
+            "lastError": status.last_error,
+            "lastConnectedAt": status.last_connected_at,
+            "lastMessageAt": status.last_message_at,
+        }
+
+    def _redact(self, value: str) -> str:
+        if not value:
+            return ""
+        if len(value) <= 6:
+            return f"{value[:2]}***"
+        return f"{value[:6]}***"

@@ -43,3 +43,10 @@
 - Planned: the work is decomposed into launcher pathing/storage, credential validation, runtime projection, runtime config merge, launcher UI, diagnostics/help, and regression coverage.
 - Confirmed: the plan assumes reuse of the bundled OpenClaw Feishu extension under `runtime/openclaw/dist/extensions/feishu/` rather than building a separate Python-side bridge.
 - Next recommended step: choose execution mode for the plan. Recommended: subagent-driven execution with review between tasks.
+
+## 2026-04-13 Feishu Channel Implementation Update
+
+- Completed: implemented the launcher-first Feishu private-chat MVP slice from the approved plan. The launcher now has Feishu channel storage under `state/channels/feishu/`, credential validation through the Feishu tenant token endpoint, runtime projection into `state/openclaw.json` plus `FEISHU_APP_ID` / `FEISHU_APP_SECRET`, status refresh into `status.json`, a visible Feishu channel card in the main window, controller/app action wiring, diagnostics redaction, and an offline setup guide at `assets/guide/setup-feishu.html`.
+- Verified: `python -m unittest discover -s tests` passes `141` tests in the Feishu implementation worktree.
+- Scope note: this implementation keeps the agreed MVP boundary: Feishu only, launcher-first, private chat only, no WeChat/QQ/WeCom, no group-chat expansion, and no Python-side message bridge.
+- Remaining validation: real end-to-end private chat still requires a real Feishu app credential set and the bundled OpenClaw Feishu runtime extension to be configured in an environment that can reach Feishu.

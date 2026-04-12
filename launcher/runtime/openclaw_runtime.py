@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import json
 import os
+import socket
 import subprocess
 import time
-import socket
 from pathlib import Path
 
 from launcher.core.config_store import LauncherConfig
 from launcher.core.paths import PortablePaths
-from launcher.core.port_resolver import PortResolver, PortResolution
+from launcher.core.port_resolver import PortResolution, PortResolver
 from launcher.runtime.base import RuntimeAdapter, RuntimeHealth, RuntimeStatus
 
 
@@ -24,14 +25,25 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         self._stdout_log: Path | None = None
         self._stderr_log: Path | None = None
         self._started_at_monotonic: float | None = None
+        self._runtime_config_patch: dict[str, object] = {}
+        self._runtime_env: dict[str, str] = {}
 
-    def prepare(self, config: LauncherConfig, paths: PortablePaths) -> None:
+    def prepare(
+        self,
+        config: LauncherConfig,
+        paths: PortablePaths,
+        runtime_config_patch: dict[str, object] | None = None,
+        runtime_env: dict[str, str] | None = None,
+    ) -> None:
         paths.ensure_directories()
         self._config = config
         self._paths = paths
         self._port_resolution = PortResolver().resolve(config.bind_host, config.gateway_port)
         self._stdout_log = paths.logs_dir / "openclaw-runtime.out.log"
         self._stderr_log = paths.logs_dir / "openclaw-runtime.err.log"
+        self._runtime_config_patch = runtime_config_patch or {}
+        self._runtime_env = runtime_env or {}
+        self._apply_runtime_config_patch()
         self._last_state = "ready"
 
     def start(self) -> None:
@@ -149,6 +161,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             "OPENCLAW_MODEL": self._config.model,
             "OPENCLAW_API_KEY": self._read_api_key(),
             "HOME": str(self._paths.state_dir),
+            **self._runtime_env,
         }
 
     def build_command(self) -> list[str]:
@@ -202,3 +215,34 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             if line.startswith("OPENCLAW_API_KEY="):
                 return line.split("=", 1)[1]
         return ""
+
+    def _apply_runtime_config_patch(self) -> None:
+        if not self._paths or not self._runtime_config_patch:
+            return
+        current_config = self._load_runtime_config()
+        merged_config = self._deep_merge(current_config, self._runtime_config_patch)
+        self._paths.config_file.write_text(
+            json.dumps(merged_config, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _load_runtime_config(self) -> dict[str, object]:
+        if not self._paths or not self._paths.config_file.exists():
+            return {}
+        try:
+            payload = json.loads(self._paths.config_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+
+    def _deep_merge(self, base: dict[str, object], patch: dict[str, object]) -> dict[str, object]:
+        merged: dict[str, object] = dict(base)
+        for key, value in patch.items():
+            existing_value = merged.get(key)
+            if isinstance(value, dict) and isinstance(existing_value, dict):
+                merged[key] = self._deep_merge(existing_value, value)
+                continue
+            merged[key] = value
+        return merged

@@ -8,6 +8,7 @@ from pathlib import Path
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
 from launcher.services.diagnostics_export import DiagnosticsExporter
+from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
 
 
 def make_workspace_temp_dir() -> Path:
@@ -47,6 +48,13 @@ class DiagnosticsExporterTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (paths.logs_dir / "openclaw-runtime.err.log").write_text("runtime failed\n", encoding="utf-8")
+            feishu_service = FeishuChannelService(paths)
+            feishu_service.save_config(
+                FeishuChannelConfig(app_id="cli_supersecret", app_secret="secret-value", enabled=True, bot_app_name="Support Bot")
+            )
+            feishu_service.save_status(
+                FeishuChannelStatus(state="connected", last_error="", last_connected_at="2026-04-12T12:00:00Z")
+            )
 
             bundle_path = DiagnosticsExporter(paths, runtime_mode="openclaw").export_bundle()
 
@@ -68,6 +76,12 @@ class DiagnosticsExporterTests(unittest.TestCase):
             self.assertTrue(summary["adminPasswordConfigured"])
             self.assertNotIn("apiKey", summary)
             self.assertNotIn("adminPassword", summary)
+            self.assertTrue(summary["feishuChannel"]["configured"])
+            self.assertTrue(summary["feishuChannel"]["enabled"])
+            self.assertEqual(summary["feishuChannel"]["appId"], "cli_su***")
+            self.assertTrue(summary["feishuChannel"]["appSecretConfigured"])
+            self.assertNotIn("secret-value", json.dumps(summary, ensure_ascii=False))
+            self.assertEqual(summary["feishuChannel"]["status"], "connected")
             self.assertEqual(manifest["runtimeMode"], "openclaw")
             self.assertEqual(manifest["logsIncluded"], ["openclaw-runtime.err.log"])
         finally:

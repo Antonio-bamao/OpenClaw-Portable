@@ -83,6 +83,13 @@
 - Verified: `python -m unittest discover -s tests` now passes `122` tests after the prune tooling extension.
 - Next: if we want to convert this evidence into a shipping improvement, promote `typescript_sources` + `test_artifacts` into the default prune path, rebuild a clean dist, and rerun the release-grade stability gate before touching the next release.
 
+## 2026-04-13 Feishu Channel Update
+
+- Completed: Feishu private-chat channel MVP implementation is now the active Phase 3 delivery result.
+- Delivered: canonical Feishu channel state paths, channel config/status JSON service, tenant-token credential test, runtime config/env projection, runtime config merge into `state/openclaw.json`, Feishu status refresh, launcher view model, controller save/test/enable/disable APIs, main-window Feishu card, app action bindings, diagnostics redaction, and offline setup help.
+- Verified: full test suite passes with `python -m unittest discover -s tests` at `141` tests.
+- Next: perform real Feishu private-chat E2E validation with actual app credentials, then decide whether to prepare a new release build or continue with U-disk and anti-virus delivery risk work.
+
 ## 2026-04-12 Default Runtime Prune Update
 
 - Completed: default runtime pruning now includes `typescript_sources` and `test_artifacts`, with CLI semantics kept safe as “no args => default prune, explicit args => experiment-only overrides”.

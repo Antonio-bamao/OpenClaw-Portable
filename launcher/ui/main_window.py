@@ -6,13 +6,14 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from launcher.models import LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState
 from launcher.ui.theme import app_stylesheet, preferred_font
 from launcher.ui.widgets import HeroPanel, MetricCard, apply_card_shadow, make_button, make_label
 
@@ -45,6 +46,16 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restore_update_backup_button: QPushButton | None = None
         self.factory_reset_button: QPushButton | None = None
         self.reconfigure_button: QPushButton | None = None
+        self.feishu_app_id_input: QLineEdit | None = None
+        self.feishu_app_secret_input: QLineEdit | None = None
+        self.feishu_bot_name_input: QLineEdit | None = None
+        self.feishu_status_label: QLabel | None = None
+        self.feishu_status_detail_label: QLabel | None = None
+        self.save_feishu_button: QPushButton | None = None
+        self.test_feishu_button: QPushButton | None = None
+        self.enable_feishu_button: QPushButton | None = None
+        self.disable_feishu_button: QPushButton | None = None
+        self.open_feishu_help_button: QPushButton | None = None
         self._buttons_by_action: dict[str, QPushButton] = {}
         self._default_button_texts: dict[QPushButton, str] = {}
         self._build_ui()
@@ -67,6 +78,13 @@ class OpenClawLauncherWindow(QMainWindow):
         self.factory_reset_button.clicked.connect(on_factory_reset)
         self.reconfigure_button.clicked.connect(on_reconfigure)
 
+    def bind_feishu_handlers(self, *, on_save, on_test, on_enable, on_disable, on_open_help) -> None:
+        self.save_feishu_button.clicked.connect(on_save)
+        self.test_feishu_button.clicked.connect(on_test)
+        self.enable_feishu_button.clicked.connect(on_enable)
+        self.disable_feishu_button.clicked.connect(on_disable)
+        self.open_feishu_help_button.clicked.connect(on_open_help)
+
     def apply_view_state(self, view_state: LauncherViewState) -> None:
         self.view_state = view_state
         self.status_card.set_value(view_state.status_label)
@@ -79,6 +97,15 @@ class OpenClawLauncherWindow(QMainWindow):
             f"地址 {view_state.webui_url or '尚未启动'}  ·  "
             f"{'离线模式已开启' if view_state.offline_mode else '已配置 API Key，可进入联调'}"
         )
+
+    def apply_feishu_channel_state(self, state: FeishuChannelState) -> None:
+        self.feishu_app_id_input.setText(state.app_id)
+        self.feishu_app_secret_input.setText(state.app_secret)
+        self.feishu_bot_name_input.setText(state.bot_app_name)
+        self.feishu_status_label.setText(state.status_label)
+        self.feishu_status_detail_label.setText(state.status_detail)
+        self.enable_feishu_button.setEnabled(not state.enabled)
+        self.disable_feishu_button.setEnabled(state.enabled)
 
     def set_action_busy(self, action: str, busy: bool) -> None:
         runtime_actions = {
@@ -104,6 +131,11 @@ class OpenClawLauncherWindow(QMainWindow):
             button.setText("正在导入..." if busy else "导入更新包")
         elif action == "restore_update_backup":
             button.setText("正在恢复..." if busy else "恢复更新备份")
+
+        elif action == "test_feishu_channel":
+            button.setText("正在测试..." if busy else "测试连接")
+        elif action == "enable_feishu_channel":
+            button.setText("正在启用..." if busy else "启用飞书私聊")
 
     def _build_ui(self) -> None:
         self.setWindowTitle("OpenClaw Portable")
@@ -199,6 +231,72 @@ class OpenClawLauncherWindow(QMainWindow):
         control_layout.addWidget(self.footnote_label)
 
         layout.addWidget(control_card)
+
+        feishu_card = QFrame()
+        feishu_card.setObjectName("SectionCard")
+        apply_card_shadow(feishu_card, blur_radius=24, offset_y=8)
+        feishu_layout = QVBoxLayout(feishu_card)
+        feishu_layout.setContentsMargins(24, 24, 24, 24)
+        feishu_layout.setSpacing(14)
+        feishu_layout.addWidget(make_label("飞书私聊渠道", "HeroTitle", size=18, weight=700))
+        feishu_layout.addWidget(make_label("配置飞书应用凭据，测试通过后启用私聊 Bot。", "MutedText"))
+
+        form = QGridLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(10)
+        self.feishu_app_id_input = QLineEdit()
+        self.feishu_app_id_input.setPlaceholderText("cli_xxx")
+        self.feishu_app_secret_input = QLineEdit()
+        self.feishu_app_secret_input.setPlaceholderText("App Secret")
+        self.feishu_app_secret_input.setEchoMode(QLineEdit.Password)
+        self.feishu_bot_name_input = QLineEdit()
+        self.feishu_bot_name_input.setPlaceholderText("OpenClaw Bot")
+        form.addWidget(make_label("App ID", "MetricLabel"), 0, 0)
+        form.addWidget(self.feishu_app_id_input, 0, 1)
+        form.addWidget(make_label("App Secret", "MetricLabel"), 1, 0)
+        form.addWidget(self.feishu_app_secret_input, 1, 1)
+        form.addWidget(make_label("Bot 名称", "MetricLabel"), 2, 0)
+        form.addWidget(self.feishu_bot_name_input, 2, 1)
+        feishu_layout.addLayout(form)
+
+        self.feishu_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.feishu_status_detail_label = make_label(
+            "填写 App ID 和 App Secret 后，先测试连接再启用飞书私聊。",
+            "MutedText",
+        )
+        feishu_layout.addWidget(self.feishu_status_label)
+        feishu_layout.addWidget(self.feishu_status_detail_label)
+
+        feishu_actions = QHBoxLayout()
+        feishu_actions.setSpacing(12)
+        self.save_feishu_button = make_button("保存飞书配置")
+        self.test_feishu_button = make_button("测试连接", primary=True)
+        self.enable_feishu_button = make_button("启用飞书私聊")
+        self.disable_feishu_button = make_button("停用")
+        self.open_feishu_help_button = make_button("接入帮助", subtle=True)
+        for button in (
+            self.save_feishu_button,
+            self.test_feishu_button,
+            self.enable_feishu_button,
+            self.disable_feishu_button,
+            self.open_feishu_help_button,
+        ):
+            feishu_actions.addWidget(button)
+        feishu_actions.addStretch(1)
+        feishu_layout.addLayout(feishu_actions)
+        self._buttons_by_action.update(
+            {
+                "test_feishu_channel": self.test_feishu_button,
+                "enable_feishu_channel": self.enable_feishu_button,
+            }
+        )
+        self._default_button_texts.update(
+            {
+                self.test_feishu_button: self.test_feishu_button.text(),
+                self.enable_feishu_button: self.enable_feishu_button.text(),
+            }
+        )
+        layout.addWidget(feishu_card)
         layout.addStretch(1)
 
         self.setCentralWidget(root)

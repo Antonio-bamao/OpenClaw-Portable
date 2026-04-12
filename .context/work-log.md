@@ -350,3 +350,11 @@
 - Verification: self-reviewed the plan against the approved spec, removed implementation placeholders, and confirmed it stays within Feishu only, launcher-first, private-chat MVP.
 - Next: choose execution mode and begin Task 1 from the plan.
 
+## 2026-04-13 / Phase 3 Implementation Step 03 - Implement Feishu private-chat channel MVP
+
+- Goal: move the first real channel integration from spec/plan into a launcher-usable MVP rather than continuing packaging-only work.
+- Actions: used an isolated worktree for the Feishu implementation; added Feishu channel paths, storage service, credential validation, runtime projection, `state/openclaw.json` merge, status refresh, launcher-facing view state, controller save/test/enable/disable APIs, main-window Feishu card, app event binding, diagnostics redaction, and `assets/guide/setup-feishu.html`. During review, fixed two important edge cases: malformed Feishu config now safely falls back instead of blocking launcher startup, and runtime config patch data is actually merged into the runtime config instead of being dead plumbing.
+- Result: users can now save Feishu App ID / App Secret in the launcher, test credentials, enable or disable the private-chat channel, see status, export diagnostics without leaking the App Secret, and open an offline Feishu setup guide. The runtime side receives both env vars and `channels.feishu` config while preserving existing launcher config keys.
+- Verification: `python -m unittest discover -s tests` passed `141` tests; `git diff --check` passed aside from existing line-ending warnings reported by Git on Windows.
+- Remaining: a real private-chat proof requires an actual Feishu app and network access to Feishu; group chat, WeChat/QQ/WeCom, WebUI dual-entry, and a Python-side message bridge remain intentionally out of scope.
+

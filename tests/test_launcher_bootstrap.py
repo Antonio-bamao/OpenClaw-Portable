@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
-from launcher.models import LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.wizard import SetupWizardWindow
 
@@ -123,10 +123,43 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertTrue(window.restart_button.isEnabled())
         self.assertEqual(window.start_button.text(), "启动服务")
 
+    def test_main_window_shows_feishu_channel_controls(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.test_feishu_button.text(), "测试连接")
+        self.assertEqual(window.enable_feishu_button.text(), "启用飞书私聊")
+        self.assertEqual(window.open_feishu_help_button.text(), "接入帮助")
+
+    def test_main_window_applies_feishu_channel_state(self) -> None:
+        window = OpenClawLauncherWindow()
+        state = FeishuChannelState(
+            app_id="cli_xxx",
+            app_secret="secret",
+            bot_app_name="Support Bot",
+            enabled=True,
+            status_label="已连接",
+            status_detail="飞书私聊链路已就绪，可接收私聊消息。",
+        )
+
+        window.apply_feishu_channel_state(state)
+
+        self.assertEqual(window.feishu_app_id_input.text(), "cli_xxx")
+        self.assertEqual(window.feishu_bot_name_input.text(), "Support Bot")
+        self.assertEqual(window.feishu_status_label.text(), "已连接")
+        self.assertFalse(window.enable_feishu_button.isEnabled())
+        self.assertTrue(window.disable_feishu_button.isEnabled())
+
     def test_builds_wizard_with_expected_steps(self) -> None:
         window = SetupWizardWindow()
 
         self.assertEqual(window.step_titles(), ["设置密码", "选择 Provider", "填写 API Key", "测试连接", "完成配置"])
+
+
+    def test_feishu_offline_help_page_is_packaged(self) -> None:
+        help_page = Path.cwd() / "assets" / "guide" / "setup-feishu.html"
+
+        self.assertTrue(help_page.exists())
+        self.assertIn("飞书私聊接入帮助", help_page.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

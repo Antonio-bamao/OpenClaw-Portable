@@ -5,6 +5,7 @@ import unittest
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import patch
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
 from launcher.core.paths import PortablePaths
@@ -12,6 +13,7 @@ from launcher.runtime.base import RuntimeHealth, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.controller import LauncherController
+from launcher.services.feishu_channel import FeishuChannelConfig
 
 
 def make_workspace_temp_dir() -> Path:
@@ -68,11 +70,22 @@ class FakeRestoreResult:
 
 
 class FakeRuntimeAdapter:
-    def __init__(self) -> None:
+    def __init__(self, runtime_state: str = "ready", runtime_message: str = "ready") -> None:
         self.stop_calls = 0
+        self.runtime_state = runtime_state
+        self.runtime_message = runtime_message
+        self.last_runtime_config_patch: dict[str, object] = {}
+        self.last_runtime_env: dict[str, str] = {}
 
-    def prepare(self, config: LauncherConfig, paths: PortablePaths) -> None:
-        return None
+    def prepare(
+        self,
+        config: LauncherConfig,
+        paths: PortablePaths,
+        runtime_config_patch: dict[str, object] | None = None,
+        runtime_env: dict[str, str] | None = None,
+    ) -> None:
+        self.last_runtime_config_patch = runtime_config_patch or {}
+        self.last_runtime_env = runtime_env or {}
 
     def start(self) -> None:
         return None
@@ -84,7 +97,7 @@ class FakeRuntimeAdapter:
         return None
 
     def status(self) -> RuntimeStatus:
-        return RuntimeStatus(state="ready", port=18789, message="ready")
+        return RuntimeStatus(state=self.runtime_state, port=18789, message=self.runtime_message)
 
     def webui_url(self) -> str:
         return "http://127.0.0.1:18789"
@@ -290,7 +303,6 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-
     def test_reset_factory_state_returns_controller_to_first_run_but_keeps_workspace_and_backups(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -399,6 +411,102 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertEqual(runtime_adapter.stop_calls, 1)
             self.assertEqual(online_update_service.download_called_with, metadata)
             self.assertFalse(controller._prepared)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_controller_passes_feishu_projection_into_runtime_prepare(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.feishu_channel_service.save_config(
+                FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True)
+            )
+
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_ID"], "cli_xxx")
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_SECRET"], "secret")
+            self.assertTrue(runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_controller_skips_feishu_projection_when_channel_config_is_invalid(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            paths.ensure_directories()
+            paths.feishu_channel_config_file.write_text("{not-json", encoding="utf-8")
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            self.assertEqual(runtime_adapter.last_runtime_config_patch, {})
+            self.assertEqual(runtime_adapter.last_runtime_env, {})
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_controller_refreshes_feishu_status_when_runtime_is_running(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="feishu ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.feishu_channel_service.save_config(
+                FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True)
+            )
+
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.load_view_state()
+
+            self.assertEqual(controller.feishu_channel_service.load_status().state, "connected")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @patch("launcher.services.feishu_channel.urlopen")
+    def test_controller_saves_tests_and_enables_feishu_channel(self, mock_urlopen) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            mock_response = mock_urlopen.return_value.__enter__.return_value
+            mock_response.read.return_value = b'{"code":0,"tenant_access_token":"t-123"}'
+
+            saved_state = controller.save_feishu_channel(" cli_xxx ", " secret ", "Support Bot")
+            tested_state = controller.test_feishu_channel()
+            enabled_state = controller.enable_feishu_channel()
+
+            self.assertEqual(saved_state.app_id, "cli_xxx")
+            self.assertEqual(tested_state.status_label, "待启用")
+            self.assertTrue(enabled_state.enabled)
+            self.assertEqual(enabled_state.status_label, "连接中")
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_ID"], "cli_xxx")
+            self.assertTrue(runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["enabled"])
+            self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["botAppName"], "Support Bot")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

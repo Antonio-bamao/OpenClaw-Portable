@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import inspect
+from dataclasses import replace
 from pathlib import Path
 
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
-from launcher.models import LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState
 from launcher.runtime.base import RuntimeAdapter, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.diagnostics_export import DiagnosticsExporter
 from launcher.services.factory_reset import FactoryResetService
+from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 from launcher.services.online_update import OnlineUpdateService, UpdateCheckResult
 
@@ -40,23 +43,29 @@ class LauncherController:
         self.local_update_service = local_update_service or LocalUpdateImportService(paths)
         self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
         self.online_update_service = online_update_service or OnlineUpdateService(paths)
+        self.feishu_channel_service = FeishuChannelService(paths)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
         self.store.save(config, sensitive)
-        self.runtime_adapter.prepare(config, self.paths)
+        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
+        self._refresh_feishu_runtime_status()
 
     def start_runtime(self) -> None:
         self._prepare_if_needed()
         self.runtime_adapter.start()
+        self._refresh_feishu_runtime_status()
 
     def stop_runtime(self) -> None:
         self.runtime_adapter.stop()
+        self._refresh_feishu_runtime_status()
 
     def restart_runtime(self) -> None:
         self._prepare_if_needed()
         self.runtime_adapter.restart()
+        self._refresh_feishu_runtime_status()
 
     def export_diagnostics_bundle(self) -> Path:
         return self.diagnostics_exporter.export_bundle()
@@ -89,6 +98,55 @@ class LauncherController:
         self._prepared = False
         return result.imported_version
 
+    def load_feishu_channel_state(self) -> FeishuChannelState:
+        if not self.store.is_first_run():
+            self._refresh_feishu_runtime_status()
+        return self.feishu_channel_service.build_view_state()
+
+    def save_feishu_channel(self, app_id: str, app_secret: str, bot_app_name: str = "OpenClaw Bot") -> FeishuChannelState:
+        current = self.feishu_channel_service.load_config()
+        config = FeishuChannelConfig(
+            app_id=app_id.strip(),
+            app_secret=app_secret.strip(),
+            enabled=current.enabled,
+            bot_app_name=bot_app_name.strip() or "OpenClaw Bot",
+            last_validated_at=current.last_validated_at,
+        )
+        self.feishu_channel_service.save_config(config)
+        if not config.app_id or not config.app_secret:
+            self.feishu_channel_service.save_status(
+                FeishuChannelStatus(state="unconfigured", last_error="", last_connected_at=None, last_message_at=None)
+            )
+        return self.load_feishu_channel_state()
+
+    def test_feishu_channel(self) -> FeishuChannelState:
+        config = self.feishu_channel_service.load_config()
+        result = self.feishu_channel_service.validate_credentials(config.app_id, config.app_secret)
+        if result.ok:
+            self.feishu_channel_service.save_config(replace(config, last_validated_at=result.validated_at))
+            self.feishu_channel_service.save_status(FeishuChannelStatus(state=result.state, last_error=""))
+        else:
+            self.feishu_channel_service.save_status(FeishuChannelStatus(state=result.state, last_error=result.error_message))
+        return self.load_feishu_channel_state()
+
+    def enable_feishu_channel(self) -> FeishuChannelState:
+        config = self.feishu_channel_service.load_config()
+        if not config.app_id.strip() or not config.app_secret.strip():
+            self.feishu_channel_service.save_status(
+                FeishuChannelStatus(state="invalid_config", last_error="配置无效，请检查 App ID / App Secret。")
+            )
+            return self.load_feishu_channel_state()
+        self.feishu_channel_service.save_config(replace(config, enabled=True))
+        self._reproject_feishu_runtime_if_configured()
+        return self.load_feishu_channel_state()
+
+    def disable_feishu_channel(self) -> FeishuChannelState:
+        config = self.feishu_channel_service.load_config()
+        self.feishu_channel_service.save_config(replace(config, enabled=False))
+        self.feishu_channel_service.save_status(FeishuChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured"))
+        self._reproject_feishu_runtime_if_configured()
+        return self.load_feishu_channel_state()
+
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():
             return LauncherViewState(
@@ -105,6 +163,7 @@ class LauncherController:
         config, sensitive = self.store.load()
         self._prepare_if_needed()
         runtime_status = self.runtime_adapter.status()
+        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
         status_label = self._map_status_label(runtime_status)
         port = runtime_status.port or config.gateway_port
         status_detail = self._build_status_detail(runtime_status)
@@ -127,6 +186,7 @@ class LauncherController:
         config, sensitive = self.store.load()
         self._prepare_if_needed()
         runtime_status = self.runtime_adapter.status()
+        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
         port = runtime_status.port or config.gateway_port
 
         return LauncherViewState(
@@ -144,7 +204,51 @@ class LauncherController:
         if self._prepared or self.store.is_first_run():
             return
         config, _ = self.store.load()
+        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
+        self._prepared = True
+
+    def _feishu_runtime_projection(self) -> tuple[dict[str, object], dict[str, str]]:
+        feishu_config = self.feishu_channel_service.load_config()
+        if not (feishu_config.app_id.strip() or feishu_config.app_secret.strip() or feishu_config.enabled):
+            return {}, {}
+        projection = self.feishu_channel_service.build_runtime_projection(feishu_config)
+        if not feishu_config.app_id.strip() or not feishu_config.app_secret.strip():
+            return projection.runtime_config_patch, {}
+        return projection.runtime_config_patch, projection.runtime_env
+
+    def _prepare_runtime_adapter(
+        self,
+        config: LauncherConfig,
+        runtime_config_patch: dict[str, object],
+        runtime_env: dict[str, str],
+    ) -> None:
+        prepare_signature = inspect.signature(self.runtime_adapter.prepare)
+        supports_projection = (
+            "runtime_config_patch" in prepare_signature.parameters
+            or "runtime_env" in prepare_signature.parameters
+            or any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in prepare_signature.parameters.values())
+        )
+        if supports_projection:
+            self.runtime_adapter.prepare(
+                config,
+                self.paths,
+                runtime_config_patch=runtime_config_patch,
+                runtime_env=runtime_env,
+            )
+            return
         self.runtime_adapter.prepare(config, self.paths)
+
+    def _refresh_feishu_runtime_status(self) -> None:
+        runtime_status = self.runtime_adapter.status()
+        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
+
+    def _reproject_feishu_runtime_if_configured(self) -> None:
+        if self.store.is_first_run():
+            return
+        config, _ = self.store.load()
+        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
 
     def _build_runtime_adapter(self, runtime_mode: str, node_command: str) -> RuntimeAdapter:

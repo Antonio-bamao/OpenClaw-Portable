@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import socket
@@ -94,6 +95,61 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
             self.assertEqual(environment["OPENCLAW_CACHE_DIR"], str(paths.cache_dir))
             self.assertEqual(environment["OPENCLAW_API_KEY"], "sk-demo")
             self.assertEqual(environment.get("PATH"), os.environ.get("PATH"))
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_build_environment_merges_runtime_environment_projection(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            config = make_config(reserve_free_port())
+            adapter = OpenClawRuntimeAdapter()
+            adapter.prepare(
+                config,
+                paths,
+                runtime_env={
+                    "FEISHU_APP_ID": "cli_xxx",
+                    "FEISHU_APP_SECRET": "secret",
+                },
+            )
+
+            environment = adapter.build_environment()
+
+            self.assertEqual(environment["FEISHU_APP_ID"], "cli_xxx")
+            self.assertEqual(environment["FEISHU_APP_SECRET"], "secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_prepare_merges_runtime_config_patch_into_openclaw_config(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            paths.ensure_directories()
+            paths.config_file.write_text(
+                '{"provider_id":"dashscope","channels":{"slack":{"enabled":true}}}',
+                encoding="utf-8",
+            )
+            config = make_config(reserve_free_port())
+            adapter = OpenClawRuntimeAdapter()
+            adapter.prepare(
+                config,
+                paths,
+                runtime_config_patch={
+                    "channels": {
+                        "feishu": {
+                            "enabled": True,
+                            "botAppName": "OpenClaw Bot",
+                        }
+                    }
+                },
+            )
+
+            merged = json.loads(paths.config_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(merged["provider_id"], "dashscope")
+            self.assertTrue(merged["channels"]["slack"]["enabled"])
+            self.assertTrue(merged["channels"]["feishu"]["enabled"])
+            self.assertEqual(merged["channels"]["feishu"]["botAppName"], "OpenClaw Bot")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

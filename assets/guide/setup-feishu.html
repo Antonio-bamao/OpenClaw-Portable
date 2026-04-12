@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>飞书私聊接入帮助</title>
+  <style>
+    body { margin: 0; font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif; color: #172026; background: #f5f2ea; }
+    main { max-width: 920px; margin: 0 auto; padding: 48px 24px 72px; }
+    section { background: #fffaf0; border: 1px solid #eadfcb; border-radius: 22px; padding: 28px; margin-top: 18px; box-shadow: 0 18px 45px rgba(82, 64, 36, 0.12); }
+    h1 { font-size: 34px; margin: 0 0 12px; }
+    h2 { font-size: 22px; margin: 0 0 14px; }
+    p, li { line-height: 1.8; font-size: 16px; }
+    code { background: #efe6d3; border-radius: 8px; padding: 2px 7px; }
+    .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #d84f2a; color: #fff; font-weight: 700; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="badge">OpenClaw Portable</span>
+    <h1>飞书私聊接入帮助</h1>
+    <p>本页用于配置飞书企业自建应用，让用户私聊 Bot 时进入 OpenClaw，并把回复发回同一个飞书私聊会话。本轮只支持私聊，不支持群聊、@ 提及或群白名单。</p>
+
+    <section>
+      <h2>1. 创建飞书应用</h2>
+      <ol>
+        <li>打开飞书开放平台，创建一个企业自建应用。</li>
+        <li>在应用凭证页复制 <code>App ID</code> 和 <code>App Secret</code>。</li>
+        <li>在 OpenClaw 启动器的“飞书私聊渠道”卡片中填入凭据并保存。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>2. 配置机器人与事件</h2>
+      <ol>
+        <li>在飞书应用后台启用机器人能力。</li>
+        <li>按飞书后台提示完成事件订阅或长连接配置。</li>
+        <li>确保应用具备接收私聊消息和发送消息所需权限。</li>
+        <li>回到启动器点击“测试连接”，测试通过后点击“启用飞书私聊”。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>3. 常见问题</h2>
+      <ul>
+        <li>“配置无效”：请重新检查 <code>App ID</code> 和 <code>App Secret</code>。</li>
+        <li>“连接失败”：请确认飞书后台机器人、事件订阅、权限已配置完整，并重启 OpenClaw 服务。</li>
+        <li>“待启用”：凭据已保存，但尚未写入运行时启用配置，请点击“启用飞书私聊”。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
