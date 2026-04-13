@@ -90,6 +90,14 @@
 - Verified: full test suite passes with `python -m unittest discover -s tests` at `141` tests.
 - Next: perform real Feishu private-chat E2E validation with actual app credentials, then decide whether to prepare a new release build or continue with U-disk and anti-virus delivery risk work.
 
+## 2026-04-13 Local Delivery-Risk Evidence Update
+
+- Completed: pushed the Feishu implementation commit to `origin/main`, reran the portable package audit on the current clean dist, enumerated local drive types, and ran local Windows Defender custom scans on the launcher EXE plus the existing release zip.
+- Verified: clean dist remains at about `558.52MB / 25837` files with no required-path gaps, no mutable release state, no write-risk directories, and no remaining prune-candidate groups.
+- Verified: no usable removable U-disk target is currently mounted; `F:` is removable but has no filesystem/size, while `G:` and `H:` are fixed disks.
+- Verified: Windows Defender is enabled and local custom scan did not produce threat detections for `dist/OpenClaw-Portable/OpenClawLauncher.exe` or `dist/release/OpenClaw-Portable-v2026.04.2.zip`.
+- Next: run real removable-media read/write and cold-start measurements once a usable U-disk is available; keep Defender results as a local baseline only, not a replacement for SmartScreen reputation or multi-engine AV validation.
+
 ## 2026-04-12 Default Runtime Prune Update
 
 - Completed: default runtime pruning now includes `typescript_sources` and `test_artifacts`, with CLI semantics kept safe as “no args => default prune, explicit args => experiment-only overrides”.

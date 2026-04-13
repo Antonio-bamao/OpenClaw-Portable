@@ -358,3 +358,17 @@
 - Verification: `python -m unittest discover -s tests` passed `141` tests; `git diff --check` passed aside from existing line-ending warnings reported by Git on Windows.
 - Remaining: a real private-chat proof requires an actual Feishu app and network access to Feishu; group chat, WeChat/QQ/WeCom, WebUI dual-entry, and a Python-side message bridge remain intentionally out of scope.
 
+
+## 2026-04-13｜Complete Feishu private-chat MVP branch integration
+- 目标：Complete Feishu private-chat MVP branch integration
+- 动作：Pushed local main commit 8b1c473 to origin/main after confirming only main worktree remains and the working tree is clean.
+- 结果：Remote main now includes the Feishu private-chat MVP implementation commit.
+- 验证：git status --short --branch reports main aligned with origin/main; prior Feishu implementation verification passed python -m unittest discover -s tests with 141 tests.
+- 下一步：Shift to the next unblocked delivery-risk item: U-disk read/write performance and anti-virus false-positive assessment, while real Feishu E2E remains dependent on actual credentials.
+
+## 2026-04-13｜Collect local delivery-risk baseline evidence
+- 目标：Collect local delivery-risk baseline evidence
+- 动作：Ran portable package audit on dist/OpenClaw-Portable, enumerated Windows drive types, checked Defender status, scanned the launcher EXE and release zip with Windows Defender, queried Defender threat detections, and updated current-status/task-breakdown/risk-register.
+- 结果：Clean dist remains 558.52MB / 25837 files with no release-state or write-risk warnings; no usable removable U-disk is mounted; Defender local custom scans completed and threat detection query returned no detections.
+- 验证：audit-portable-package.py output showed required_paths_missing=[], unexpected_state_paths=[], write_risk_directories=[], prune candidates all zero; Get-CimInstance reported F: removable but no filesystem/size and G:/H: fixed; Get-MpComputerStatus showed Defender protections enabled; Get-MpThreatDetection returned no rows; validate_context.py returned context is valid.
+- 下一步：Run real removable-media read/write and cold-start measurement once a usable U-disk or target delivery path is available; otherwise draft a small assessment plan/checklist for SmartScreen and multi-engine AV validation.

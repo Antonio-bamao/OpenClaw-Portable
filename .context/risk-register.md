@@ -12,3 +12,8 @@
 | 更新覆盖失败 | 下载包不完整、写入失败、文件被占用 | 启动失败、用户数据受损 | 更新前自动备份 `runtime/`；首启失败自动回滚；永不覆盖 `state/` |
 | 诊断包泄露敏感信息 | 日志、配置、token 未脱敏就导出 | 用户密钥泄露、商业与安全风险 | 严格执行脱敏规则；诊断包默认不包含消息正文；导出前再次校验敏感字段 |
 | Windows 长路径限制 | `runtime/openclaw/` 包含深层 `dist/extensions/*/node_modules`，且交付目录或临时打包目录过深 | 复制、打包或更新时文件丢失，导致 runtime 启动失败 | U 盘交付目录保持短路径；打包脚本避免深层临时目录；必要时评估依赖裁剪或长路径策略 |
+
+## 2026-04-13 Local Evidence
+
+- 杀软误报基线：本机 Windows Defender 已开启，签名更新时间为 `2026/4/12 16:11:51`；对 `dist/OpenClaw-Portable/OpenClawLauncher.exe` 和 `dist/release/OpenClaw-Portable-v2026.04.2.zip` 执行本地自定义扫描后，`Get-MpThreatDetection` 未返回检出项。该结果只能作为本机 Defender 基线，不能替代 VirusTotal、多厂商杀软或 SmartScreen 信誉验证。
+- U 盘读写基线：当前系统没有可用的 DriveType=2 交付介质；`F:` 是可移动盘位但无文件系统/容量，`G:` 与 `H:` 被识别为固定盘。真实 U 盘读写与冷启动波动评估仍需插入可用介质或指定目标路径。
