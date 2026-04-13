@@ -98,6 +98,13 @@
 - Verified: Windows Defender is enabled and local custom scan did not produce threat detections for `dist/OpenClaw-Portable/OpenClawLauncher.exe` or `dist/release/OpenClaw-Portable-v2026.04.2.zip`.
 - Next: run real removable-media read/write and cold-start measurements once a usable U-disk is available; keep Defender results as a local baseline only, not a replacement for SmartScreen reputation or multi-engine AV validation.
 
+## 2026-04-13 Delivery Flow Gate Update
+
+- Completed: added `scripts/verify-delivery-flow.py` as the release-readiness command that ties together package audit, release asset checks, optional runtime stability, and external evidence tracking.
+- Verified: local package/release/runtime checks can now be run as one JSON-producing gate. On the current main-worktree dist, the gate reaches `status=pending` rather than `failed` once the ignored local signature artifact is regenerated.
+- Pending by design: real Feishu private-chat E2E, removable-media performance/cold-start evidence, and multi-engine AV/SmartScreen validation still need outside inputs.
+- Next: merge the gate to `main`; then run it before any next release build, using higher runtime run counts for release-grade verification and passing evidence paths when real external validation artifacts exist.
+
 ## 2026-04-12 Default Runtime Prune Update
 
 - Completed: default runtime pruning now includes `typescript_sources` and `test_artifacts`, with CLI semantics kept safe as “no args => default prune, explicit args => experiment-only overrides”.

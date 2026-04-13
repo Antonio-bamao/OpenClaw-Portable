@@ -208,3 +208,12 @@
 - 解决方案：按 TDD 扩展 `tests/test_runtime_pruning.py`，随后在 `launcher/services/runtime_pruning.py` 增加目录名匹配能力，并让 `scripts/prune-portable-runtime.py` 新增实验性 `--directory-name` 参数；修复后 dry-run 与审计对齐为 `740` 个文件 / `3.88MB`。
 - 预防措施：后续新增审计候选分组时，实验入口必须同步具备等价的命中语义；至少补一条“审计统计值与 prune dry-run 命中值一致”的回归验证，避免再次出现“报告可见、工具删不到”的半闭环。
 - 状态：Resolved
+
+## Delivery gate and tests interfered when run in parallel
+- 现象：A full unittest run failed once in MockRuntimeAdapterTests.test_switches_to_next_port_when_requested_one_is_busy while a real runtime delivery gate was running in parallel; a later delivery gate run also hit a transient restart port bind failure before passing on rerun.
+- 触发条件：Ran unit tests and a real OpenClaw runtime delivery gate concurrently, then immediately repeated runtime stability verification on randomly selected ports.
+- 影响：Could produce false negative verification results and make the delivery flow look broken when the underlying feature code is not the root cause.
+- 根因：The verification commands share localhost port space; real OpenClaw and mock runtime tests can interfere when executed concurrently, and OpenClaw can occasionally hit an internal port bind conflict on a randomly selected verification port.
+- 解决方案：Stopped parallelizing unit tests with real runtime verification, reran tests serially, and reran the delivery gate serially; the full test suite passed and the second gate run passed local checks with only external evidence pending.
+- 预防措施：Do not run real runtime stability gates in parallel with unit tests or other localhost runtime checks; keep delivery gate output as evidence and rerun isolated if a single port bind failure appears.
+- 状态：documented
