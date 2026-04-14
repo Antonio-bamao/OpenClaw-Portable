@@ -9,6 +9,7 @@ from launcher.core.config_store import LauncherConfig, LauncherConfigStore, Sens
 from launcher.core.paths import PortablePaths
 from launcher.services.diagnostics_export import DiagnosticsExporter
 from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
+from launcher.services.social_channels import QqChannelConfig, SocialChannelService, WechatChannelConfig, WecomChannelConfig
 
 
 def make_workspace_temp_dir() -> Path:
@@ -55,6 +56,10 @@ class DiagnosticsExporterTests(unittest.TestCase):
             feishu_service.save_status(
                 FeishuChannelStatus(state="connected", last_error="", last_connected_at="2026-04-12T12:00:00Z")
             )
+            social_service = SocialChannelService(paths)
+            social_service.save_wechat_config(WechatChannelConfig(enabled=True, installed=True))
+            social_service.save_qq_config(QqChannelConfig(app_id="123456789", app_secret="qq-secret-value", enabled=True))
+            social_service.save_wecom_config(WecomChannelConfig(bot_id="wwbot-secret", secret="wecom-secret-value", enabled=True))
 
             bundle_path = DiagnosticsExporter(paths, runtime_mode="openclaw").export_bundle()
 
@@ -82,6 +87,15 @@ class DiagnosticsExporterTests(unittest.TestCase):
             self.assertTrue(summary["feishuChannel"]["appSecretConfigured"])
             self.assertNotIn("secret-value", json.dumps(summary, ensure_ascii=False))
             self.assertEqual(summary["feishuChannel"]["status"], "connected")
+            self.assertTrue(summary["wechatChannel"]["enabled"])
+            self.assertTrue(summary["qqChannel"]["enabled"])
+            self.assertEqual(summary["qqChannel"]["appId"], "123456***")
+            self.assertTrue(summary["qqChannel"]["appSecretConfigured"])
+            self.assertTrue(summary["wecomChannel"]["enabled"])
+            self.assertEqual(summary["wecomChannel"]["botId"], "wwbot-***")
+            self.assertTrue(summary["wecomChannel"]["secretConfigured"])
+            self.assertNotIn("qq-secret-value", json.dumps(summary, ensure_ascii=False))
+            self.assertNotIn("wecom-secret-value", json.dumps(summary, ensure_ascii=False))
             self.assertEqual(manifest["runtimeMode"], "openclaw")
             self.assertEqual(manifest["logsIncluded"], ["openclaw-runtime.err.log"])
         finally:

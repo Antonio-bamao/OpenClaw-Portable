@@ -5,7 +5,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from launcher.app import OpenClawLauncherApplication
-from launcher.models import FeishuChannelState, LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 
 
 def make_view_state(status_label: str, status_detail: str, message: str) -> LauncherViewState:
@@ -99,6 +99,59 @@ class FakeController:
         return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "disabled")
 
 
+    def install_wechat_channel(self) -> WechatChannelState:
+        self.calls.append("install_wechat_channel")
+        return WechatChannelState(False, True, "待扫码", "installed")
+
+    def login_wechat_channel(self) -> WechatChannelState:
+        self.calls.append("login_wechat_channel")
+        return WechatChannelState(False, True, "待启用", "login opened")
+
+    def enable_wechat_channel(self) -> WechatChannelState:
+        self.calls.append("enable_wechat_channel")
+        return WechatChannelState(True, True, "已启用", "enabled")
+
+    def disable_wechat_channel(self) -> WechatChannelState:
+        self.calls.append("disable_wechat_channel")
+        return WechatChannelState(False, True, "待启用", "disabled")
+
+    def save_qq_channel(self, app_id: str, app_secret: str) -> QqChannelState:
+        self.calls.append(f"save_qq_channel:{app_id}:{app_secret}")
+        return QqChannelState(app_id, app_secret, False, "待启用", "saved")
+
+    def test_qq_channel(self) -> QqChannelState:
+        self.calls.append("test_qq_channel")
+        return QqChannelState("123456", "secret", False, "待启用", "tested")
+
+    def enable_qq_channel(self) -> QqChannelState:
+        self.calls.append("enable_qq_channel")
+        return QqChannelState("123456", "secret", True, "已启用", "enabled")
+
+    def disable_qq_channel(self) -> QqChannelState:
+        self.calls.append("disable_qq_channel")
+        return QqChannelState("123456", "secret", False, "待启用", "disabled")
+
+    def install_wecom_channel(self) -> WecomChannelState:
+        self.calls.append("install_wecom_channel")
+        return WecomChannelState("", "", False, "websocket", "待配置", "installed")
+
+    def save_wecom_channel(self, bot_id: str, secret: str) -> WecomChannelState:
+        self.calls.append(f"save_wecom_channel:{bot_id}:{secret}")
+        return WecomChannelState(bot_id, secret, False, "websocket", "待启用", "saved")
+
+    def test_wecom_channel(self) -> WecomChannelState:
+        self.calls.append("test_wecom_channel")
+        return WecomChannelState("wwbot", "secret", False, "websocket", "待启用", "tested")
+
+    def enable_wecom_channel(self) -> WecomChannelState:
+        self.calls.append("enable_wecom_channel")
+        return WecomChannelState("wwbot", "secret", True, "websocket", "已启用", "enabled")
+
+    def disable_wecom_channel(self) -> WecomChannelState:
+        self.calls.append("disable_wecom_channel")
+        return WecomChannelState("wwbot", "secret", False, "websocket", "待启用", "disabled")
+
+
 class FakeInput:
     def __init__(self, value: str) -> None:
         self.value = value
@@ -112,10 +165,17 @@ class FakeWindow:
         self.calls = calls
         self.states: list[LauncherViewState] = []
         self.feishu_states: list[FeishuChannelState] = []
+        self.wechat_states: list[WechatChannelState] = []
+        self.qq_states: list[QqChannelState] = []
+        self.wecom_states: list[WecomChannelState] = []
         self.busy_actions: list[tuple[str, bool]] = []
         self.feishu_app_id_input = FakeInput("cli_xxx")
         self.feishu_app_secret_input = FakeInput("secret")
         self.feishu_bot_name_input = FakeInput("Support Bot")
+        self.qq_app_id_input = FakeInput("123456")
+        self.qq_app_secret_input = FakeInput("qq-secret")
+        self.wecom_bot_id_input = FakeInput("wwbot")
+        self.wecom_secret_input = FakeInput("wecom-secret")
 
     def apply_view_state(self, state: LauncherViewState) -> None:
         self.states.append(state)
@@ -128,6 +188,18 @@ class FakeWindow:
     def apply_feishu_channel_state(self, state: FeishuChannelState) -> None:
         self.feishu_states.append(state)
         self.calls.append(f"apply_feishu:{state.status_label}")
+
+    def apply_wechat_channel_state(self, state: WechatChannelState) -> None:
+        self.wechat_states.append(state)
+        self.calls.append(f"apply_wechat:{state.status_label}")
+
+    def apply_qq_channel_state(self, state: QqChannelState) -> None:
+        self.qq_states.append(state)
+        self.calls.append(f"apply_qq:{state.status_label}")
+
+    def apply_wecom_channel_state(self, state: WecomChannelState) -> None:
+        self.wecom_states.append(state)
+        self.calls.append(f"apply_wecom:{state.status_label}")
 
 
 class FakeQtApp:
@@ -341,6 +413,50 @@ class LauncherAppTests(unittest.TestCase):
 
         self.assertIn("enable_feishu_channel", calls)
         self.assertEqual(application.main_window.feishu_states[-1].status_label, "连接中")
+
+
+    def test_handle_wechat_install_login_and_enable_apply_states(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_install_wechat_channel()
+        application._handle_login_wechat_channel()
+        application._handle_enable_wechat_channel()
+
+        self.assertIn("install_wechat_channel", calls)
+        self.assertIn("login_wechat_channel", calls)
+        self.assertIn("enable_wechat_channel", calls)
+        self.assertEqual(application.main_window.wechat_states[-1].status_label, "已启用")
+
+    def test_handle_save_and_enable_qq_channel_reads_inputs(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_save_qq_channel()
+        application._handle_enable_qq_channel()
+
+        self.assertIn("save_qq_channel:123456:qq-secret", calls)
+        self.assertIn("enable_qq_channel", calls)
+        self.assertEqual(application.main_window.qq_states[-1].status_label, "已启用")
+
+    def test_handle_save_and_enable_wecom_channel_reads_inputs(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_install_wecom_channel()
+        application._handle_save_wecom_channel()
+        application._handle_enable_wecom_channel()
+
+        self.assertIn("install_wecom_channel", calls)
+        self.assertIn("save_wecom_channel:wwbot:wecom-secret", calls)
+        self.assertIn("enable_wecom_channel", calls)
+        self.assertEqual(application.main_window.wecom_states[-1].status_label, "已启用")
 
 
 if __name__ == "__main__":

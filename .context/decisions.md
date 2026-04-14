@@ -122,6 +122,13 @@
 - 影响范围：`launcher/services/factory_reset.py`、`LauncherController.reset_factory_state()`、主界面“恢复出厂”入口、售后排障与重新初始化流程。
 - 后续约束：恢复出厂默认只清理 `state/openclaw.json`、`state/.env`、provider templates、临时日志/缓存和 sessions/channels；不得删除 `runtime/`、`state/workspace/` 或 `state/backups/`，除非后续单独设计并测试更激进的重置模式。
 
+## 2026-04-14｜渠道接入优先走官方 / 插件路径
+
+- 决策：微信优先走 WeChat ClawBot + `@tencent-weixin/openclaw-weixin` 的扫码登录路径，不再把公众号路线作为默认 MVP；QQ 走 QQ Bot / `qqbot` 捆绑扩展；企业微信走 `@wecom/wecom-openclaw-plugin` 插件入口。
+- 原因：用户已确认微信端 ClawBot 插件已安装，且最新 npm 信息显示 `openclaw-weixin` 2.x 主线支持 OpenClaw `>=2026.3.22`；当前本地 runtime 已是 OpenClaw `v2026.4.8`。
+- 约束：渠道消息仍交给 OpenClaw runtime/plugin infrastructure；Python launcher 只负责安装/登录引导、状态/config 持久化、runtime config patch 和诊断脱敏，不实现自定义消息桥。
+- 交付策略：杀软/SmartScreen 不再作为当前渠道功能开发阻塞项；若客户机器误报，优先按用户要求走白名单/信任说明，后续只保留交付风险记录。
+
 ## 2026-04-11｜本地导入更新包默认只替换分发内容，更新前自动备份且永不覆盖 `state/`
 
 - 背景：当前项目需要先把“更新 / 回滚”做成可落地的本地闭环，但仓库里还没有现成的在线 updater；同时 `risk-register.md` 已明确更新失败回滚和保护用户状态目录是高优先级约束。

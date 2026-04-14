@@ -105,6 +105,13 @@
 - Pending by design: real Feishu private-chat E2E, removable-media performance/cold-start evidence, and multi-engine AV/SmartScreen validation still need outside inputs.
 - Next: merge the gate to `main`; then run it before any next release build, using higher runtime run counts for release-grade verification and passing evidence paths when real external validation artifacts exist.
 
+## 2026-04-14 WeChat / QQ / WeCom Channel Update
+
+- Completed: expanded Phase 3 channel support beyond Feishu with a launcher-first social channel service for WeChat ClawBot, QQ Bot, and WeCom.
+- Delivered: WeChat plugin install command (`@tencent-weixin/openclaw-weixin@latest`), WeChat QR login command (`openclaw-weixin`), QQ Bot AppID/AppSecret config projection, WeCom plugin install command (`@wecom/wecom-openclaw-plugin@latest`), WeCom credential projection, channel status/config persistence, UI cards, controller/app handlers, and diagnostics redaction.
+- Verified: targeted channel/controller/UI/diagnostics tests pass, and full `python -m unittest discover -s tests` passes 157 tests.
+- Next: run a real WeChat QR login on the user's machine with the already-installed WeChat ClawBot plugin, then test QQ and WeCom with real platform credentials.
+
 ## 2026-04-12 Default Runtime Prune Update
 
 - Completed: default runtime pruning now includes `typescript_sources` and `test_artifacts`, with CLI semantics kept safe as “no args => default prune, explicit args => experiment-only overrides”.

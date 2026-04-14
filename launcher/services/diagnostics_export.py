@@ -8,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from launcher.core.config_store import LauncherConfigStore
 from launcher.core.paths import PortablePaths
 from launcher.services.feishu_channel import FeishuChannelService
+from launcher.services.social_channels import SocialChannelService
 
 
 class DiagnosticsExporter:
@@ -78,6 +79,9 @@ class DiagnosticsExporter:
             "adminPasswordConfigured": bool(config.admin_password),
         }
         summary["feishuChannel"] = self._feishu_channel_summary()
+        summary["wechatChannel"] = self._wechat_channel_summary()
+        summary["qqChannel"] = self._qq_channel_summary()
+        summary["wecomChannel"] = self._wecom_channel_summary()
         return summary
 
     def _feishu_channel_summary(self) -> dict[str, object]:
@@ -95,6 +99,47 @@ class DiagnosticsExporter:
             "lastError": status.last_error,
             "lastConnectedAt": status.last_connected_at,
             "lastMessageAt": status.last_message_at,
+        }
+
+    def _wechat_channel_summary(self) -> dict[str, object]:
+        service = SocialChannelService(self.paths)
+        config = service.load_wechat_config()
+        status = service.load_wechat_status()
+        return {
+            "installed": config.installed,
+            "enabled": config.enabled,
+            "lastLoginAt": config.last_login_at,
+            "status": status.state,
+            "lastError": status.last_error,
+        }
+
+    def _qq_channel_summary(self) -> dict[str, object]:
+        service = SocialChannelService(self.paths)
+        config = service.load_qq_config()
+        status = service.load_qq_status()
+        return {
+            "configured": bool(config.app_id and config.app_secret),
+            "enabled": config.enabled,
+            "appId": self._redact(config.app_id),
+            "appSecretConfigured": bool(config.app_secret),
+            "lastValidatedAt": config.last_validated_at,
+            "status": status.state,
+            "lastError": status.last_error,
+        }
+
+    def _wecom_channel_summary(self) -> dict[str, object]:
+        service = SocialChannelService(self.paths)
+        config = service.load_wecom_config()
+        status = service.load_wecom_status()
+        return {
+            "configured": bool(config.bot_id and config.secret),
+            "enabled": config.enabled,
+            "botId": self._redact(config.bot_id),
+            "secretConfigured": bool(config.secret),
+            "connectionMode": config.connection_mode,
+            "lastValidatedAt": config.last_validated_at,
+            "status": status.state,
+            "lastError": status.last_error,
         }
 
     def _redact(self, value: str) -> str:

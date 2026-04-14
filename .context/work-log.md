@@ -366,6 +366,14 @@
 - 验证：git status --short --branch reports main aligned with origin/main; prior Feishu implementation verification passed python -m unittest discover -s tests with 141 tests.
 - 下一步：Shift to the next unblocked delivery-risk item: U-disk read/write performance and anti-virus false-positive assessment, while real Feishu E2E remains dependent on actual credentials.
 
+## 2026-04-14｜Add WeChat / QQ / WeCom channel launcher slice
+
+- 目标：按用户确认的计划，先做微信 ClawBot 扫码接入，再补 QQ Bot 与企业微信的最小可用 launcher 接入入口。
+- 动作：新增 `launcher/services/social_channels.py`，为 WeChat / QQ / WeCom 提供本地 config/status 存储、runtime config patch、WeChat 插件安装与扫码登录命令、WeCom 插件安装命令、QQ / WeCom 凭据检查；扩展 `LauncherController`、`OpenClawLauncherApplication` 与主窗口 UI，新增微信、QQ、企业微信卡片和安装/扫码/保存/检查/启停操作；诊断导出增加三类渠道的脱敏摘要。
+- 结果：启动器现在不只显示飞书私聊卡片，也能引导微信官方 ClawBot 插件扫码、QQ Bot AppID/AppSecret 配置、企业微信插件安装与凭据配置，并把启用状态投影到 OpenClaw runtime 配置中。
+- 验证：RED 先确认 `tests.test_social_channel_service` 因缺 `launcher.services.social_channels` 失败；GREEN 后相关 54 个服务/控制器/UI/应用/诊断测试通过；最终 `python -m unittest discover -s tests` 通过 157 个测试。
+- 下一步：用用户本机已安装的微信 ClawBot 执行真实二维码登录；QQ 和企业微信需要真实平台凭据后再做 E2E。
+
 ## 2026-04-13｜Collect local delivery-risk baseline evidence
 - 目标：Collect local delivery-risk baseline evidence
 - 动作：Ran portable package audit on dist/OpenClaw-Portable, enumerated Windows drive types, checked Defender status, scanned the launcher EXE and release zip with Windows Defender, queried Defender threat detections, and updated current-status/task-breakdown/risk-register.

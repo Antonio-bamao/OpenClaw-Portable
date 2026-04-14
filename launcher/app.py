@@ -72,8 +72,26 @@ class OpenClawLauncherApplication:
                 on_disable=self._handle_disable_feishu_channel,
                 on_open_help=self._handle_open_feishu_help,
             )
+            self.main_window.bind_social_channel_handlers(
+                on_install_wechat=self._handle_install_wechat_channel,
+                on_login_wechat=self._handle_login_wechat_channel,
+                on_enable_wechat=self._handle_enable_wechat_channel,
+                on_disable_wechat=self._handle_disable_wechat_channel,
+                on_save_qq=self._handle_save_qq_channel,
+                on_test_qq=self._handle_test_qq_channel,
+                on_enable_qq=self._handle_enable_qq_channel,
+                on_disable_qq=self._handle_disable_qq_channel,
+                on_install_wecom=self._handle_install_wecom_channel,
+                on_save_wecom=self._handle_save_wecom_channel,
+                on_test_wecom=self._handle_test_wecom_channel,
+                on_enable_wecom=self._handle_enable_wecom_channel,
+                on_disable_wecom=self._handle_disable_wecom_channel,
+            )
         self.main_window.apply_view_state(view_state)
         self.main_window.apply_feishu_channel_state(self.controller.load_feishu_channel_state())
+        self.main_window.apply_wechat_channel_state(self.controller.load_wechat_channel_state())
+        self.main_window.apply_qq_channel_state(self.controller.load_qq_channel_state())
+        self.main_window.apply_wecom_channel_state(self.controller.load_wecom_channel_state())
         self.main_window.show()
         if self.wizard_window:
             self.wizard_window.hide()
@@ -207,15 +225,92 @@ class OpenClawLauncherApplication:
             return
         webbrowser.open_new_tab(help_path.as_uri())
 
+    def _handle_install_wechat_channel(self) -> None:
+        self._run_background_action("install_wechat_channel", self.controller.install_wechat_channel, self._apply_wechat_channel_state)
+
+    def _handle_login_wechat_channel(self) -> None:
+        self._run_background_action("login_wechat_channel", self.controller.login_wechat_channel, self._apply_wechat_channel_state)
+
+    def _handle_enable_wechat_channel(self) -> None:
+        self._run_background_action("enable_wechat_channel", self.controller.enable_wechat_channel, self._apply_wechat_channel_state)
+
+    def _handle_disable_wechat_channel(self) -> None:
+        state = self._run_with_error_boundary(self.controller.disable_wechat_channel)
+        if state is not None:
+            self._apply_wechat_channel_state(state)
+
+    def _handle_save_qq_channel(self) -> None:
+        if not self.main_window:
+            return
+        state = self.controller.save_qq_channel(
+            self.main_window.qq_app_id_input.text(),
+            self.main_window.qq_app_secret_input.text(),
+        )
+        self._apply_qq_channel_state(state)
+
+    def _handle_test_qq_channel(self) -> None:
+        self._handle_save_qq_channel()
+        self._run_background_action("test_qq_channel", self.controller.test_qq_channel, self._apply_qq_channel_state)
+
+    def _handle_enable_qq_channel(self) -> None:
+        self._run_background_action("enable_qq_channel", self.controller.enable_qq_channel, self._apply_qq_channel_state)
+
+    def _handle_disable_qq_channel(self) -> None:
+        state = self._run_with_error_boundary(self.controller.disable_qq_channel)
+        if state is not None:
+            self._apply_qq_channel_state(state)
+
+    def _handle_install_wecom_channel(self) -> None:
+        self._run_background_action("install_wecom_channel", self.controller.install_wecom_channel, self._apply_wecom_channel_state)
+
+    def _handle_save_wecom_channel(self) -> None:
+        if not self.main_window:
+            return
+        state = self.controller.save_wecom_channel(
+            self.main_window.wecom_bot_id_input.text(),
+            self.main_window.wecom_secret_input.text(),
+        )
+        self._apply_wecom_channel_state(state)
+
+    def _handle_test_wecom_channel(self) -> None:
+        self._handle_save_wecom_channel()
+        self._run_background_action("test_wecom_channel", self.controller.test_wecom_channel, self._apply_wecom_channel_state)
+
+    def _handle_enable_wecom_channel(self) -> None:
+        self._run_background_action("enable_wecom_channel", self.controller.enable_wecom_channel, self._apply_wecom_channel_state)
+
+    def _handle_disable_wecom_channel(self) -> None:
+        state = self._run_with_error_boundary(self.controller.disable_wecom_channel)
+        if state is not None:
+            self._apply_wecom_channel_state(state)
+
     def _apply_feishu_channel_state(self, state) -> None:
         if self.main_window and hasattr(self.main_window, "apply_feishu_channel_state"):
             self.main_window.apply_feishu_channel_state(state)
+
+    def _apply_wechat_channel_state(self, state) -> None:
+        if self.main_window and hasattr(self.main_window, "apply_wechat_channel_state"):
+            self.main_window.apply_wechat_channel_state(state)
+
+    def _apply_qq_channel_state(self, state) -> None:
+        if self.main_window and hasattr(self.main_window, "apply_qq_channel_state"):
+            self.main_window.apply_qq_channel_state(state)
+
+    def _apply_wecom_channel_state(self, state) -> None:
+        if self.main_window and hasattr(self.main_window, "apply_wecom_channel_state"):
+            self.main_window.apply_wecom_channel_state(state)
 
     def _refresh_main_view(self) -> None:
         if self.main_window:
             self.main_window.apply_view_state(self.controller.load_view_state())
             if hasattr(self.controller, "load_feishu_channel_state"):
                 self._apply_feishu_channel_state(self.controller.load_feishu_channel_state())
+            if hasattr(self.controller, "load_wechat_channel_state"):
+                self._apply_wechat_channel_state(self.controller.load_wechat_channel_state())
+            if hasattr(self.controller, "load_qq_channel_state"):
+                self._apply_qq_channel_state(self.controller.load_qq_channel_state())
+            if hasattr(self.controller, "load_wecom_channel_state"):
+                self._apply_wecom_channel_state(self.controller.load_wecom_channel_state())
 
     def _show_pending_runtime_state(self, action: str) -> None:
         if self.main_window:

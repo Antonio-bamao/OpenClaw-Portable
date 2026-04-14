@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from launcher.models import FeishuChannelState, LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.ui.theme import app_stylesheet, preferred_font
 from launcher.ui.widgets import HeroPanel, MetricCard, apply_card_shadow, make_button, make_label
 
@@ -56,6 +56,29 @@ class OpenClawLauncherWindow(QMainWindow):
         self.enable_feishu_button: QPushButton | None = None
         self.disable_feishu_button: QPushButton | None = None
         self.open_feishu_help_button: QPushButton | None = None
+        self.wechat_status_label: QLabel | None = None
+        self.wechat_status_detail_label: QLabel | None = None
+        self.install_wechat_button: QPushButton | None = None
+        self.login_wechat_button: QPushButton | None = None
+        self.enable_wechat_button: QPushButton | None = None
+        self.disable_wechat_button: QPushButton | None = None
+        self.qq_app_id_input: QLineEdit | None = None
+        self.qq_app_secret_input: QLineEdit | None = None
+        self.qq_status_label: QLabel | None = None
+        self.qq_status_detail_label: QLabel | None = None
+        self.save_qq_button: QPushButton | None = None
+        self.test_qq_button: QPushButton | None = None
+        self.enable_qq_button: QPushButton | None = None
+        self.disable_qq_button: QPushButton | None = None
+        self.wecom_bot_id_input: QLineEdit | None = None
+        self.wecom_secret_input: QLineEdit | None = None
+        self.wecom_status_label: QLabel | None = None
+        self.wecom_status_detail_label: QLabel | None = None
+        self.install_wecom_button: QPushButton | None = None
+        self.save_wecom_button: QPushButton | None = None
+        self.test_wecom_button: QPushButton | None = None
+        self.enable_wecom_button: QPushButton | None = None
+        self.disable_wecom_button: QPushButton | None = None
         self._buttons_by_action: dict[str, QPushButton] = {}
         self._default_button_texts: dict[QPushButton, str] = {}
         self._build_ui()
@@ -85,6 +108,37 @@ class OpenClawLauncherWindow(QMainWindow):
         self.disable_feishu_button.clicked.connect(on_disable)
         self.open_feishu_help_button.clicked.connect(on_open_help)
 
+    def bind_social_channel_handlers(
+        self,
+        *,
+        on_install_wechat,
+        on_login_wechat,
+        on_enable_wechat,
+        on_disable_wechat,
+        on_save_qq,
+        on_test_qq,
+        on_enable_qq,
+        on_disable_qq,
+        on_install_wecom,
+        on_save_wecom,
+        on_test_wecom,
+        on_enable_wecom,
+        on_disable_wecom,
+    ) -> None:
+        self.install_wechat_button.clicked.connect(on_install_wechat)
+        self.login_wechat_button.clicked.connect(on_login_wechat)
+        self.enable_wechat_button.clicked.connect(on_enable_wechat)
+        self.disable_wechat_button.clicked.connect(on_disable_wechat)
+        self.save_qq_button.clicked.connect(on_save_qq)
+        self.test_qq_button.clicked.connect(on_test_qq)
+        self.enable_qq_button.clicked.connect(on_enable_qq)
+        self.disable_qq_button.clicked.connect(on_disable_qq)
+        self.install_wecom_button.clicked.connect(on_install_wecom)
+        self.save_wecom_button.clicked.connect(on_save_wecom)
+        self.test_wecom_button.clicked.connect(on_test_wecom)
+        self.enable_wecom_button.clicked.connect(on_enable_wecom)
+        self.disable_wecom_button.clicked.connect(on_disable_wecom)
+
     def apply_view_state(self, view_state: LauncherViewState) -> None:
         self.view_state = view_state
         self.status_card.set_value(view_state.status_label)
@@ -106,6 +160,28 @@ class OpenClawLauncherWindow(QMainWindow):
         self.feishu_status_detail_label.setText(state.status_detail)
         self.enable_feishu_button.setEnabled(not state.enabled)
         self.disable_feishu_button.setEnabled(state.enabled)
+
+    def apply_wechat_channel_state(self, state: WechatChannelState) -> None:
+        self.wechat_status_label.setText(state.status_label)
+        self.wechat_status_detail_label.setText(state.status_detail)
+        self.enable_wechat_button.setEnabled(not state.enabled)
+        self.disable_wechat_button.setEnabled(state.enabled)
+
+    def apply_qq_channel_state(self, state: QqChannelState) -> None:
+        self.qq_app_id_input.setText(state.app_id)
+        self.qq_app_secret_input.setText(state.app_secret)
+        self.qq_status_label.setText(state.status_label)
+        self.qq_status_detail_label.setText(state.status_detail)
+        self.enable_qq_button.setEnabled(not state.enabled)
+        self.disable_qq_button.setEnabled(state.enabled)
+
+    def apply_wecom_channel_state(self, state: WecomChannelState) -> None:
+        self.wecom_bot_id_input.setText(state.bot_id)
+        self.wecom_secret_input.setText(state.secret)
+        self.wecom_status_label.setText(state.status_label)
+        self.wecom_status_detail_label.setText(state.status_detail)
+        self.enable_wecom_button.setEnabled(not state.enabled)
+        self.disable_wecom_button.setEnabled(state.enabled)
 
     def set_action_busy(self, action: str, busy: bool) -> None:
         runtime_actions = {
@@ -297,6 +373,142 @@ class OpenClawLauncherWindow(QMainWindow):
             }
         )
         layout.addWidget(feishu_card)
+
+        social_grid = QGridLayout()
+        social_grid.setHorizontalSpacing(16)
+        social_grid.setVerticalSpacing(16)
+
+        wechat_card = QFrame()
+        wechat_card.setObjectName("SectionCard")
+        apply_card_shadow(wechat_card, blur_radius=20, offset_y=6)
+        wechat_layout = QVBoxLayout(wechat_card)
+        wechat_layout.setContentsMargins(24, 24, 24, 24)
+        wechat_layout.setSpacing(12)
+        wechat_layout.addWidget(make_label("微信 ClawBot", "HeroTitle", size=18, weight=700))
+        wechat_layout.addWidget(make_label("安装腾讯微信通道插件，扫码后用私聊连接 OpenClaw。", "MutedText"))
+        self.wechat_status_label = make_label("未安装", "HeroTitle", size=14, weight=700)
+        self.wechat_status_detail_label = make_label("先安装微信插件，再打开扫码窗口完成登录。", "MutedText")
+        wechat_layout.addWidget(self.wechat_status_label)
+        wechat_layout.addWidget(self.wechat_status_detail_label)
+        wechat_actions = QHBoxLayout()
+        wechat_actions.setSpacing(10)
+        self.install_wechat_button = make_button("安装微信插件")
+        self.login_wechat_button = make_button("扫码登录", primary=True)
+        self.enable_wechat_button = make_button("启用微信")
+        self.disable_wechat_button = make_button("停用")
+        for button in (self.install_wechat_button, self.login_wechat_button, self.enable_wechat_button, self.disable_wechat_button):
+            wechat_actions.addWidget(button)
+        wechat_actions.addStretch(1)
+        wechat_layout.addLayout(wechat_actions)
+
+        qq_card = QFrame()
+        qq_card.setObjectName("SectionCard")
+        apply_card_shadow(qq_card, blur_radius=20, offset_y=6)
+        qq_layout = QVBoxLayout(qq_card)
+        qq_layout.setContentsMargins(24, 24, 24, 24)
+        qq_layout.setSpacing(12)
+        qq_layout.addWidget(make_label("QQ Bot", "HeroTitle", size=18, weight=700))
+        qq_layout.addWidget(make_label("QQ 扩展已随包内置，填入开放平台 AppID 和 AppSecret 即可启用。", "MutedText"))
+        qq_form = QGridLayout()
+        qq_form.setHorizontalSpacing(12)
+        qq_form.setVerticalSpacing(10)
+        self.qq_app_id_input = QLineEdit()
+        self.qq_app_id_input.setPlaceholderText("QQ Bot AppID")
+        self.qq_app_secret_input = QLineEdit()
+        self.qq_app_secret_input.setPlaceholderText("AppSecret")
+        self.qq_app_secret_input.setEchoMode(QLineEdit.Password)
+        qq_form.addWidget(make_label("AppID", "MetricLabel"), 0, 0)
+        qq_form.addWidget(self.qq_app_id_input, 0, 1)
+        qq_form.addWidget(make_label("AppSecret", "MetricLabel"), 1, 0)
+        qq_form.addWidget(self.qq_app_secret_input, 1, 1)
+        qq_layout.addLayout(qq_form)
+        self.qq_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.qq_status_detail_label = make_label("创建 QQ 机器人后，把 AppID 和 AppSecret 填到这里。", "MutedText")
+        qq_layout.addWidget(self.qq_status_label)
+        qq_layout.addWidget(self.qq_status_detail_label)
+        qq_actions = QHBoxLayout()
+        qq_actions.setSpacing(10)
+        self.save_qq_button = make_button("保存 QQ 配置")
+        self.test_qq_button = make_button("检查 QQ 配置")
+        self.enable_qq_button = make_button("启用 QQ", primary=True)
+        self.disable_qq_button = make_button("停用")
+        for button in (self.save_qq_button, self.test_qq_button, self.enable_qq_button, self.disable_qq_button):
+            qq_actions.addWidget(button)
+        qq_actions.addStretch(1)
+        qq_layout.addLayout(qq_actions)
+
+        wecom_card = QFrame()
+        wecom_card.setObjectName("SectionCard")
+        apply_card_shadow(wecom_card, blur_radius=20, offset_y=6)
+        wecom_layout = QVBoxLayout(wecom_card)
+        wecom_layout.setContentsMargins(24, 24, 24, 24)
+        wecom_layout.setSpacing(12)
+        wecom_layout.addWidget(make_label("企业微信", "HeroTitle", size=18, weight=700))
+        wecom_layout.addWidget(make_label("安装企业微信插件后，填入机器人凭据启用 WebSocket 通道。", "MutedText"))
+        wecom_form = QGridLayout()
+        wecom_form.setHorizontalSpacing(12)
+        wecom_form.setVerticalSpacing(10)
+        self.wecom_bot_id_input = QLineEdit()
+        self.wecom_bot_id_input.setPlaceholderText("Bot ID")
+        self.wecom_secret_input = QLineEdit()
+        self.wecom_secret_input.setPlaceholderText("Secret")
+        self.wecom_secret_input.setEchoMode(QLineEdit.Password)
+        wecom_form.addWidget(make_label("Bot ID", "MetricLabel"), 0, 0)
+        wecom_form.addWidget(self.wecom_bot_id_input, 0, 1)
+        wecom_form.addWidget(make_label("Secret", "MetricLabel"), 1, 0)
+        wecom_form.addWidget(self.wecom_secret_input, 1, 1)
+        wecom_layout.addLayout(wecom_form)
+        self.wecom_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.wecom_status_detail_label = make_label("先安装企业微信插件，再填写凭据启用。", "MutedText")
+        wecom_layout.addWidget(self.wecom_status_label)
+        wecom_layout.addWidget(self.wecom_status_detail_label)
+        wecom_actions = QHBoxLayout()
+        wecom_actions.setSpacing(10)
+        self.install_wecom_button = make_button("安装企业微信插件")
+        self.save_wecom_button = make_button("保存企业微信配置")
+        self.test_wecom_button = make_button("检查企业微信配置")
+        self.enable_wecom_button = make_button("启用企业微信", primary=True)
+        self.disable_wecom_button = make_button("停用")
+        for button in (
+            self.install_wecom_button,
+            self.save_wecom_button,
+            self.test_wecom_button,
+            self.enable_wecom_button,
+            self.disable_wecom_button,
+        ):
+            wecom_actions.addWidget(button)
+        wecom_actions.addStretch(1)
+        wecom_layout.addLayout(wecom_actions)
+
+        social_grid.addWidget(wechat_card, 0, 0)
+        social_grid.addWidget(qq_card, 0, 1)
+        social_grid.addWidget(wecom_card, 1, 0, 1, 2)
+        layout.addLayout(social_grid)
+
+        self._buttons_by_action.update(
+            {
+                "install_wechat_channel": self.install_wechat_button,
+                "login_wechat_channel": self.login_wechat_button,
+                "enable_wechat_channel": self.enable_wechat_button,
+                "test_qq_channel": self.test_qq_button,
+                "enable_qq_channel": self.enable_qq_button,
+                "install_wecom_channel": self.install_wecom_button,
+                "test_wecom_channel": self.test_wecom_button,
+                "enable_wecom_channel": self.enable_wecom_button,
+            }
+        )
+        self._default_button_texts.update(
+            {
+                self.install_wechat_button: self.install_wechat_button.text(),
+                self.login_wechat_button: self.login_wechat_button.text(),
+                self.enable_wechat_button: self.enable_wechat_button.text(),
+                self.test_qq_button: self.test_qq_button.text(),
+                self.enable_qq_button: self.enable_qq_button.text(),
+                self.install_wecom_button: self.install_wecom_button.text(),
+                self.test_wecom_button: self.test_wecom_button.text(),
+                self.enable_wecom_button: self.enable_wecom_button.text(),
+            }
+        )
         layout.addStretch(1)
 
         self.setCentralWidget(root)

@@ -15,6 +15,14 @@ from launcher.services.factory_reset import FactoryResetService
 from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 from launcher.services.online_update import OnlineUpdateService, UpdateCheckResult
+from launcher.services.social_channels import (
+    OpenClawChannelCommandRunner,
+    QqChannelConfig,
+    SocialChannelService,
+    SocialChannelStatus,
+    WechatChannelConfig,
+    WecomChannelConfig,
+)
 
 
 class LauncherController:
@@ -44,11 +52,12 @@ class LauncherController:
         self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
         self.online_update_service = online_update_service or OnlineUpdateService(paths)
         self.feishu_channel_service = FeishuChannelService(paths)
+        self.social_channel_service = SocialChannelService(paths, OpenClawChannelCommandRunner(paths, node_command=node_command))
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
         self.store.save(config, sensitive)
-        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        runtime_config_patch, runtime_env = self._channel_runtime_projection()
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
         self._refresh_feishu_runtime_status()
@@ -147,6 +156,125 @@ class LauncherController:
         self._reproject_feishu_runtime_if_configured()
         return self.load_feishu_channel_state()
 
+    def load_wechat_channel_state(self):
+        return self.social_channel_service.build_wechat_view_state()
+
+    def install_wechat_channel(self):
+        self.social_channel_service.install_wechat_plugin()
+        self._reproject_channels_if_configured()
+        return self.load_wechat_channel_state()
+
+    def login_wechat_channel(self):
+        self.social_channel_service.open_wechat_login_terminal()
+        return self.load_wechat_channel_state()
+
+    def enable_wechat_channel(self):
+        config = self.social_channel_service.load_wechat_config()
+        self.social_channel_service.save_wechat_config(replace(config, enabled=True))
+        self.social_channel_service.save_wechat_status(SocialChannelStatus(state="enabled"))
+        self._reproject_channels_if_configured()
+        return self.load_wechat_channel_state()
+
+    def disable_wechat_channel(self):
+        config = self.social_channel_service.load_wechat_config()
+        self.social_channel_service.save_wechat_config(replace(config, enabled=False))
+        self.social_channel_service.save_wechat_status(SocialChannelStatus(state="pending_enable" if config.installed else "unconfigured"))
+        self._reproject_channels_if_configured()
+        return self.load_wechat_channel_state()
+
+    def load_qq_channel_state(self):
+        return self.social_channel_service.build_qq_view_state()
+
+    def save_qq_channel(self, app_id: str, app_secret: str):
+        current = self.social_channel_service.load_qq_config()
+        config = QqChannelConfig(
+            app_id=app_id.strip(),
+            app_secret=app_secret.strip(),
+            enabled=current.enabled,
+            last_validated_at=current.last_validated_at,
+        )
+        self.social_channel_service.save_qq_config(config)
+        if not config.app_id or not config.app_secret:
+            self.social_channel_service.save_qq_status(SocialChannelStatus(state="unconfigured"))
+        return self.load_qq_channel_state()
+
+    def test_qq_channel(self):
+        config = self.social_channel_service.load_qq_config()
+        result = self.social_channel_service.validate_qq_config(config)
+        if result.ok:
+            self.social_channel_service.save_qq_config(replace(config, last_validated_at=result.validated_at))
+            self.social_channel_service.save_qq_status(SocialChannelStatus(state=result.state))
+        else:
+            self.social_channel_service.save_qq_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
+        return self.load_qq_channel_state()
+
+    def enable_qq_channel(self):
+        config = self.social_channel_service.load_qq_config()
+        result = self.social_channel_service.validate_qq_config(config)
+        if not result.ok:
+            self.social_channel_service.save_qq_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
+            return self.load_qq_channel_state()
+        self.social_channel_service.save_qq_config(replace(config, enabled=True, last_validated_at=result.validated_at))
+        self.social_channel_service.save_qq_status(SocialChannelStatus(state="enabled"))
+        self._reproject_channels_if_configured()
+        return self.load_qq_channel_state()
+
+    def disable_qq_channel(self):
+        config = self.social_channel_service.load_qq_config()
+        self.social_channel_service.save_qq_config(replace(config, enabled=False))
+        self.social_channel_service.save_qq_status(SocialChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured"))
+        self._reproject_channels_if_configured()
+        return self.load_qq_channel_state()
+
+    def load_wecom_channel_state(self):
+        return self.social_channel_service.build_wecom_view_state()
+
+    def install_wecom_channel(self):
+        self.social_channel_service.install_wecom_plugin()
+        return self.load_wecom_channel_state()
+
+    def save_wecom_channel(self, bot_id: str, secret: str):
+        current = self.social_channel_service.load_wecom_config()
+        config = WecomChannelConfig(
+            bot_id=bot_id.strip(),
+            secret=secret.strip(),
+            enabled=current.enabled,
+            connection_mode=current.connection_mode,
+            last_validated_at=current.last_validated_at,
+        )
+        self.social_channel_service.save_wecom_config(config)
+        if not config.bot_id or not config.secret:
+            self.social_channel_service.save_wecom_status(SocialChannelStatus(state="unconfigured"))
+        return self.load_wecom_channel_state()
+
+    def test_wecom_channel(self):
+        config = self.social_channel_service.load_wecom_config()
+        result = self.social_channel_service.validate_wecom_config(config)
+        if result.ok:
+            self.social_channel_service.save_wecom_config(replace(config, last_validated_at=result.validated_at))
+            self.social_channel_service.save_wecom_status(SocialChannelStatus(state=result.state))
+        else:
+            self.social_channel_service.save_wecom_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
+        return self.load_wecom_channel_state()
+
+    def enable_wecom_channel(self):
+        config = self.social_channel_service.load_wecom_config()
+        result = self.social_channel_service.validate_wecom_config(config)
+        if not result.ok:
+            self.social_channel_service.save_wecom_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
+            return self.load_wecom_channel_state()
+        self.social_channel_service.save_wecom_config(replace(config, enabled=True, last_validated_at=result.validated_at))
+        self.social_channel_service.save_wecom_status(SocialChannelStatus(state="enabled"))
+        self._reproject_channels_if_configured()
+        return self.load_wecom_channel_state()
+
+    def disable_wecom_channel(self):
+        config = self.social_channel_service.load_wecom_config()
+        self.social_channel_service.save_wecom_config(replace(config, enabled=False))
+        self.social_channel_service.save_wecom_status(SocialChannelStatus(state="pending_enable" if config.bot_id and config.secret else "unconfigured"))
+        self._reproject_channels_if_configured()
+        return self.load_wecom_channel_state()
+
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():
             return LauncherViewState(
@@ -204,9 +332,14 @@ class LauncherController:
         if self._prepared or self.store.is_first_run():
             return
         config, _ = self.store.load()
-        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        runtime_config_patch, runtime_env = self._channel_runtime_projection()
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
+
+    def _channel_runtime_projection(self) -> tuple[dict[str, object], dict[str, str]]:
+        feishu_config_patch, feishu_env = self._feishu_runtime_projection()
+        social_config_patch, social_env = self._social_runtime_projection()
+        return self._deep_merge(feishu_config_patch, social_config_patch), {**feishu_env, **social_env}
 
     def _feishu_runtime_projection(self) -> tuple[dict[str, object], dict[str, str]]:
         feishu_config = self.feishu_channel_service.load_config()
@@ -216,6 +349,30 @@ class LauncherController:
         if not feishu_config.app_id.strip() or not feishu_config.app_secret.strip():
             return projection.runtime_config_patch, {}
         return projection.runtime_config_patch, projection.runtime_env
+
+    def _social_runtime_projection(self) -> tuple[dict[str, object], dict[str, str]]:
+        runtime_config_patch: dict[str, object] = {}
+        runtime_env: dict[str, str] = {}
+
+        wechat_config = self.social_channel_service.load_wechat_config()
+        if wechat_config.enabled or wechat_config.installed:
+            projection = self.social_channel_service.build_wechat_runtime_projection(wechat_config)
+            runtime_config_patch = self._deep_merge(runtime_config_patch, projection.runtime_config_patch)
+            runtime_env.update(projection.runtime_env)
+
+        qq_config = self.social_channel_service.load_qq_config()
+        if qq_config.enabled or qq_config.app_id.strip() or qq_config.app_secret.strip():
+            projection = self.social_channel_service.build_qq_runtime_projection(qq_config)
+            runtime_config_patch = self._deep_merge(runtime_config_patch, projection.runtime_config_patch)
+            runtime_env.update(projection.runtime_env)
+
+        wecom_config = self.social_channel_service.load_wecom_config()
+        if wecom_config.enabled or wecom_config.bot_id.strip() or wecom_config.secret.strip():
+            projection = self.social_channel_service.build_wecom_runtime_projection(wecom_config)
+            runtime_config_patch = self._deep_merge(runtime_config_patch, projection.runtime_config_patch)
+            runtime_env.update(projection.runtime_env)
+
+        return runtime_config_patch, runtime_env
 
     def _prepare_runtime_adapter(
         self,
@@ -244,12 +401,25 @@ class LauncherController:
         self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
 
     def _reproject_feishu_runtime_if_configured(self) -> None:
+        self._reproject_channels_if_configured()
+
+    def _reproject_channels_if_configured(self) -> None:
         if self.store.is_first_run():
             return
         config, _ = self.store.load()
-        runtime_config_patch, runtime_env = self._feishu_runtime_projection()
+        runtime_config_patch, runtime_env = self._channel_runtime_projection()
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
+
+    def _deep_merge(self, base: dict[str, object], patch: dict[str, object]) -> dict[str, object]:
+        merged: dict[str, object] = dict(base)
+        for key, value in patch.items():
+            existing_value = merged.get(key)
+            if isinstance(value, dict) and isinstance(existing_value, dict):
+                merged[key] = self._deep_merge(existing_value, value)
+                continue
+            merged[key] = value
+        return merged
 
     def _build_runtime_adapter(self, runtime_mode: str, node_command: str) -> RuntimeAdapter:
         if runtime_mode == "mock":

@@ -66,3 +66,11 @@
 - Verified: `python -m unittest tests.test_delivery_gate -v` passes `4` delivery-gate tests, including a RED/GREEN regression for release zips missing `update-signature.json`; `python -m unittest discover -s tests` passes `145` tests in the delivery-flow-gate worktree.
 - Verified: after regenerating the ignored local `dist/OpenClaw-Portable/update-signature.json` artifact from `.local/update-signing-private-key.txt`, `python scripts\verify-delivery-flow.py --package-root C:\Users\m1591\Desktop\OpenClaw-Portable-1\dist\OpenClaw-Portable --release-dir C:\Users\m1591\Desktop\OpenClaw-Portable-1\dist\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\delivery-flow-gate-main-dist-rerun.json` returned `status=pending`: audit passed, release assets passed, runtime stability passed, and only external Feishu/U-disk/multi-engine AV evidence remains pending.
 - Note: one earlier run hit a transient restart port bind failure; the issue was recorded in `.context/bug-log.md`, and verification should not run real runtime gates in parallel with unit tests.
+
+## 2026-04-14 WeChat / QQ / WeCom Channel Update
+
+- Completed: added a launcher-first social channel slice for WeChat, QQ Bot, and WeCom while keeping the existing Feishu private-chat implementation intact.
+- Delivered: `launcher/services/social_channels.py` stores channel config/status under `state/channels/{wechat,qq,wecom}/`, builds runtime config patches for `openclaw-weixin`, bundled `qqbot`, and `wecom`, launches OpenClaw CLI commands for WeChat plugin install / QR login and WeCom plugin install, and exposes redacted channel summaries in diagnostics.
+- UI: the main launcher now shows cards for WeChat ClawBot, QQ Bot, and WeCom; the app layer wires install/login/save/test/enable/disable handlers into the controller.
+- Verified: `python -m unittest discover -s tests` passes 157 tests after the channel expansion.
+- Remaining external validation: real WeChat QR login requires the user's WeChat account to have the ClawBot plugin rollout and network access to install `@tencent-weixin/openclaw-weixin`; QQ requires real QQ Open Platform AppID/AppSecret; WeCom requires real plugin-side credentials and tenant setup.

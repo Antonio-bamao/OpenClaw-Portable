@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
-from launcher.models import FeishuChannelState, LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.wizard import SetupWizardWindow
 
@@ -148,6 +148,41 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertEqual(window.feishu_status_label.text(), "已连接")
         self.assertFalse(window.enable_feishu_button.isEnabled())
         self.assertTrue(window.disable_feishu_button.isEnabled())
+
+    def test_main_window_shows_wechat_qq_and_wecom_channel_controls(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.install_wechat_button.text(), "安装微信插件")
+        self.assertEqual(window.login_wechat_button.text(), "扫码登录")
+        self.assertEqual(window.qq_app_id_input.placeholderText(), "QQ Bot AppID")
+        self.assertEqual(window.install_wecom_button.text(), "安装企业微信插件")
+
+    def test_main_window_applies_wechat_qq_and_wecom_states(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        window.apply_wechat_channel_state(
+            WechatChannelState(enabled=True, installed=True, status_label="已启用", status_detail="wechat ready")
+        )
+        window.apply_qq_channel_state(
+            QqChannelState(app_id="123456", app_secret="secret", enabled=True, status_label="已启用", status_detail="qq ready")
+        )
+        window.apply_wecom_channel_state(
+            WecomChannelState(
+                bot_id="wwbot",
+                secret="wecom-secret",
+                enabled=True,
+                connection_mode="websocket",
+                status_label="已启用",
+                status_detail="wecom ready",
+            )
+        )
+
+        self.assertEqual(window.wechat_status_label.text(), "已启用")
+        self.assertFalse(window.enable_wechat_button.isEnabled())
+        self.assertEqual(window.qq_app_id_input.text(), "123456")
+        self.assertFalse(window.enable_qq_button.isEnabled())
+        self.assertEqual(window.wecom_bot_id_input.text(), "wwbot")
+        self.assertFalse(window.enable_wecom_button.isEnabled())
 
     def test_builds_wizard_with_expected_steps(self) -> None:
         window = SetupWizardWindow()

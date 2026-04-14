@@ -28,6 +28,39 @@ class FeishuChannelState:
 
 
 @dataclass(frozen=True)
+class WechatChannelState:
+    enabled: bool
+    installed: bool
+    status_label: str
+    status_detail: str
+    last_login_at: str | None = None
+    last_error: str = ""
+
+
+@dataclass(frozen=True)
+class QqChannelState:
+    app_id: str
+    app_secret: str
+    enabled: bool
+    status_label: str
+    status_detail: str
+    last_validated_at: str | None = None
+    last_error: str = ""
+
+
+@dataclass(frozen=True)
+class WecomChannelState:
+    bot_id: str
+    secret: str
+    enabled: bool
+    connection_mode: str
+    status_label: str
+    status_detail: str
+    last_validated_at: str | None = None
+    last_error: str = ""
+
+
+@dataclass(frozen=True)
 class WizardStep:
     title: str
     description: str

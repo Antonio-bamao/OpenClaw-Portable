@@ -14,6 +14,7 @@ from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.controller import LauncherController
 from launcher.services.feishu_channel import FeishuChannelConfig
+from launcher.services.social_channels import QqChannelConfig, WechatChannelConfig, WecomChannelConfig
 
 
 def make_workspace_temp_dir() -> Path:
@@ -434,6 +435,60 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_ID"], "cli_xxx")
             self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_SECRET"], "secret")
             self.assertTrue(runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_controller_passes_wechat_qq_and_wecom_projection_into_runtime_prepare(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.social_channel_service.save_wechat_config(WechatChannelConfig(enabled=True, installed=True))
+            controller.social_channel_service.save_qq_config(QqChannelConfig(app_id="123456", app_secret="secret", enabled=True))
+            controller.social_channel_service.save_wecom_config(WecomChannelConfig(bot_id="wwbot", secret="wecom-secret", enabled=True))
+
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            patch = runtime_adapter.last_runtime_config_patch
+            self.assertTrue(patch["plugins"]["entries"]["openclaw-weixin"]["enabled"])
+            self.assertTrue(patch["channels"]["openclaw-weixin"]["enabled"])
+            self.assertEqual(patch["channels"]["qqbot"]["appId"], "123456")
+            self.assertEqual(patch["channels"]["qqbot"]["clientSecret"], "secret")
+            self.assertEqual(patch["channels"]["wecom"]["botId"], "wwbot")
+            self.assertEqual(patch["channels"]["wecom"]["secret"], "wecom-secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_controller_saves_and_enables_qq_and_wecom_channels(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            saved_qq = controller.save_qq_channel(" 123456 ", " qq-secret ")
+            enabled_qq = controller.enable_qq_channel()
+            saved_wecom = controller.save_wecom_channel(" wwbot ", " wecom-secret ")
+            enabled_wecom = controller.enable_wecom_channel()
+
+            self.assertEqual(saved_qq.app_id, "123456")
+            self.assertTrue(enabled_qq.enabled)
+            self.assertEqual(saved_wecom.bot_id, "wwbot")
+            self.assertTrue(enabled_wecom.enabled)
+            self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["qqbot"]["clientSecret"], "qq-secret")
+            self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["wecom"]["secret"], "wecom-secret")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
