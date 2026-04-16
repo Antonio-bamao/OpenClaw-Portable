@@ -426,3 +426,11 @@
 - Result: `dist\release\OpenClaw-Portable-v2026.04.3.zip` and `dist\release\update.json` are ready locally; `D:\OpenClaw-Portable` now carries `v2026.04.3`; this has not been published as a GitHub Release/tag yet.
 - Verification: focused update/release tests passed `48` tests; full unittest passed `159` tests; local gate returned `status=pending` with package audit/release assets/runtime stability passed and runtime cold `24.14s`, restart `20.59s`; D-drive gate returned `status=pending` with package audit/release assets/runtime stability/removable-media evidence passed and runtime cold `35.75s`, restart `22.23s`; pending checks are only external Feishu E2E and multi-engine AV/SmartScreen evidence.
 - Next: commit and push the `v2026.04.3` version/context update, then create/upload a GitHub Release only after explicitly deciding to publish the release candidate.
+
+## 2026-04-16 / Publish v2026.04.3 GitHub Release
+
+- Goal: finish the release flow by publishing the already-verified `v2026.04.3` assets to GitHub instead of leaving them as local-only release-candidate files.
+- Actions: created annotated tag `v2026.04.3`, pushed it to `origin`, used Git Credential Manager authentication in memory to create GitHub Release `v2026.04.3`, uploaded `dist\release\OpenClaw-Portable-v2026.04.3.zip` and `dist\release\update.json`, and verified the public latest update feed plus zip URL.
+- Result: GitHub Release `v2026.04.3` is published at `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/tag/v2026.04.3`; the release contains both required assets and is the latest release entry.
+- Verification: GitHub API reported uploaded assets `OpenClaw-Portable-v2026.04.3.zip` (`205617762` bytes) and `update.json` (`400` bytes); public latest `update.json` resolves to version `v2026.04.3`; public zip URL returned HTTP `200`; `git status --short --branch` was clean before this context update.
+- Next: commit and push this publication record. Remaining product evidence is external only: real Feishu E2E, real WeChat/QQ/WeCom credential tests, and multi-engine AV/SmartScreen evidence.

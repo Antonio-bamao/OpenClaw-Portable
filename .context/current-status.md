@@ -104,5 +104,6 @@
 - Verified: focused update/release suite passed `48` tests; full `python -m unittest discover -s tests` passed `159` tests.
 - Verified: local `dist\OpenClaw-Portable` audit passed at `558.55MB / 25839` files, and local delivery gate passed package audit, release assets, and runtime stability with cold `24.14s`, restart `20.59s`, max `24.14s`, avg `22.37s`.
 - Verified: `D:\OpenClaw-Portable` was resynced to `v2026.04.3`, audit-clean at `558.55MB / 25839` files, robocopy dry-run showed no remaining differences, and D-drive delivery gate passed package audit, release assets, runtime stability, and removable-media evidence with cold `35.75s`, restart `22.23s`, max `35.75s`, avg `28.99s`.
-- Current caveat: `v2026.04.3` is a local release candidate only until a GitHub Release/tag is explicitly created and the two generated release assets are uploaded.
+- Published: Git tag `v2026.04.3` was pushed to origin, GitHub Release `v2026.04.3` was created, and release assets `OpenClaw-Portable-v2026.04.3.zip` plus `update.json` were uploaded.
+- Verified public update entry: `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/latest/download/update.json` now resolves to `v2026.04.3` and points to the `v2026.04.3` zip; the public zip URL returned HTTP `200`.
 - Remaining external validation: real Feishu private-chat E2E, real WeChat/QQ/WeCom platform credential tests, and multi-engine AV/SmartScreen evidence still remain pending.

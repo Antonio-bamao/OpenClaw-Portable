@@ -138,4 +138,5 @@
 
 - Completed: prepared a local `v2026.04.3` release candidate containing the social-channel expansion and removable-media runtime-cache fix.
 - Verified: `dist\release\OpenClaw-Portable-v2026.04.3.zip` and `dist\release\update.json` exist locally; local and D-drive delivery gates pass all non-external checks, with D-drive runtime cold `35.75s` and restart `22.23s`.
-- Next: decide whether to publish `v2026.04.3` as a GitHub Release. If publishing, create tag/release `v2026.04.3` and upload `dist\release\OpenClaw-Portable-v2026.04.3.zip` plus `dist\release\update.json`; if not publishing, keep it as a local candidate while collecting external platform and AV/SmartScreen evidence.
+- Completed: published `v2026.04.3` as a GitHub Release with `OpenClaw-Portable-v2026.04.3.zip` and `update.json`; the public latest feed now resolves to `v2026.04.3`.
+- Next: collect external platform and AV/SmartScreen evidence. No local release-packaging action is pending for `v2026.04.3`.
