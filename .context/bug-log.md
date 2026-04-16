@@ -245,3 +245,12 @@
 - Resolution: Deleted `D:\ocs-*`, `C:\Users\m1591\ocs-*`, project `tmp`, `build`, `dist\pyinstaller`, `dist\release`, and generated spec artifacts while preserving `dist\OpenClaw-Portable` and source/runtime files.
 - Prevention: Do not run real update/removable-media validation on a user's delivery medium unless explicitly needed; prefer workspace or system temp roots, clean temp roots immediately, and report expected temporary disk usage before running large smoke tests.
 - Status: Resolved locally; no product code change required.
+
+## 2026-04-17 - Packaged launcher missed PyNaCl CFFI backend
+- Symptom: Double-clicking `OpenClawLauncher.exe` showed an "Unhandled exception in script" dialog ending with `No module named '_cffi_backend'`.
+- Trigger: The packaged launcher imported `launcher/services/update_signature.py`, which imports PyNaCl; PyNaCl needs the CFFI backend extension at runtime.
+- Impact: The packaged desktop launcher could fail at import time before showing the UI.
+- Root cause: PyInstaller did not automatically collect `_cffi_backend` even though the source environment had it installed for PyNaCl.
+- Resolution: Added `--hidden-import _cffi_backend` to the PyInstaller command in `scripts/build-launcher.ps1` and rebuilt the local portable package.
+- Prevention: Added `tests/test_build_launcher_script.py` to assert the build script keeps the hidden import.
+- Status: Resolved locally; requires a new release build/tag to replace any already-published artifact that lacks the dependency.

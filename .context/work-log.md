@@ -440,3 +440,10 @@
 - Result: Project context now reflects the actual latest release and the cleanup boundary: runtime package preserved, temporary validation/build artifacts removed.
 - Verification: Follow-up verification in this session will run unit tests and portable package audit before reporting completion.
 - Next step: Run fresh tests/audit; only proceed to external channel/AV evidence if credentials or third-party validation input is available.
+
+## 2026-04-17 - Fix Packaged Launcher Missing CFFI Backend
+- Goal: Fix the packaged `OpenClawLauncher.exe` startup crash reporting `No module named '_cffi_backend'`.
+- Actions: Reproduced the packaging gap by inspecting `dist\OpenClaw-Portable\_internal`, added a regression test for the PyInstaller hidden import, added `--hidden-import _cffi_backend` to `scripts/build-launcher.ps1`, rebuilt the local portable package, and cleaned build cache artifacts afterward.
+- Result: The local packaged launcher now includes `_cffi_backend.cp312-win_amd64.pyd` and no longer immediately exits with the missing-module crash.
+- Verification: `python -m unittest tests.test_build_launcher_script -v` passes; `python -m unittest discover -s tests` passes `163` tests; a short `OpenClawLauncher.exe` launch returned `started_without_import_crash`.
+- Next step: Commit and push the packaging fix; prepare a new release only after an explicit release-preparation pass.

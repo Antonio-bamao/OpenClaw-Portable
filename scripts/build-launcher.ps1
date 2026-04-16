@@ -66,6 +66,7 @@ if (-not (Test-Path $nodeRuntime)) {
   --clean `
   --windowed `
   --onedir `
+  --hidden-import _cffi_backend `
   --name OpenClawLauncher `
   --distpath $pyiDist `
   --workpath $buildDir `

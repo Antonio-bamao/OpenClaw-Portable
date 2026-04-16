@@ -116,3 +116,10 @@
 - Cleanup: removed temporary validation directories from `D:\ocs-*`, `C:\Users\m1591\ocs-*`, project `tmp`, `build`, `dist\pyinstaller`, `dist\release`, and `OpenClawLauncher.spec`. These were validation/build artifacts, not user runtime files.
 - Current local artifact state: `dist\OpenClaw-Portable` remains present and reports `v2026.04.4`; local `dist\release` was intentionally deleted as non-runtime cleanup, while the already-published GitHub Release remains the release source.
 - Next recommended step: do not run more U-disk or release rebuild work unless explicitly needed. Remaining product validation is external: real Feishu/WeChat/QQ/WeCom credentials and multi-engine AV/SmartScreen evidence.
+
+### 2026-04-17 Launcher PyInstaller Dependency Fix
+
+- Completed: fixed the packaged launcher crash `No module named '_cffi_backend'` by adding `_cffi_backend` as an explicit PyInstaller hidden import in `scripts/build-launcher.ps1`.
+- Guarded: added `tests/test_build_launcher_script.py` so future launcher builds keep the PyNaCl/CFFI runtime dependency included.
+- Verified locally: rebuilt `dist\OpenClaw-Portable`, confirmed `_internal\_cffi_backend.cp312-win_amd64.pyd` exists, short-launched `OpenClawLauncher.exe` without the import-time crash, and `python -m unittest discover -s tests` passed `163` tests.
+- Current release note: this fix is in local source/build state and still needs a deliberate next release/tag if it should replace the already-published `v2026.04.4` public artifact.
