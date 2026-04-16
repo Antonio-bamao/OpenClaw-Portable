@@ -97,3 +97,12 @@
 - Current state: the working tree was clean before the context update; package audit, release assets, runtime stability, and D-drive removable-media evidence are already verified from the final rerun above.
 - Remaining external validation: real Feishu private-chat E2E, real WeChat/QQ/WeCom platform credential tests, and multi-engine AV/SmartScreen evidence still require external accounts or third-party validation.
 - Next recommended step: collect the remaining external evidence, or start a new release-preparation pass if the remote-backed runtime-cache fix should be included in the next public artifact.
+
+### 2026-04-16 v2026.04.3 Release-Candidate Prep
+
+- Completed: bumped root `version.json` to `v2026.04.3` with build date `2026-04-16`, rebuilt signed release assets, and generated `dist\release\OpenClaw-Portable-v2026.04.3.zip` plus a clean `update.json` pointing at tag `v2026.04.3`.
+- Verified: focused update/release suite passed `48` tests; full `python -m unittest discover -s tests` passed `159` tests.
+- Verified: local `dist\OpenClaw-Portable` audit passed at `558.55MB / 25839` files, and local delivery gate passed package audit, release assets, and runtime stability with cold `24.14s`, restart `20.59s`, max `24.14s`, avg `22.37s`.
+- Verified: `D:\OpenClaw-Portable` was resynced to `v2026.04.3`, audit-clean at `558.55MB / 25839` files, robocopy dry-run showed no remaining differences, and D-drive delivery gate passed package audit, release assets, runtime stability, and removable-media evidence with cold `35.75s`, restart `22.23s`, max `35.75s`, avg `28.99s`.
+- Current caveat: `v2026.04.3` is a local release candidate only until a GitHub Release/tag is explicitly created and the two generated release assets are uploaded.
+- Remaining external validation: real Feishu private-chat E2E, real WeChat/QQ/WeCom platform credential tests, and multi-engine AV/SmartScreen evidence still remain pending.
