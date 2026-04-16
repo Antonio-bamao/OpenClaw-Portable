@@ -127,3 +127,9 @@
 - Completed: fixed restart readiness by requiring two consecutive gateway health checks.
 - Verified: D-drive delivery gate now passes package audit, release assets, runtime stability, and removable-media evidence. Latest D-drive runtime measurements: cold `34.72s`, restart `21.72s`.
 - Next: use real Feishu/WeChat/QQ/WeCom credentials to clear channel E2E; collect multi-engine AV/SmartScreen evidence if the product needs stronger public-delivery confidence. Consider runtime archive packaging later to reduce first-cache preparation cost on very slow U disks.
+
+## 2026-04-16 Remote Alignment Update
+
+- Completed: pushed the local `main` implementation commits for WeChat/QQ/WeCom channels and removable-media runtime caching to `origin/main`.
+- Verified: push advanced the remote from `f499fa8` to `d1cfb0d`; the final local verification set remains valid and documented in `.context/current-status.md`.
+- Next: no local-only implementation commits remain for this slice once this context update is committed and pushed. Remaining tasks require external credentials/evidence or a deliberate next release-preparation pass.

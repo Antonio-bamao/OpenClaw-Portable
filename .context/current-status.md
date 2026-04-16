@@ -90,3 +90,10 @@
 ### Final release-asset verification rerun
 
 - After regenerating `dist\release\OpenClaw-Portable-v2026.04.2.zip` and `update.json`, resyncing the rebuilt package to `D:\OpenClaw-Portable`, and rerunning the real D-drive delivery gate, package audit, release assets, runtime stability, and removable-media evidence all pass. Latest final measurements: cold `34.75s`, restart `23.20s`, max `34.75s`, average `28.98s`. Overall status remains `pending` only for external Feishu E2E credentials and multi-engine AV/SmartScreen evidence.
+
+### 2026-04-16 Remote Alignment Update
+
+- Completed: pushed local `main` to `origin/main`, so `ddbb826` (`feat: add wechat qq wecom channels`) and `d1cfb0d` (`fix: cache runtime on removable media`) are now remote-backed.
+- Current state: the working tree was clean before the context update; package audit, release assets, runtime stability, and D-drive removable-media evidence are already verified from the final rerun above.
+- Remaining external validation: real Feishu private-chat E2E, real WeChat/QQ/WeCom platform credential tests, and multi-engine AV/SmartScreen evidence still require external accounts or third-party validation.
+- Next recommended step: collect the remaining external evidence, or start a new release-preparation pass if the remote-backed runtime-cache fix should be included in the next public artifact.

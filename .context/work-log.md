@@ -410,3 +410,11 @@
 ### Final release-asset rerun note
 
 - After rebuilding `dist\release` with `scripts\build-release-assets.ps1` and syncing the rebuilt `dist\OpenClaw-Portable` back to `D:\OpenClaw-Portable`, U-disk audit still passed at `558.55MB / 25839` files and robocopy dry-run showed no remaining differences. The final D-drive delivery gate returned `status=pending` with package audit passed, release assets passed, runtime stability passed (cold `34.75s`, restart `23.20s`), and removable-media evidence passed. Remaining pending checks are still external Feishu E2E and multi-engine AV/SmartScreen evidence.
+
+## 2026-04-16 / Push channel and U-disk delivery work to origin
+
+- Goal: finish the local-only handoff by publishing the completed WeChat/QQ/WeCom channel slice and removable-media runtime-cache fix to `origin/main`.
+- Actions: inspected `git status --short --branch` and `git log --oneline --decorate --max-count 8 --all`, confirmed the working tree was clean and `main` was ahead of `origin/main` by `2` commits, then pushed `main` to `origin/main`.
+- Result: `origin/main` advanced from `f499fa8` to `d1cfb0d`, so the remote now contains `ddbb826` (`feat: add wechat qq wecom channels`) and `d1cfb0d` (`fix: cache runtime on removable media`).
+- Verification: `git push origin main` completed successfully against `https://github.com/Antonio-bamao/OpenClaw-Portable.git`; prior final verification remains `python -m unittest discover -s tests` passing `159` tests and the D-drive delivery gate passing package audit, release assets, runtime stability, and removable-media evidence with overall `pending` only for external credentials and AV/SmartScreen evidence.
+- Next: commit and push this context update, then collect real Feishu/WeChat/QQ/WeCom credential evidence and multi-engine AV/SmartScreen evidence when those external inputs are available.
