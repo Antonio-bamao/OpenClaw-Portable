@@ -237,3 +237,11 @@
 - Fix: `_wait_until_ready()` now requires two consecutive successful health checks before declaring the runtime ready. A regression test covers the `true -> false -> true -> true` sequence.
 - Verification: `python -m unittest discover -s tests` passed `159` tests; local delivery gate then passed cold `25.12s` and restart `25.58s`; D-drive delivery gate passed cold `34.72s` and restart `21.72s`.
 - Status: Resolved.
+## 2026-04-17 - Temporary update-validation directories filled delivery media and user profile
+- Symptom: The U disk unexpectedly dropped to about 405MB free, and later inspection found additional multi-GB `C:\Users\m1591\ocs-*` validation directories.
+- Trigger: Real online-update and removable-media smoke tests copied full portable packages, downloaded release zips, and extracted runtime trees into temporary `ocs-*` directories.
+- Impact: The user saw the U disk nearly full and reasonably interpreted it as product bloat rather than temporary validation residue.
+- Root cause: The validation workflow created large temp directories on delivery media and under the user profile without immediate cleanup and without clearly separating product package size from test residue.
+- Resolution: Deleted `D:\ocs-*`, `C:\Users\m1591\ocs-*`, project `tmp`, `build`, `dist\pyinstaller`, `dist\release`, and generated spec artifacts while preserving `dist\OpenClaw-Portable` and source/runtime files.
+- Prevention: Do not run real update/removable-media validation on a user's delivery medium unless explicitly needed; prefer workspace or system temp roots, clean temp roots immediately, and report expected temporary disk usage before running large smoke tests.
+- Status: Resolved locally; no product code change required.

@@ -434,3 +434,9 @@
 - Result: GitHub Release `v2026.04.3` is published at `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/tag/v2026.04.3`; the release contains both required assets and is the latest release entry.
 - Verification: GitHub API reported uploaded assets `OpenClaw-Portable-v2026.04.3.zip` (`205617762` bytes) and `update.json` (`400` bytes); public latest `update.json` resolves to version `v2026.04.3`; public zip URL returned HTTP `200`; `git status --short --branch` was clean before this context update.
 - Next: commit and push this publication record. Remaining product evidence is external only: real Feishu E2E, real WeChat/QQ/WeCom credential tests, and multi-engine AV/SmartScreen evidence.
+## 2026-04-17 - Resume After Cleanup
+- Goal: Continue from the post-cleanup state without touching the U disk or doing package-size optimization.
+- Actions: Verified `main` is aligned with `origin/main` at `62bd791`, confirmed root and dist package versions are `v2026.04.4`, and documented the v2026.04.4 release plus cleanup state.
+- Result: Project context now reflects the actual latest release and the cleanup boundary: runtime package preserved, temporary validation/build artifacts removed.
+- Verification: Follow-up verification in this session will run unit tests and portable package audit before reporting completion.
+- Next step: Run fresh tests/audit; only proceed to external channel/AV evidence if credentials or third-party validation input is available.

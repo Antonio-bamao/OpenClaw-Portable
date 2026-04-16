@@ -107,3 +107,12 @@
 - Published: Git tag `v2026.04.3` was pushed to origin, GitHub Release `v2026.04.3` was created, and release assets `OpenClaw-Portable-v2026.04.3.zip` plus `update.json` were uploaded.
 - Verified public update entry: `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/latest/download/update.json` now resolves to `v2026.04.3` and points to the `v2026.04.3` zip; the public zip URL returned HTTP `200`.
 - Remaining external validation: real Feishu private-chat E2E, real WeChat/QQ/WeCom platform credential tests, and multi-engine AV/SmartScreen evidence still remain pending.
+
+### 2026-04-17 v2026.04.4 Release And Cleanup Update
+
+- Completed: fixed Windows online-update handling for deep runtime paths. `OnlineUpdateService` now extracts zip entries with Windows long-path handling, local update directory replacement uses `robocopy` on Windows, and update manifest hashing/traversal is long-path safe while preserving existing manifest compatibility.
+- Published: source commit `62bd791` is on `main` and `origin/main`, annotated tag `v2026.04.4` exists locally, and GitHub Release `v2026.04.4` was created with public latest-feed verification before cleanup.
+- Verified before cleanup: focused update/local-update/manifest/delivery tests passed, full `python -m unittest discover -s tests` passed `162` tests, local delivery gate passed package audit/release-assets/runtime stability, and real online-update smoke upgraded an old package to `v2026.04.4` while preserving state.
+- Cleanup: removed temporary validation directories from `D:\ocs-*`, `C:\Users\m1591\ocs-*`, project `tmp`, `build`, `dist\pyinstaller`, `dist\release`, and `OpenClawLauncher.spec`. These were validation/build artifacts, not user runtime files.
+- Current local artifact state: `dist\OpenClaw-Portable` remains present and reports `v2026.04.4`; local `dist\release` was intentionally deleted as non-runtime cleanup, while the already-published GitHub Release remains the release source.
+- Next recommended step: do not run more U-disk or release rebuild work unless explicitly needed. Remaining product validation is external: real Feishu/WeChat/QQ/WeCom credentials and multi-engine AV/SmartScreen evidence.
