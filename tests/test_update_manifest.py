@@ -1,10 +1,11 @@
 import json
+import os
 import shutil
 import unittest
 import uuid
 from pathlib import Path
 
-from launcher.services.update_manifest import build_update_manifest, hash_directory, write_update_manifest
+from launcher.services.update_manifest import build_update_manifest, hash_directory, validate_update_manifest, write_update_manifest
 
 
 def make_workspace_temp_dir() -> Path:
@@ -27,6 +28,21 @@ def stage_package_root(root: Path) -> None:
     (root / "tools" / "helper.txt").parent.mkdir(parents=True, exist_ok=True)
     (root / "tools" / "helper.txt").write_text("tool\n", encoding="utf-8")
     (root / "README.txt").write_text("readme\n", encoding="utf-8")
+
+
+def long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def write_text_long(path: Path, content: str) -> None:
+    os.makedirs(long_path(path.parent), exist_ok=True)
+    with open(long_path(path), "w", encoding="utf-8") as handle:
+        handle.write(content)
 
 
 class UpdateManifestTests(unittest.TestCase):
@@ -75,6 +91,36 @@ class UpdateManifestTests(unittest.TestCase):
 
             self.assertEqual(manifest_path.name, "update-manifest.json")
             self.assertEqual(manifest["packageVersion"], "v2026.04.2")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_validate_update_manifest_handles_long_runtime_paths(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            deep_runtime_file = Path(
+                "runtime/openclaw/dist/extensions/discord/node_modules/@buape/carbon/"
+                "node_modules/discord-api-types/payloads/v10/_interactions/"
+                "_applicationCommands/_chatInput/attachment.js"
+            )
+            short_root = temp_dir / "s"
+            long_root = (
+                temp_dir
+                / "system-temp"
+                / "OpenClawPortable"
+                / "updates"
+                / "packages"
+                / "v2026.04.3"
+                / "OpenClaw-Portable"
+            )
+            write_text_long(short_root / "version.json", json.dumps({"version": "v2026.04.3"}))
+            write_text_long(short_root / deep_runtime_file, "deep runtime\n")
+            manifest_path = write_update_manifest(short_root)
+
+            write_text_long(long_root / "version.json", json.dumps({"version": "v2026.04.3"}))
+            write_text_long(long_root / deep_runtime_file, "deep runtime\n")
+            write_text_long(long_root / "update-manifest.json", manifest_path.read_text(encoding="utf-8"))
+
+            validate_update_manifest(long_root, expected_version="v2026.04.3", required_entries=["runtime", "version.json"])
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import urllib.error
@@ -83,7 +84,7 @@ class OnlineUpdateService:
 
         try:
             with zipfile.ZipFile(archive_path, "r") as archive:
-                archive.extractall(extract_root)
+                self._extract_archive(archive, extract_root)
         except (zipfile.BadZipFile, OSError) as exc:
             raise ValueError("更新包解压失败，可能是下载不完整。") from exc
 
@@ -93,14 +94,37 @@ class OnlineUpdateService:
         return package_root
 
     def _locate_package_root(self, extract_root: Path) -> Path | None:
-        candidates = [extract_root] + sorted(
-            [path for path in extract_root.rglob("*") if path.is_dir()],
-            key=lambda path: len(path.parts),
-        )
+        candidates = [extract_root]
+        candidates.extend(sorted(path for path in extract_root.iterdir() if path.is_dir()))
         for candidate in candidates:
             if (candidate / "version.json").exists() and (candidate / "update-manifest.json").exists():
                 return candidate
+        for candidate in sorted((path for path in extract_root.rglob("*") if path.is_dir()), key=lambda path: len(path.parts)):
+            if (candidate / "version.json").exists() and (candidate / "update-manifest.json").exists():
+                return candidate
         return None
+
+    def _extract_archive(self, archive: zipfile.ZipFile, extract_root: Path) -> None:
+        extract_root = extract_root.resolve()
+        for item in archive.infolist():
+            relative_path = Path(item.filename)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                raise ValueError("Update package contains an unsafe path.")
+            target_path = extract_root / relative_path
+            if item.is_dir():
+                os.makedirs(self._long_path(target_path), exist_ok=True)
+                continue
+            os.makedirs(self._long_path(target_path.parent), exist_ok=True)
+            with archive.open(item, "r") as source, open(self._long_path(target_path), "wb") as target:
+                shutil.copyfileobj(source, target)
+
+    def _long_path(self, path: Path) -> str:
+        text = str(path)
+        if os.name != "nt" or text.startswith("\\\\?\\"):
+            return text
+        if text.startswith("\\\\"):
+            return "\\\\?\\UNC\\" + text.lstrip("\\")
+        return "\\\\?\\" + text
 
     def _default_fetch_text(self, url: str) -> str:
         with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310

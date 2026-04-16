@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -20,22 +21,52 @@ DEFAULT_UPDATE_ENTRY_NAMES = (
 
 def hash_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with open(_long_path(path), "rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
 def hash_directory(path: Path) -> str:
+    path = path.resolve()
     if not path.exists() or not path.is_dir():
         raise FileNotFoundError(f"Directory not found: {path}")
     lines: list[str] = []
-    for file_path in sorted(item for item in path.rglob("*") if item.is_file()):
+    for file_path in _iter_files(path):
         relative_path = file_path.relative_to(path).as_posix()
         lines.append(f"{relative_path}\t{hash_file(file_path)}")
     digest = hashlib.sha256()
     digest.update("\n".join(lines).encode("utf-8"))
     return digest.hexdigest()
+
+
+def _iter_files(root: Path) -> list[Path]:
+    if os.name != "nt":
+        return sorted(item for item in root.rglob("*") if item.is_file())
+
+    root = root.resolve()
+    files: list[Path] = []
+    for dirpath, _, filenames in os.walk(_long_path(root)):
+        for filename in filenames:
+            files.append(Path(_strip_long_path(os.path.join(dirpath, filename))))
+    return sorted(files)
+
+
+def _long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def _strip_long_path(path: str) -> str:
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path.removeprefix("\\\\?\\UNC\\")
+    if path.startswith("\\\\?\\"):
+        return path.removeprefix("\\\\?\\")
+    return path
 
 
 def hash_entry(path: Path) -> tuple[str, str]:

@@ -54,6 +54,30 @@ def make_package_zip_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def make_package_zip_with_deep_runtime_path() -> bytes:
+    buffer = io.BytesIO()
+    deep_runtime_path = (
+        "OpenClaw-Portable/runtime/openclaw/dist/extensions/discord/node_modules/"
+        "@buape/carbon/node_modules/discord-api-types/payloads/v10/"
+        "_interactions/_applicationCommands/_chatInput/ChatInputApplicationCommandData.js"
+    )
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("OpenClaw-Portable/version.json", json.dumps({"version": "v2026.04.3"}))
+        archive.writestr(
+            "OpenClaw-Portable/update-manifest.json",
+            json.dumps(
+                {
+                    "manifestVersion": 1,
+                    "packageVersion": "v2026.04.3",
+                    "generatedAt": "2026-04-16T00:00:00+00:00",
+                    "entries": {},
+                }
+            ),
+        )
+        archive.writestr(deep_runtime_path, "module.exports = {}\n")
+    return buffer.getvalue()
+
+
 class OnlineUpdateServiceTests(unittest.TestCase):
     def test_online_update_service_uses_resolved_feed_url_when_no_explicit_url_is_passed(self) -> None:
         temp_dir = make_workspace_temp_dir()
@@ -154,6 +178,23 @@ class OnlineUpdateServiceTests(unittest.TestCase):
             self.assertTrue((package_dir / "version.json").exists())
             self.assertTrue((package_dir / "update-manifest.json").exists())
             self.assertIn("updates", str(package_dir))
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_download_update_package_extracts_deep_runtime_paths(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            service = OnlineUpdateService(
+                make_paths(temp_dir),
+                update_feed_url="https://example.com/update.json",
+                fetch_bytes=lambda _: make_package_zip_with_deep_runtime_path(),
+            )
+            metadata = type("Metadata", (), {"latest_version": "v2026.04.3", "package_url": "https://example.com/pkg.zip"})()
+
+            package_dir = service.download_update_package(metadata)
+
+            self.assertTrue((package_dir / "version.json").exists())
+            self.assertTrue((package_dir / "runtime" / "openclaw").exists())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

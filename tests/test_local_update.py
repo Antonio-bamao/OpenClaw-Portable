@@ -3,6 +3,7 @@ import shutil
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from launcher.core.paths import PortablePaths
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
@@ -140,6 +141,33 @@ class LocalUpdateImportServiceTests(unittest.TestCase):
             self.assertEqual((paths.runtime_dir / "openclaw" / "openclaw.mjs").read_text(encoding="utf-8"), "new runtime\n")
             self.assertEqual((paths.state_dir / "openclaw.json").read_text(encoding="utf-8"), "keep state\n")
             self.assertEqual((paths.state_dir / ".env").read_text(encoding="utf-8"), "OPENCLAW_API_KEY=keep\n")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_copy_entry_uses_robocopy_for_directories_on_windows(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            source = temp_dir / "source-dir"
+            destination = temp_dir / "destination-dir"
+            source.mkdir(parents=True, exist_ok=True)
+            (source / "file.txt").write_text("content\n", encoding="utf-8")
+            service = make_import_service(paths)
+
+            with patch("launcher.services.local_update.os.name", "nt"), patch(
+                "launcher.services.local_update.subprocess.run"
+            ) as run:
+                run.return_value.returncode = 1
+
+                service._copy_entry(source, destination)
+
+            run.assert_called_once()
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], "robocopy")
+            self.assertEqual(command[1], str(source))
+            self.assertEqual(command[2], str(destination))
+            self.assertIn("/E", command)
+            self.assertIn("/MT:8", command)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
