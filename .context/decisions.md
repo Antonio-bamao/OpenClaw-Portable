@@ -197,3 +197,16 @@
 - 理由：既然实验包与正式 clean dist 的验证都已证明这两组文件可以安全移除，那么继续把它们保留在默认交付包里，只会增加 U 盘拷贝体积、IDE 扫描噪声和发布资产大小，而不会为真实运行提供价值。将其升级为默认 prune 规则，能把 clean dist 稳定收敛到约 `558.52MB / 25837` 文件，并把真实稳定性 gate 维持在 max `26.64s`、avg `24.77s` 的水平。
 - 影响范围：`launcher/services/runtime_pruning.py` 的默认裁剪常量、`scripts/prune-portable-runtime.py` 的默认行为、`scripts/build-launcher.ps1` 产出的 clean dist 基线，以及所有后续 release 资产构建与审计结果。
 - 后续约束：默认构建必须持续移除 `.map/.md/.d.ts`、`*.ts/*.mts/*.cts`、`*.test.*/*.spec.*` 与 `__tests__/test` 目录后代文件；任何未来想撤回或新增默认 prune 规则的改动，都必须先在 clean dist 上完成审计、真实 runtime 稳定性验证和回归测试，不能只凭候选报告直接改默认值；CLI 显式传参时仍应保持“实验覆盖默认”的语义，避免实验命令意外混入正式默认规则。
+
+## 2026-04-16 - Run OpenClaw from a local cache when the package root is removable
+
+- Decision: when the launcher detects that the package root is on a Windows removable drive, stage `runtime/openclaw` into a versioned local temp cache and run the gateway from that cache. Keep `state/`, channel config, sessions, backups, and user data on the U disk.
+- Reason: direct gateway startup from the mounted FAT32 U disk timed out because OpenClaw loads many small JS/node_modules files. The local cache moves repeated module loading to the user's local disk without breaking the portable data model.
+- Implementation constraint: staging uses Windows `robocopy /MT` rather than Python `shutil.copytree`, because Python per-file copying stalled on the real U disk. The cache key includes package/update metadata and runtime package files so updates naturally create a new cache.
+- Consequence: the first run on a new machine or changed package may spend time preparing the local cache; subsequent starts use the cache and should be much faster. Future work should evaluate shipping a compressed runtime archive to reduce first-cache preparation time.
+
+## 2026-04-16 - Runtime readiness requires two consecutive successful health checks
+
+- Decision: a single TCP connection is no longer enough to mark the OpenClaw gateway ready; `_wait_until_ready()` requires two consecutive successful health checks.
+- Reason: restart verification showed that a transient or stale socket accept can briefly look healthy while the restarted gateway is not stable yet.
+- Consequence: successful starts wait one extra polling interval in the normal case, but restart false positives are reduced.

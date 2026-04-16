@@ -217,3 +217,23 @@
 - 解决方案：Stopped parallelizing unit tests with real runtime verification, reran tests serially, and reran the delivery gate serially; the full test suite passed and the second gate run passed local checks with only external evidence pending.
 - 预防措施：Do not run real runtime stability gates in parallel with unit tests or other localhost runtime checks; keep delivery gate output as evidence and rerun isolated if a single port bind failure appears.
 - 状态：documented
+
+## Removable FAT32 runtime startup timed out before gateway health
+
+- Symptom: `python scripts\verify-delivery-flow.py --package-root D:\OpenClaw-Portable --cold-runs 1 --restart-runs 1 --timeout-seconds 90` failed runtime stability on the real U disk. The direct D-drive run did not become healthy within 90 seconds, and a 300-second cold-start attempt only reached early gateway logs (`loading configuration`, `resolving authentication`, `starting...`) before timing out.
+- Trigger: running OpenClaw directly from a real FAT32 removable drive containing about `25,839` files and many small JS/node_modules files.
+- Impact: the package could be copied and audited correctly, but the real U-disk user flow was not reliable enough to call the portable build usable.
+- Root cause: the OpenClaw runtime performs heavy small-file reads during module loading; on the removable FAT32 U disk this made startup far slower than the local `dist` package. A Python `shutil.copytree` attempt to stage the runtime also stalled, confirming that naive per-file copying is not a good mitigation on this medium.
+- Fix: `OpenClawRuntimeAdapter` now detects removable Windows package roots and stages `runtime/openclaw` into a versioned local temp cache using Windows `robocopy /MT`; gateway then starts from the local cache while `state/` remains on the U disk. The staging can also be forced with `OPENCLAW_PORTABLE_STAGE_RUNTIME=1` for tests.
+- Verification: D-drive delivery gate now passes runtime stability with cold `34.72s` and restart `21.72s`, and removable-media evidence passed for `D:\OpenClaw-Portable`.
+- Status: Resolved for the mounted U disk. Future packaging should still investigate a zip/single-archive runtime cache to reduce first-cache preparation cost even further.
+
+## Restart readiness accepted a transient socket too early
+
+- Symptom: after the first runtime-cache build, local delivery gate passed cold start but failed restart with `healthOk=false` and `error="timed out"` immediately after `restart()` returned.
+- Trigger: `OpenClawRuntimeAdapter.restart()` stopped and started the gateway, then `_wait_until_ready()` returned after a single successful TCP connection.
+- Impact: a stale or transient port accept could make the launcher believe the gateway was ready before it was actually stable yet.
+- Root cause: readiness required only one successful health check.
+- Fix: `_wait_until_ready()` now requires two consecutive successful health checks before declaring the runtime ready. A regression test covers the `true -> false -> true -> true` sequence.
+- Verification: `python -m unittest discover -s tests` passed `159` tests; local delivery gate then passed cold `25.12s` and restart `25.58s`; D-drive delivery gate passed cold `34.72s` and restart `21.72s`.
+- Status: Resolved.

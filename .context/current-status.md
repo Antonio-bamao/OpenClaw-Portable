@@ -74,3 +74,19 @@
 - UI: the main launcher now shows cards for WeChat ClawBot, QQ Bot, and WeCom; the app layer wires install/login/save/test/enable/disable handlers into the controller.
 - Verified: `python -m unittest discover -s tests` passes 157 tests after the channel expansion.
 - Remaining external validation: real WeChat QR login requires the user's WeChat account to have the ClawBot plugin rollout and network access to install `@tencent-weixin/openclaw-weixin`; QQ requires real QQ Open Platform AppID/AppSecret; WeCom requires real plugin-side credentials and tenant setup.
+
+## 2026-04-16 U-Disk Runtime Cache Update
+
+- Completed: real `D:` removable-media validation is now implemented and verified for the mounted U disk. The U disk package at `D:\OpenClaw-Portable` is synchronized with `dist\OpenClaw-Portable`, audit-clean, and byte/file-count matched at `558.55MB / 25839` files.
+- Delivered: removable-drive runtime staging in `OpenClawRuntimeAdapter`. On Windows removable package roots, the launcher stages `runtime/openclaw` into a versioned local temp cache with `robocopy /MT`, then starts the gateway from local cache while preserving U-disk `state/` as the portable data root.
+- Delivered: runtime readiness now requires two consecutive successful health checks, fixing a restart false positive seen during delivery-gate verification.
+- Verified: `python -m unittest discover -s tests` passes `159` tests. Local dist delivery gate passes package audit, release assets, and runtime stability. D-drive delivery gate with `--cold-runs 1 --restart-runs 1 --removable-media-path D:\OpenClaw-Portable` returns `status=pending` with package audit passed, release assets passed, runtime stability passed (cold `34.72s`, restart `21.72s`), and removable-media evidence passed.
+- Remaining external validation: real Feishu private-chat E2E and real WeChat/QQ/WeCom platform credential tests still need user/platform credentials. Multi-engine AV/SmartScreen evidence remains pending; local Defender baseline alone is not a replacement.
+
+### Final 2026-04-16 verification rerun
+
+- `python -m unittest discover -s tests` passes `159` tests. The final real U-disk delivery gate at `D:\OpenClaw-Portable` passes package audit, release assets, runtime stability, and removable-media evidence with cold `31.20s`, restart `21.70s`, max `31.20s`, average `26.45s`. Overall gate status remains `pending` only for external Feishu E2E credentials and multi-engine AV/SmartScreen evidence.
+
+### Final release-asset verification rerun
+
+- After regenerating `dist\release\OpenClaw-Portable-v2026.04.2.zip` and `update.json`, resyncing the rebuilt package to `D:\OpenClaw-Portable`, and rerunning the real D-drive delivery gate, package audit, release assets, runtime stability, and removable-media evidence all pass. Latest final measurements: cold `34.75s`, restart `23.20s`, max `34.75s`, average `28.98s`. Overall status remains `pending` only for external Feishu E2E credentials and multi-engine AV/SmartScreen evidence.

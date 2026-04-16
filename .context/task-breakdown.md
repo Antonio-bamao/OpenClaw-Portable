@@ -119,3 +119,11 @@
 - Verified: `python .\\scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 3 --restart-runs 2 --output tmp\\runtime-stability-report-default-prune.json` passed `3` cold starts plus `2` restarts with max `26.64s` and average `24.77s`.
 - Verified: `python -m unittest discover -s tests` remains green at `122` tests.
 - Next: shift the active delivery focus to U-disk read/write performance and anti-virus false-positive risk assessment; when ready to cut the next release, reuse this default-pruned clean dist as the new build baseline.
+
+## 2026-04-16 U-Disk Delivery Update
+
+- Completed: copied the rebuilt portable package to the mounted `D:` U disk and verified that source and U-disk package match exactly (`25839` files, `558.55MB`).
+- Completed: fixed D-drive runtime startup by staging OpenClaw runtime files to a local temp cache when the package root is removable.
+- Completed: fixed restart readiness by requiring two consecutive gateway health checks.
+- Verified: D-drive delivery gate now passes package audit, release assets, runtime stability, and removable-media evidence. Latest D-drive runtime measurements: cold `34.72s`, restart `21.72s`.
+- Next: use real Feishu/WeChat/QQ/WeCom credentials to clear channel E2E; collect multi-engine AV/SmartScreen evidence if the product needs stronger public-delivery confidence. Consider runtime archive packaging later to reduce first-cache preparation cost on very slow U disks.

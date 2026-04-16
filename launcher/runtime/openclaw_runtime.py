@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
+import shutil
 import socket
 import subprocess
 import time
@@ -14,9 +16,15 @@ from launcher.runtime.base import RuntimeAdapter, RuntimeHealth, RuntimeStatus
 
 
 class OpenClawRuntimeAdapter(RuntimeAdapter):
-    def __init__(self, node_command: str = "node", startup_timeout_seconds: float = 90) -> None:
+    def __init__(
+        self,
+        node_command: str = "node",
+        startup_timeout_seconds: float = 90,
+        health_poll_interval_seconds: float = 0.5,
+    ) -> None:
         self.node_command = node_command
         self.startup_timeout_seconds = startup_timeout_seconds
+        self.health_poll_interval_seconds = health_poll_interval_seconds
         self._config: LauncherConfig | None = None
         self._paths: PortablePaths | None = None
         self._port_resolution: PortResolution | None = None
@@ -27,6 +35,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         self._started_at_monotonic: float | None = None
         self._runtime_config_patch: dict[str, object] = {}
         self._runtime_env: dict[str, str] = {}
+        self._openclaw_runtime_dir: Path | None = None
 
     def prepare(
         self,
@@ -43,6 +52,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         self._stderr_log = paths.logs_dir / "openclaw-runtime.err.log"
         self._runtime_config_patch = runtime_config_patch or {}
         self._runtime_env = runtime_env or {}
+        self._openclaw_runtime_dir = self._resolve_openclaw_runtime_dir()
         self._apply_runtime_config_patch()
         self._last_state = "ready"
 
@@ -182,7 +192,83 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
     def _openclaw_dir(self) -> Path:
         if not self._paths:
             raise RuntimeError("Runtime paths are not prepared")
-        return self._paths.runtime_dir / "openclaw"
+        return self._openclaw_runtime_dir or (self._paths.runtime_dir / "openclaw")
+
+    def _resolve_openclaw_runtime_dir(self) -> Path:
+        if not self._paths:
+            raise RuntimeError("Runtime paths are not prepared")
+        source_dir = self._paths.runtime_dir / "openclaw"
+        if not self._should_stage_runtime(source_dir):
+            return source_dir
+        if not source_dir.exists():
+            return source_dir
+        cache_key = self._runtime_cache_key(source_dir)
+        cache_parent = self._paths.cache_dir / "runtime"
+        target_dir = cache_parent / f"openclaw-{cache_key}"
+        if self._is_usable_cached_runtime(target_dir):
+            return target_dir
+        staging_dir = cache_parent / f".{target_dir.name}.staging-{os.getpid()}"
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        cache_parent.mkdir(parents=True, exist_ok=True)
+        _copy_runtime_tree(source_dir, staging_dir)
+        (staging_dir / ".openclaw-portable-cache.json").write_text(
+            json.dumps(
+                {
+                    "source": str(source_dir),
+                    "cacheKey": cache_key,
+                    "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        if target_dir.exists():
+            shutil.rmtree(target_dir, ignore_errors=True)
+        staging_dir.replace(target_dir)
+        return target_dir
+
+    def _should_stage_runtime(self, source_dir: Path) -> bool:
+        override = os.environ.get("OPENCLAW_PORTABLE_STAGE_RUNTIME", "").strip().lower()
+        if override in {"1", "true", "yes", "on", "always"}:
+            return True
+        if override in {"0", "false", "no", "off", "never"}:
+            return False
+        if not self._paths:
+            return False
+        return _is_removable_path(self._paths.project_root) and source_dir.exists()
+
+    def _runtime_cache_key(self, source_dir: Path) -> str:
+        if not self._paths:
+            raise RuntimeError("Runtime paths are not prepared")
+        digest = hashlib.sha256()
+        candidates = (
+            self._paths.project_root / "update-manifest.json",
+            self._paths.project_root / "version.json",
+            source_dir / "package.json",
+            source_dir / "package-lock.json",
+            source_dir / "node_modules" / ".package-lock.json",
+            source_dir / "openclaw.mjs",
+        )
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            stat = candidate.stat()
+            digest.update(str(candidate.relative_to(self._paths.project_root)).encode("utf-8", errors="replace"))
+            digest.update(str(stat.st_size).encode("ascii"))
+            digest.update(str(stat.st_mtime_ns).encode("ascii"))
+            if stat.st_size <= 2_000_000:
+                digest.update(candidate.read_bytes())
+        return digest.hexdigest()[:16]
+
+    def _is_usable_cached_runtime(self, target_dir: Path) -> bool:
+        return (
+            target_dir.exists()
+            and (target_dir / "package.json").exists()
+            and (target_dir / "openclaw.mjs").exists()
+            and (target_dir / ".openclaw-portable-cache.json").exists()
+        )
 
     def _entrypoint_script(self) -> Path:
         openclaw_dir = self._openclaw_dir()
@@ -199,13 +285,18 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
 
     def _wait_until_ready(self) -> None:
         deadline = time.monotonic() + self.startup_timeout_seconds
+        consecutive_successes = 0
         while time.monotonic() < deadline:
             if self._process and self._process.poll() is not None:
                 raise RuntimeError("OpenClaw runtime exited before becoming healthy")
             health = self.healthcheck()
             if health.ok:
-                return
-            time.sleep(0.5)
+                consecutive_successes += 1
+                if consecutive_successes >= 2:
+                    return
+            else:
+                consecutive_successes = 0
+            time.sleep(self.health_poll_interval_seconds)
         raise TimeoutError("OpenClaw runtime did not become healthy in time")
 
     def _read_api_key(self) -> str:
@@ -246,3 +337,47 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
                 continue
             merged[key] = value
         return merged
+
+
+def _is_removable_path(path: Path) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        resolved = path.resolve()
+        root = resolved.anchor or str(resolved)
+        drive_type = ctypes.windll.kernel32.GetDriveTypeW(str(Path(root)))
+    except Exception:  # noqa: BLE001
+        return False
+    return drive_type == 2
+
+
+def _copy_runtime_tree(source_dir: Path, target_dir: Path) -> None:
+    robocopy = shutil.which("robocopy") if os.name == "nt" else None
+    if robocopy:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        completed = subprocess.run(
+            [
+                robocopy,
+                str(source_dir),
+                str(target_dir),
+                "/E",
+                "/R:1",
+                "/W:1",
+                "/MT:16",
+                "/NFL",
+                "/NDL",
+                "/NJH",
+                "/NJS",
+                "/NP",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if completed.returncode >= 8:
+            raise RuntimeError(f"Failed to stage OpenClaw runtime cache with robocopy: {completed.stderr.strip()}")
+        return
+    shutil.copytree(source_dir, target_dir)
