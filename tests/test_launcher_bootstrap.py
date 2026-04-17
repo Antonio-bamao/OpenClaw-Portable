@@ -154,6 +154,7 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertEqual(window.install_wechat_button.text(), "安装微信插件")
         self.assertEqual(window.login_wechat_button.text(), "扫码登录")
+        self.assertEqual(window.confirm_wechat_button.text(), "确认已扫码")
         self.assertEqual(window.open_wechat_help_button.text(), "接入帮助")
         self.assertEqual(window.qq_app_id_input.placeholderText(), "QQ Bot AppID")
         self.assertEqual(window.open_qq_help_button.text(), "接入帮助")

@@ -14,7 +14,7 @@ from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
 from launcher.services.controller import LauncherController
 from launcher.services.feishu_channel import FeishuChannelConfig
-from launcher.services.social_channels import QqChannelConfig, WechatChannelConfig, WecomChannelConfig
+from launcher.services.social_channels import ChannelCommandResult, QqChannelConfig, WechatChannelConfig, WecomChannelConfig
 
 
 def make_workspace_temp_dir() -> Path:
@@ -105,6 +105,16 @@ class FakeRuntimeAdapter:
 
     def healthcheck(self) -> RuntimeHealth:
         return RuntimeHealth(ok=True)
+
+
+class FakeChannelCommandRunner:
+    def __init__(self, result=None) -> None:
+        self.result = result
+        self.calls: list[list[str]] = []
+
+    def run(self, args: list[str], timeout_seconds: int = 180):
+        self.calls.append(args)
+        return self.result
 
 
 class FakeRestoreUpdateBackupService:
@@ -465,6 +475,59 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_enable_qq_channel_runs_documented_onboarding_command_once_per_credentials(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw" / "dist" / "extensions" / "qqbot").mkdir(parents=True)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.save_qq_channel("123456", "qq-secret")
+            runner = FakeChannelCommandRunner(ChannelCommandResult(ok=True, output="added"))
+            controller.social_channel_service.command_runner = runner
+
+            first_state = controller.enable_qq_channel()
+            second_state = controller.enable_qq_channel()
+
+            self.assertTrue(first_state.enabled)
+            self.assertTrue(second_state.enabled)
+            self.assertEqual(
+                runner.calls,
+                [["channels", "add", "--channel", "qqbot", "--token", "123456:qq-secret"]],
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_enable_qq_channel_keeps_disabled_when_onboarding_command_fails(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw" / "dist" / "extensions" / "qqbot").mkdir(parents=True)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.save_qq_channel("123456", "qq-secret")
+            runner = FakeChannelCommandRunner(ChannelCommandResult(ok=False, error_message="channels add failed"))
+            controller.social_channel_service.command_runner = runner
+
+            state = controller.enable_qq_channel()
+
+            self.assertFalse(state.enabled)
+            self.assertIn("failed", state.last_error)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_controller_saves_and_enables_qq_and_wecom_channels(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -478,6 +541,9 @@ class LauncherControllerTests(unittest.TestCase):
                 node_command="node",
             )
             controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.social_channel_service.command_runner = FakeChannelCommandRunner(
+                ChannelCommandResult(ok=True, output="added")
+            )
 
             saved_qq = controller.save_qq_channel(" 123456 ", " qq-secret ")
             enabled_qq = controller.enable_qq_channel()

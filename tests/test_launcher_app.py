@@ -108,6 +108,10 @@ class FakeController:
         self.calls.append("login_wechat_channel")
         return WechatChannelState(False, True, "待启用", "login opened")
 
+    def confirm_wechat_channel_login(self) -> WechatChannelState:
+        self.calls.append("confirm_wechat_channel_login")
+        return WechatChannelState(False, True, "待启用", "confirmed")
+
     def enable_wechat_channel(self) -> WechatChannelState:
         self.calls.append("enable_wechat_channel")
         return WechatChannelState(True, True, "已启用", "enabled")
@@ -430,6 +434,17 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("login_wechat_channel", calls)
         self.assertIn("enable_wechat_channel", calls)
         self.assertEqual(application.main_window.wechat_states[-1].status_label, "已启用")
+
+    def test_handle_confirm_wechat_channel_refreshes_state(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+
+        application._handle_confirm_wechat_channel()
+
+        self.assertIn("confirm_wechat_channel_login", calls)
+        self.assertEqual(application.main_window.wechat_states[-1].status_detail, "confirmed")
 
     def test_handle_save_and_enable_qq_channel_reads_inputs(self) -> None:
         calls: list[str] = []

@@ -60,6 +60,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.wechat_status_detail_label: QLabel | None = None
         self.install_wechat_button: QPushButton | None = None
         self.login_wechat_button: QPushButton | None = None
+        self.confirm_wechat_button: QPushButton | None = None
         self.open_wechat_help_button: QPushButton | None = None
         self.enable_wechat_button: QPushButton | None = None
         self.disable_wechat_button: QPushButton | None = None
@@ -115,6 +116,7 @@ class OpenClawLauncherWindow(QMainWindow):
         *,
         on_install_wechat,
         on_login_wechat,
+        on_confirm_wechat,
         on_open_wechat_help,
         on_enable_wechat,
         on_disable_wechat,
@@ -131,6 +133,7 @@ class OpenClawLauncherWindow(QMainWindow):
     ) -> None:
         self.install_wechat_button.clicked.connect(on_install_wechat)
         self.login_wechat_button.clicked.connect(on_login_wechat)
+        self.confirm_wechat_button.clicked.connect(on_confirm_wechat)
         self.open_wechat_help_button.clicked.connect(on_open_wechat_help)
         self.enable_wechat_button.clicked.connect(on_enable_wechat)
         self.disable_wechat_button.clicked.connect(on_disable_wechat)
@@ -400,12 +403,14 @@ class OpenClawLauncherWindow(QMainWindow):
         wechat_actions.setSpacing(10)
         self.install_wechat_button = make_button("安装微信插件")
         self.login_wechat_button = make_button("扫码登录", primary=True)
+        self.confirm_wechat_button = make_button("确认已扫码")
         self.open_wechat_help_button = make_button("接入帮助", subtle=True)
         self.enable_wechat_button = make_button("启用微信")
         self.disable_wechat_button = make_button("停用")
         for button in (
             self.install_wechat_button,
             self.login_wechat_button,
+            self.confirm_wechat_button,
             self.open_wechat_help_button,
             self.enable_wechat_button,
             self.disable_wechat_button,
@@ -509,6 +514,7 @@ class OpenClawLauncherWindow(QMainWindow):
             {
                 "install_wechat_channel": self.install_wechat_button,
                 "login_wechat_channel": self.login_wechat_button,
+                "confirm_wechat_channel": self.confirm_wechat_button,
                 "enable_wechat_channel": self.enable_wechat_button,
                 "test_qq_channel": self.test_qq_button,
                 "enable_qq_channel": self.enable_qq_button,
@@ -521,6 +527,7 @@ class OpenClawLauncherWindow(QMainWindow):
             {
                 self.install_wechat_button: self.install_wechat_button.text(),
                 self.login_wechat_button: self.login_wechat_button.text(),
+                self.confirm_wechat_button: self.confirm_wechat_button.text(),
                 self.enable_wechat_button: self.enable_wechat_button.text(),
                 self.test_qq_button: self.test_qq_button.text(),
                 self.enable_qq_button: self.enable_qq_button.text(),

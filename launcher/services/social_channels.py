@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+import hashlib
 from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,7 @@ class QqChannelConfig:
     app_secret: str = ""
     enabled: bool = False
     last_validated_at: str | None = None
+    last_onboarded_token_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,24 @@ class SocialChannelService:
     def wecom_install_commands(self) -> list[list[str]]:
         return [["plugins", "install", "@wecom/wecom-openclaw-plugin@latest"]]
 
+    def qq_onboarding_command(self, config: QqChannelConfig) -> list[str]:
+        app_id = config.app_id.strip()
+        app_secret = config.app_secret.strip()
+        return ["channels", "add", "--channel", "qqbot", "--token", f"{app_id}:{app_secret}"]
+
+    def qq_token_fingerprint(self, config: QqChannelConfig) -> str | None:
+        app_id = config.app_id.strip()
+        app_secret = config.app_secret.strip()
+        if not app_id or not app_secret:
+            return None
+        return hashlib.sha256(f"{app_id}:{app_secret}".encode("utf-8")).hexdigest()
+
+    def qq_needs_onboarding(self, config: QqChannelConfig) -> bool:
+        fingerprint = self.qq_token_fingerprint(config)
+        if fingerprint is None:
+            return False
+        return config.last_onboarded_token_fingerprint != fingerprint
+
     def install_wechat_plugin(self) -> ChannelCommandResult:
         result = self._run_commands(self.wechat_install_commands())
         if result.ok:
@@ -216,6 +236,24 @@ class SocialChannelService:
             self.save_wechat_status(SocialChannelStatus(state="pending_enable", last_action_at=self._utc_now_iso()))
         else:
             self.save_wechat_status(SocialChannelStatus(state="login_failed", last_error=result.error_message))
+        return result
+
+    def confirm_wechat_runtime_login(self) -> None:
+        self.refresh_wechat_runtime_status()
+
+    def onboard_qq_channel(self, config: QqChannelConfig) -> ChannelCommandResult:
+        if not self.command_runner:
+            return ChannelCommandResult(ok=False, error_message="OpenClaw command runner is not configured.")
+        if not self.qq_needs_onboarding(config):
+            return ChannelCommandResult(ok=True, output="qqbot already onboarded")
+        result = self.command_runner.run(self.qq_onboarding_command(config))
+        if result.ok:
+            self.save_qq_config(
+                replace(
+                    config,
+                    last_onboarded_token_fingerprint=self.qq_token_fingerprint(config),
+                )
+            )
         return result
 
     def install_wecom_plugin(self) -> ChannelCommandResult:
@@ -359,6 +397,7 @@ class SocialChannelService:
                 "missing_runtime_plugin": ("缺少扩展", status.last_error or "当前便携包缺少内置 QQ Bot 扩展，请重新安装或更新 OpenClaw Portable。"),
                 "pending_enable": ("待启用", "QQ Bot 凭据已保存，启用后会写入运行时配置。"),
                 "enabled": ("已启用", "QQ Bot 通道已启用，可接收私聊、群聊和富媒体消息。"),
+                "enable_failed": ("启用失败", status.last_error or "QQ Bot 运行时接入失败，请重试。"),
             },
         )
         return QqChannelState(config.app_id, config.app_secret, config.enabled, label, detail, config.last_validated_at, status.last_error)
@@ -437,6 +476,7 @@ class SocialChannelService:
             "app_id": "appId",
             "app_secret": "appSecret",
             "last_validated_at": "lastValidatedAt",
+            "last_onboarded_token_fingerprint": "lastOnboardedTokenFingerprint",
             "last_login_at": "lastLoginAt",
             "last_error": "lastError",
             "last_action_at": "lastActionAt",
@@ -450,6 +490,7 @@ class SocialChannelService:
             "appId": "app_id",
             "appSecret": "app_secret",
             "lastValidatedAt": "last_validated_at",
+            "lastOnboardedTokenFingerprint": "last_onboarded_token_fingerprint",
             "lastLoginAt": "last_login_at",
             "lastError": "last_error",
             "lastActionAt": "last_action_at",

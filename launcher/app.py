@@ -75,6 +75,7 @@ class OpenClawLauncherApplication:
             self.main_window.bind_social_channel_handlers(
                 on_install_wechat=self._handle_install_wechat_channel,
                 on_login_wechat=self._handle_login_wechat_channel,
+                on_confirm_wechat=self._handle_confirm_wechat_channel,
                 on_open_wechat_help=self._handle_open_wechat_help,
                 on_enable_wechat=self._handle_enable_wechat_channel,
                 on_disable_wechat=self._handle_disable_wechat_channel,
@@ -234,6 +235,13 @@ class OpenClawLauncherApplication:
         self._run_background_action(
             "login_wechat_channel",
             self.controller.login_wechat_channel,
+            lambda state: (self._apply_wechat_channel_state(state), self._refresh_main_view()),
+        )
+
+    def _handle_confirm_wechat_channel(self) -> None:
+        self._run_background_action(
+            "confirm_wechat_channel",
+            self.controller.confirm_wechat_channel_login,
             lambda state: (self._apply_wechat_channel_state(state), self._refresh_main_view()),
         )
 

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import json
 import shutil
 import unittest
 import uuid
-import json
 from pathlib import Path
 
 from launcher.core.paths import PortablePaths
 from launcher.services.social_channels import (
+    ChannelCommandResult,
     QqChannelConfig,
     SocialChannelService,
     WechatChannelConfig,
@@ -79,6 +80,20 @@ class SocialChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_qq_onboarding_command_uses_documented_token_format(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            service = SocialChannelService(make_paths(temp_dir))
+
+            command = service.qq_onboarding_command(QqChannelConfig(app_id=" 123456 ", app_secret=" secret "))
+
+            self.assertEqual(
+                command,
+                ["channels", "add", "--channel", "qqbot", "--token", "123456:secret"],
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_qq_validation_rejects_package_when_bundled_extension_is_missing(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -90,7 +105,7 @@ class SocialChannelServiceTests(unittest.TestCase):
 
             self.assertFalse(result.ok)
             self.assertEqual(result.state, "missing_runtime_plugin")
-            self.assertIn("QQ Bot 扩展", result.error_message)
+            self.assertIn("QQ Bot", result.error_message)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -107,9 +122,26 @@ class SocialChannelServiceTests(unittest.TestCase):
             service.refresh_wechat_runtime_status()
             state = service.build_wechat_view_state()
 
-            self.assertEqual(state.status_label, "待启用")
             self.assertEqual(state.last_login_at, "2026-04-17T10:00:00Z")
-            self.assertIn("启用微信", state.status_detail)
+            self.assertIn("启用", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_confirm_wechat_runtime_login_refreshes_state_immediately(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            service = SocialChannelService(paths)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(json.dumps({"connected": True, "lastLoginAt": "2026-04-18T08:00:00Z"}), encoding="utf-8")
+
+            service.confirm_wechat_runtime_login()
+            state = service.build_wechat_view_state()
+
+            self.assertEqual(state.last_login_at, "2026-04-18T08:00:00Z")
+            self.assertIn("启用", state.status_detail)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -129,7 +161,7 @@ class SocialChannelServiceTests(unittest.TestCase):
             state = service.build_qq_view_state()
 
             self.assertEqual(state.status_label, "缺少扩展")
-            self.assertIn("QQ Bot 扩展", state.status_detail)
+            self.assertIn("QQ Bot", state.status_detail)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

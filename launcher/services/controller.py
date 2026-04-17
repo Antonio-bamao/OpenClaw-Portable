@@ -168,6 +168,10 @@ class LauncherController:
         self.social_channel_service.open_wechat_login_terminal()
         return self.load_wechat_channel_state()
 
+    def confirm_wechat_channel_login(self):
+        self.social_channel_service.confirm_wechat_runtime_login()
+        return self.load_wechat_channel_state()
+
     def enable_wechat_channel(self):
         config = self.social_channel_service.load_wechat_config()
         self.social_channel_service.save_wechat_config(replace(config, enabled=True))
@@ -187,15 +191,25 @@ class LauncherController:
 
     def save_qq_channel(self, app_id: str, app_secret: str):
         current = self.social_channel_service.load_qq_config()
+        normalized_app_id = app_id.strip()
+        normalized_app_secret = app_secret.strip()
+        credentials_changed = (
+            normalized_app_id != current.app_id.strip() or normalized_app_secret != current.app_secret.strip()
+        )
         config = QqChannelConfig(
-            app_id=app_id.strip(),
-            app_secret=app_secret.strip(),
-            enabled=current.enabled,
+            app_id=normalized_app_id,
+            app_secret=normalized_app_secret,
+            enabled=current.enabled and not credentials_changed,
             last_validated_at=current.last_validated_at,
+            last_onboarded_token_fingerprint=(
+                current.last_onboarded_token_fingerprint if not credentials_changed else None
+            ),
         )
         self.social_channel_service.save_qq_config(config)
         if not config.app_id or not config.app_secret:
             self.social_channel_service.save_qq_status(SocialChannelStatus(state="unconfigured"))
+        elif credentials_changed:
+            self.social_channel_service.save_qq_status(SocialChannelStatus(state="pending_enable"))
         return self.load_qq_channel_state()
 
     def test_qq_channel(self):
@@ -214,6 +228,14 @@ class LauncherController:
         if not result.ok:
             self.social_channel_service.save_qq_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
             return self.load_qq_channel_state()
+        onboarding_result = self.social_channel_service.onboard_qq_channel(config)
+        if not onboarding_result.ok:
+            self.social_channel_service.save_qq_config(replace(config, enabled=False))
+            self.social_channel_service.save_qq_status(
+                SocialChannelStatus(state="enable_failed", last_error=onboarding_result.error_message or onboarding_result.output)
+            )
+            return self.load_qq_channel_state()
+        config = self.social_channel_service.load_qq_config()
         self.social_channel_service.save_qq_config(replace(config, enabled=True, last_validated_at=result.validated_at))
         self.social_channel_service.save_qq_status(SocialChannelStatus(state="enabled"))
         self._reproject_channels_if_configured()
