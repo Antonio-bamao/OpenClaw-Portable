@@ -132,3 +132,12 @@
 - Verified delivery gate: `python scripts\verify-delivery-flow.py --package-root dist\OpenClaw-Portable --release-dir dist\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\delivery-flow-gate-v2026.04.5.json` returned `status=pending` with package audit, release assets, and runtime stability passed. Runtime cold start was `25.12s`, restart was `23.11s`, max was `25.12s`, average was `24.12s`.
 - Current release note: assets are locally ready for publication, but Git tag and GitHub Release still need to be created and verified.
 - Remaining external validation: real Feishu/WeChat/QQ/WeCom credential E2E and multi-engine AV/SmartScreen evidence remain pending.
+
+### 2026-04-17 v2026.04.5 Published
+
+- Completed: committed release preparation as `c30e440` (`chore: prepare v2026.04.5 release`), pushed `main`, created and pushed annotated tag `v2026.04.5`, and published GitHub Release `v2026.04.5`.
+- Uploaded assets: `OpenClaw-Portable-v2026.04.5.zip` (`205700820` bytes) and `update.json` (`251` bytes).
+- Verified public update entry: `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/latest/download/update.json` resolves to version `v2026.04.5` and points to the `v2026.04.5` zip asset.
+- Verified public zip access: `curl.exe -L -I` against the `v2026.04.5` zip URL returned HTTP `200`.
+- Current local artifact state: `dist\OpenClaw-Portable` and `dist\release` are present for `v2026.04.5`; `dist\release` now mirrors the public release assets.
+- Remaining external validation: real Feishu/WeChat/QQ/WeCom credential E2E and multi-engine AV/SmartScreen evidence remain pending.

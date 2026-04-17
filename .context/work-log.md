@@ -454,3 +454,10 @@
 - 结果：Local v2026.04.5 release assets are ready under dist\\release and include the packaged launcher _cffi_backend fix.
 - 验证：python -m unittest discover -s tests passed 163 tests; audit-portable-package passed at 558.73MB / 25840 files with no warnings; verify-delivery-flow returned status=pending with package audit, release assets, and runtime stability passed; OpenClawLauncher.exe short launch returned started_without_import_crash.
 - 下一步：Commit and push the release-candidate update, then tag and publish v2026.04.5 on GitHub and verify the public latest feed.
+
+## 2026-04-17｜Publish v2026.04.5 hotfix release
+- 目标：Publish v2026.04.5 hotfix release
+- 动作：Committed the release-candidate update, created and pushed annotated tag v2026.04.5, published GitHub Release v2026.04.5 through the GitHub API, uploaded the zip and update.json assets, and verified public latest/feed access.
+- 结果：v2026.04.5 is now the public latest GitHub Release and includes the packaged launcher CFFI backend hotfix.
+- 验证：GitHub Release assets list shows OpenClaw-Portable-v2026.04.5.zip at 205700820 bytes and update.json at 251 bytes; public latest update.json resolves to v2026.04.5; curl.exe -L -I against the zip URL returned HTTP 200.
+- 下一步：Collect external channel E2E and multi-engine AV/SmartScreen evidence when credentials or third-party validation inputs are available.
