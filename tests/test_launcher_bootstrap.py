@@ -154,7 +154,9 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertEqual(window.install_wechat_button.text(), "安装微信插件")
         self.assertEqual(window.login_wechat_button.text(), "扫码登录")
+        self.assertEqual(window.open_wechat_help_button.text(), "接入帮助")
         self.assertEqual(window.qq_app_id_input.placeholderText(), "QQ Bot AppID")
+        self.assertEqual(window.open_qq_help_button.text(), "接入帮助")
         self.assertEqual(window.install_wecom_button.text(), "安装企业微信插件")
 
     def test_main_window_applies_wechat_qq_and_wecom_states(self) -> None:
@@ -195,6 +197,15 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertTrue(help_page.exists())
         self.assertIn("飞书私聊接入帮助", help_page.read_text(encoding="utf-8"))
+
+    def test_wechat_and_qq_offline_help_pages_are_packaged(self) -> None:
+        wechat_help = Path.cwd() / "assets" / "guide" / "setup-wechat.html"
+        qq_help = Path.cwd() / "assets" / "guide" / "setup-qq.html"
+
+        self.assertTrue(wechat_help.exists())
+        self.assertTrue(qq_help.exists())
+        self.assertIn("微信", wechat_help.read_text(encoding="utf-8"))
+        self.assertIn("QQ Bot", qq_help.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

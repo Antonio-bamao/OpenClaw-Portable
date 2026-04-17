@@ -475,3 +475,10 @@
 - 结果：Local dist\\OpenClaw-Portable now contains the WeChat/QQ hardening changes and remains smoke-usable.
 - 验证：build-launcher.ps1 completed successfully; audit-portable-package passed at 558.73MB / 25839 files with no warnings; packaged EXE short launch returned started_without_import_crash.
 - 下一步：Create a new public release only if this hardening should ship externally; otherwise wait for real WeChat QR and QQ Open Platform credentials for E2E.
+
+## 2026-04-17｜Add WeChat and QQ launcher help entrypoints and clearer status UX
+- 目标：Add WeChat and QQ launcher help entrypoints and clearer status UX
+- 动作：Wrote an implementation plan, added packaged setup-wechat.html and setup-qq.html help pages, added WeChat/QQ help buttons and browser handlers in the launcher UI/app, refreshed the main view after starting the WeChat login flow, refined WeChat pending-enable messaging and QQ missing-runtime-plugin messaging, then rebuilt the local dist package.
+- 结果：Launcher users can now open local WeChat/QQ setup help from the channel cards, and the cards explain the next step more clearly. The rebuilt local package includes both help pages and updated UI behavior.
+- 验证：python -m unittest tests.test_social_channel_service tests.test_launcher_bootstrap tests.test_launcher_app tests.test_launcher_controller -v passed 58 tests; python -m unittest discover -s tests passed 169 tests; dist help pages exist; audit-portable-package passed at 558.74MB / 25841 files with no warnings; packaged EXE short launch returned started_without_import_crash.
+- 下一步：Create a new release only if this help/status UX hardening should ship publicly; otherwise continue with real WeChat QR and QQ credential E2E when accounts are available.

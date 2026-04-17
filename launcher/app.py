@@ -75,8 +75,10 @@ class OpenClawLauncherApplication:
             self.main_window.bind_social_channel_handlers(
                 on_install_wechat=self._handle_install_wechat_channel,
                 on_login_wechat=self._handle_login_wechat_channel,
+                on_open_wechat_help=self._handle_open_wechat_help,
                 on_enable_wechat=self._handle_enable_wechat_channel,
                 on_disable_wechat=self._handle_disable_wechat_channel,
+                on_open_qq_help=self._handle_open_qq_help,
                 on_save_qq=self._handle_save_qq_channel,
                 on_test_qq=self._handle_test_qq_channel,
                 on_enable_qq=self._handle_enable_qq_channel,
@@ -229,7 +231,11 @@ class OpenClawLauncherApplication:
         self._run_background_action("install_wechat_channel", self.controller.install_wechat_channel, self._apply_wechat_channel_state)
 
     def _handle_login_wechat_channel(self) -> None:
-        self._run_background_action("login_wechat_channel", self.controller.login_wechat_channel, self._apply_wechat_channel_state)
+        self._run_background_action(
+            "login_wechat_channel",
+            self.controller.login_wechat_channel,
+            lambda state: (self._apply_wechat_channel_state(state), self._refresh_main_view()),
+        )
 
     def _handle_enable_wechat_channel(self) -> None:
         self._run_background_action("enable_wechat_channel", self.controller.enable_wechat_channel, self._apply_wechat_channel_state)
@@ -238,6 +244,13 @@ class OpenClawLauncherApplication:
         state = self._run_with_error_boundary(self.controller.disable_wechat_channel)
         if state is not None:
             self._apply_wechat_channel_state(state)
+
+    def _handle_open_wechat_help(self) -> None:
+        help_path = self.paths.assets_dir / "guide" / "setup-wechat.html"
+        if not help_path.exists():
+            self._show_error("微信接入帮助页尚未打包。")
+            return
+        webbrowser.open_new_tab(help_path.as_uri())
 
     def _handle_save_qq_channel(self) -> None:
         if not self.main_window:
@@ -259,6 +272,13 @@ class OpenClawLauncherApplication:
         state = self._run_with_error_boundary(self.controller.disable_qq_channel)
         if state is not None:
             self._apply_qq_channel_state(state)
+
+    def _handle_open_qq_help(self) -> None:
+        help_path = self.paths.assets_dir / "guide" / "setup-qq.html"
+        if not help_path.exists():
+            self._show_error("QQ 接入帮助页尚未打包。")
+            return
+        webbrowser.open_new_tab(help_path.as_uri())
 
     def _handle_install_wecom_channel(self) -> None:
         self._run_background_action("install_wecom_channel", self.controller.install_wecom_channel, self._apply_wecom_channel_state)

@@ -109,6 +109,27 @@ class SocialChannelServiceTests(unittest.TestCase):
 
             self.assertEqual(state.status_label, "待启用")
             self.assertEqual(state.last_login_at, "2026-04-17T10:00:00Z")
+            self.assertIn("启用微信", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_qq_view_state_surfaces_missing_runtime_plugin_message(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            service = SocialChannelService(paths)
+            service.save_qq_config(QqChannelConfig(app_id="123456", app_secret="secret"))
+            service.save_qq_status(
+                service.load_qq_status().__class__(
+                    state="missing_runtime_plugin",
+                    last_error="当前便携包缺少内置 QQ Bot 扩展，请重新安装或更新 OpenClaw Portable。",
+                )
+            )
+
+            state = service.build_qq_view_state()
+
+            self.assertEqual(state.status_label, "缺少扩展")
+            self.assertIn("QQ Bot 扩展", state.status_detail)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

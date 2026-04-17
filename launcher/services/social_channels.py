@@ -313,7 +313,7 @@ class SocialChannelService:
             {
                 "unconfigured": ("未安装", "先安装微信 ClawBot 通道插件，再打开扫码窗口完成登录。"),
                 "pending_login": ("待扫码", "插件已安装，点击扫码登录会打开二维码窗口。"),
-                "pending_enable": ("待启用", "扫码流程已启动，启用后会写入 OpenClaw 运行时配置。"),
+                "pending_enable": ("待启用", "扫码已完成，下一步请点击“启用微信”写入 OpenClaw 运行时配置。"),
                 "enabled": ("已启用", "微信 ClawBot 通道已启用，私聊消息会进入 OpenClaw。"),
                 "install_failed": ("安装失败", status.last_error or "微信插件安装失败，请检查网络或运行时。"),
                 "login_failed": ("扫码失败", status.last_error or "扫码窗口启动失败，请重试。"),
@@ -356,6 +356,7 @@ class SocialChannelService:
             {
                 "unconfigured": ("未配置", "在 QQ 开放平台创建机器人后，填入 AppID 和 AppSecret。"),
                 "invalid_config": ("配置无效", status.last_error or "请检查 QQ Bot 的 AppID 和 AppSecret。"),
+                "missing_runtime_plugin": ("缺少扩展", status.last_error or "当前便携包缺少内置 QQ Bot 扩展，请重新安装或更新 OpenClaw Portable。"),
                 "pending_enable": ("待启用", "QQ Bot 凭据已保存，启用后会写入运行时配置。"),
                 "enabled": ("已启用", "QQ Bot 通道已启用，可接收私聊、群聊和富媒体消息。"),
             },

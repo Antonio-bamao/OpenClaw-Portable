@@ -150,3 +150,11 @@
 - Verified package/runtime evidence: both source runtime and current dist contain `runtime\openclaw\dist\extensions\qqbot\openclaw.plugin.json`.
 - Packaged smoke: rebuilt local `dist\OpenClaw-Portable` with `scripts\build-launcher.ps1`; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` passed at `558.73MB / 25839` files with no warnings; short-launching `OpenClawLauncher.exe` returned `started_without_import_crash`.
 - Current release note: this hardening is committed and present in the local rebuilt dist, but a new public package/release is still needed if it should ship beyond this machine.
+
+### 2026-04-17 WeChat / QQ Help And Status UX Hardening
+
+- Completed: added packaged local help pages for WeChat and QQ under `assets/guide/`, plus launcher help buttons for both cards.
+- Delivered: the launcher now exposes `接入帮助` on the WeChat and QQ cards, opens packaged HTML help pages through the existing browser path, refreshes the main view after the WeChat login command starts, and makes the WeChat `pending_enable` / QQ `missing_runtime_plugin` messages more action-oriented.
+- Verified: `python -m unittest tests.test_social_channel_service tests.test_launcher_bootstrap tests.test_launcher_app tests.test_launcher_controller -v` passed `58` tests; `python -m unittest discover -s tests` passed `169` tests.
+- Packaged smoke: rebuilt local `dist\OpenClaw-Portable`; `dist\OpenClaw-Portable\assets\guide\setup-wechat.html` and `dist\OpenClaw-Portable\assets\guide\setup-qq.html` both exist; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` passed at `558.74MB / 25841` files with no warnings; short-launching `OpenClawLauncher.exe` returned `started_without_import_crash`.
+- Current release note: this UX hardening is in local source and rebuilt dist, but still needs a deliberate next release if it should become the public downloadable artifact after `v2026.04.5`.

@@ -1,6 +1,7 @@
 import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -457,6 +458,34 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("save_wecom_channel:wwbot:wecom-secret", calls)
         self.assertIn("enable_wecom_channel", calls)
         self.assertEqual(application.main_window.wecom_states[-1].status_label, "已启用")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_wechat_help_opens_packaged_help_page(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+        application.paths = type("Paths", (), {"assets_dir": Path.cwd() / "assets"})()
+
+        application._handle_open_wechat_help()
+
+        mock_open_new_tab.assert_called_once()
+        self.assertIn("setup-wechat.html", mock_open_new_tab.call_args.args[0])
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_qq_help_opens_packaged_help_page(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+        application.paths = type("Paths", (), {"assets_dir": Path.cwd() / "assets"})()
+
+        application._handle_open_qq_help()
+
+        mock_open_new_tab.assert_called_once()
+        self.assertIn("setup-qq.html", mock_open_new_tab.call_args.args[0])
 
 
 if __name__ == "__main__":

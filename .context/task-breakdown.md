@@ -155,3 +155,10 @@
 - Delivered: WeChat launcher state can now refresh from likely OpenClaw Weixin runtime status files and recognize logged-in QR state; QQ validation now checks for the bundled `qqbot` runtime extension when a real runtime tree is present; QQ projection now passes `QQBOT_APP_ID` and `QQBOT_CLIENT_SECRET` runtime env vars in addition to the existing config patch.
 - Verified: targeted social/controller/app/UI tests passed, full `python -m unittest discover -s tests` passed `165` tests, local `dist\OpenClaw-Portable` was rebuilt, package audit passed, and EXE short-launch smoke passed.
 - Next: cut a new release only if the public artifact must include this WeChat / QQ hardening; otherwise continue with real WeChat QR and QQ Open Platform credential E2E when those accounts are available.
+
+## 2026-04-17 WeChat / QQ Help And Status UX Update
+
+- Completed: added launcher-visible `接入帮助` entrypoints and packaged WeChat / QQ setup HTML pages.
+- Delivered: WeChat help button opens packaged `setup-wechat.html`; QQ help button opens packaged `setup-qq.html`; WeChat login completion messaging now explicitly tells the user to click `启用微信`; QQ packaged-runtime failure now renders as `缺少扩展` instead of a generic unknown state.
+- Verified: focused launcher/service/controller verification passed `58` tests; full `python -m unittest discover -s tests` passed `169` tests; rebuilt local `dist\OpenClaw-Portable` includes both help pages and still passes package audit plus EXE short-launch smoke.
+- Next: if this UX pass should ship publicly, prepare the next release/tag; otherwise keep moving on real WeChat QR and QQ credential E2E when account inputs are available.

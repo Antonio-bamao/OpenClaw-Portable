@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QQ Bot 接入帮助</title>
+  <style>
+    body { margin: 0; font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif; color: #172026; background: #f3f3fb; }
+    main { max-width: 920px; margin: 0 auto; padding: 48px 24px 72px; }
+    section { background: #fcfcff; border: 1px solid #dcdcf0; border-radius: 22px; padding: 28px; margin-top: 18px; box-shadow: 0 18px 45px rgba(64, 64, 112, 0.10); }
+    h1 { font-size: 34px; margin: 0 0 12px; }
+    h2 { font-size: 22px; margin: 0 0 14px; }
+    p, li { line-height: 1.8; font-size: 16px; }
+    code { background: #e8e8f7; border-radius: 8px; padding: 2px 7px; }
+    .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #4c4cc9; color: #fff; font-weight: 700; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="badge">OpenClaw Portable</span>
+    <h1>QQ Bot 接入帮助</h1>
+    <p>本页用于配置 QQ Bot 的 <code>AppID</code> 和 <code>AppSecret</code>。当前流程是“填写凭据 -> 检查配置 -> 启用 QQ”。</p>
+
+    <section>
+      <h2>1. 准备凭据</h2>
+      <ol>
+        <li>登录 QQ 开放平台并创建机器人。</li>
+        <li>记录该机器人的 <code>AppID</code> 和 <code>AppSecret</code>。</li>
+        <li>回到启动器，在“QQ Bot”卡片里填入这两个值并保存。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>2. 检查配置</h2>
+      <ol>
+        <li>点击 <code>检查 QQ 配置</code>。</li>
+        <li>若状态变成“待启用”，说明凭据格式和当前便携包的 QQ 运行时支持都已通过本地检查。</li>
+        <li>若看到“缺少内置扩展”，说明当前便携包里的 OpenClaw runtime 缺少 <code>qqbot</code> 扩展，需要重新构建或更新程序包。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>3. 启用 QQ</h2>
+      <ol>
+        <li>当卡片显示“待启用”时，点击 <code>启用 QQ</code>。</li>
+        <li>启用后，QQ 私聊、群聊和富媒体消息可以由 OpenClaw runtime 接管。</li>
+        <li>若暂时不用，可点击 <code>停用</code>。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>4. 常见问题</h2>
+      <ul>
+        <li>“未配置”：请先填写并保存 <code>AppID</code> / <code>AppSecret</code>。</li>
+        <li>“配置无效”：请重新检查凭据是否为空或是否填错。</li>
+        <li>“缺少内置扩展”：当前包缺少 QQ Bot runtime 插件，不是账号问题。</li>
+        <li>“待启用”：凭据检查已经通过，下一步是点击 <code>启用 QQ</code>。</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
