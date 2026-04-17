@@ -447,3 +447,10 @@
 - Result: The local packaged launcher now includes `_cffi_backend.cp312-win_amd64.pyd` and no longer immediately exits with the missing-module crash.
 - Verification: `python -m unittest tests.test_build_launcher_script -v` passes; `python -m unittest discover -s tests` passes `163` tests; a short `OpenClawLauncher.exe` launch returned `started_without_import_crash`.
 - Next step: Commit and push the packaging fix; prepare a new release only after an explicit release-preparation pass.
+
+## 2026-04-17｜Prepare v2026.04.5 hotfix release candidate
+- 目标：Prepare v2026.04.5 hotfix release candidate
+- 动作：Bumped version.json to v2026.04.5, rebuilt signed release assets with CFFI-backend hotfix notes, audited the portable package, ran full unit tests, ran local delivery flow verification, and short-launched the packaged EXE.
+- 结果：Local v2026.04.5 release assets are ready under dist\\release and include the packaged launcher _cffi_backend fix.
+- 验证：python -m unittest discover -s tests passed 163 tests; audit-portable-package passed at 558.73MB / 25840 files with no warnings; verify-delivery-flow returned status=pending with package audit, release assets, and runtime stability passed; OpenClawLauncher.exe short launch returned started_without_import_crash.
+- 下一步：Commit and push the release-candidate update, then tag and publish v2026.04.5 on GitHub and verify the public latest feed.

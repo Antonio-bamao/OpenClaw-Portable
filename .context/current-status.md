@@ -123,3 +123,12 @@
 - Guarded: added `tests/test_build_launcher_script.py` so future launcher builds keep the PyNaCl/CFFI runtime dependency included.
 - Verified locally: rebuilt `dist\OpenClaw-Portable`, confirmed `_internal\_cffi_backend.cp312-win_amd64.pyd` exists, short-launched `OpenClawLauncher.exe` without the import-time crash, and `python -m unittest discover -s tests` passed `163` tests.
 - Current release note: this fix is in local source/build state and still needs a deliberate next release/tag if it should replace the already-published `v2026.04.4` public artifact.
+
+### 2026-04-17 v2026.04.5 Release-Candidate Prep
+
+- Completed: bumped root `version.json` to `v2026.04.5` with build date `2026-04-17`, rebuilt signed release assets, and generated `dist\release\OpenClaw-Portable-v2026.04.5.zip` plus `dist\release\update.json`.
+- Included fix: this hotfix release candidate includes commit `6710fd3` (`fix: include cffi backend in launcher build`) so packaged launcher builds bundle `_cffi_backend` and avoid the previous import-time crash.
+- Verified: `python -m unittest discover -s tests` passed `163` tests; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 8` passed with `558.73MB / 25840` files and no warnings; `dist\OpenClaw-Portable\_internal\_cffi_backend.cp312-win_amd64.pyd` exists; short-launching `OpenClawLauncher.exe` returned `started_without_import_crash`.
+- Verified delivery gate: `python scripts\verify-delivery-flow.py --package-root dist\OpenClaw-Portable --release-dir dist\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\delivery-flow-gate-v2026.04.5.json` returned `status=pending` with package audit, release assets, and runtime stability passed. Runtime cold start was `25.12s`, restart was `23.11s`, max was `25.12s`, average was `24.12s`.
+- Current release note: assets are locally ready for publication, but Git tag and GitHub Release still need to be created and verified.
+- Remaining external validation: real Feishu/WeChat/QQ/WeCom credential E2E and multi-engine AV/SmartScreen evidence remain pending.

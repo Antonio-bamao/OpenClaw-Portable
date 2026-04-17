@@ -140,3 +140,10 @@
 - Verified: `dist\release\OpenClaw-Portable-v2026.04.3.zip` and `dist\release\update.json` exist locally; local and D-drive delivery gates pass all non-external checks, with D-drive runtime cold `35.75s` and restart `22.23s`.
 - Completed: published `v2026.04.3` as a GitHub Release with `OpenClaw-Portable-v2026.04.3.zip` and `update.json`; the public latest feed now resolves to `v2026.04.3`.
 - Next: collect external platform and AV/SmartScreen evidence. No local release-packaging action is pending for `v2026.04.3`.
+
+## 2026-04-17 v2026.04.5 Hotfix Release-Candidate Update
+
+- Completed: prepared a local `v2026.04.5` hotfix release candidate so the public artifact can include the packaged-launcher `_cffi_backend` fix from commit `6710fd3`.
+- Verified: `dist\release\OpenClaw-Portable-v2026.04.5.zip` and `dist\release\update.json` exist locally; `update.json` points to the `v2026.04.5` GitHub Release asset URL.
+- Verified: full tests passed at `163` tests, portable package audit passed at `558.73MB / 25840` files, the packaged `_cffi_backend.cp312-win_amd64.pyd` exists, short-launching the EXE did not reproduce the import crash, and the local delivery gate passed package audit, release assets, and runtime stability.
+- Next: commit and push the `v2026.04.5` version/context update, create the annotated `v2026.04.5` tag, publish the GitHub Release assets, and verify the public latest feed.
