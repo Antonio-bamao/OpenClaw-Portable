@@ -162,3 +162,10 @@
 - Delivered: WeChat help button opens packaged `setup-wechat.html`; QQ help button opens packaged `setup-qq.html`; WeChat login completion messaging now explicitly tells the user to click `启用微信`; QQ packaged-runtime failure now renders as `缺少扩展` instead of a generic unknown state.
 - Verified: focused launcher/service/controller verification passed `58` tests; full `python -m unittest discover -s tests` passed `169` tests; rebuilt local `dist\OpenClaw-Portable` includes both help pages and still passes package audit plus EXE short-launch smoke.
 - Next: if this UX pass should ship publicly, prepare the next release/tag; otherwise keep moving on real WeChat QR and QQ credential E2E when account inputs are available.
+
+## 2026-04-18 WeChat / QQ Real Onboarding Update
+
+- Completed: extended the launcher-owned channel flow so QQ enable performs real onboarding and WeChat has an explicit post-QR confirmation step.
+- Delivered: `SocialChannelService` now exposes QQ onboarding commands plus credential fingerprint tracking; `LauncherController.enable_qq_channel()` validates, runs onboarding on first enable for a credential set, keeps QQ disabled on command failure, and only skips onboarding when the saved credential fingerprint matches. The launcher UI/app now exposes `确认已扫码` and routes it through `confirm_wechat_channel_login()`.
+- Verified: focused social/controller/app/UI verification passed `63` tests; full `python -m unittest discover -s tests` passed `174` tests; rebuilt local `dist\OpenClaw-Portable` passed package audit at `558.74MB / 25841` files; packaged EXE short-launch smoke still returned `started_without_import_crash`.
+- Next: use real QQ Open Platform credentials and a real WeChat QR login to collect E2E evidence, or cut the next public release if this launcher-owned onboarding behavior should ship broadly.

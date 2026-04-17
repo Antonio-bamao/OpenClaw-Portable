@@ -158,3 +158,12 @@
 - Verified: `python -m unittest tests.test_social_channel_service tests.test_launcher_bootstrap tests.test_launcher_app tests.test_launcher_controller -v` passed `58` tests; `python -m unittest discover -s tests` passed `169` tests.
 - Packaged smoke: rebuilt local `dist\OpenClaw-Portable`; `dist\OpenClaw-Portable\assets\guide\setup-wechat.html` and `dist\OpenClaw-Portable\assets\guide\setup-qq.html` both exist; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` passed at `558.74MB / 25841` files with no warnings; short-launching `OpenClawLauncher.exe` returned `started_without_import_crash`.
 - Current release note: this UX hardening is in local source and rebuilt dist, but still needs a deliberate next release if it should become the public downloadable artifact after `v2026.04.5`.
+
+### 2026-04-18 WeChat / QQ Real Onboarding Hardening
+
+- Completed: moved the launcher-owned QQ flow one step closer to real runtime onboarding and added an explicit WeChat login confirmation action.
+- Delivered: QQ enable now runs the documented `openclaw channels add --channel qqbot --token "AppID:AppSecret"` flow through the existing command runner before the launcher marks the channel enabled; QQ stores a credential fingerprint so unchanged credentials do not rerun onboarding, while changed credentials clear the prior onboarding marker. WeChat now exposes `确认已扫码`, which immediately refreshes runtime login state instead of relying only on passive refresh.
+- Delivered: QQ onboarding failures now surface as `enable_failed` launcher state and keep the channel disabled; the WeChat confirm action is wired through the existing background-action path and included in the rebuilt packaged launcher UI.
+- Verified: `python -m unittest tests.test_social_channel_service tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v` passed `63` tests; `python -m unittest discover -s tests` passed `174` tests.
+- Packaged smoke: `scripts\build-launcher.ps1` rebuilt local `dist\OpenClaw-Portable`; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` passed at `558.74MB / 25841` files with no warnings; short-launching `dist\OpenClaw-Portable\OpenClawLauncher.exe` returned `started_without_import_crash`.
+- Current release note: this real-onboarding hardening is present in local source and rebuilt dist only; GitHub latest remains `v2026.04.5` until a new release is prepared and published.
