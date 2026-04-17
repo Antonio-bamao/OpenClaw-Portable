@@ -148,4 +148,5 @@
 - Delivered: QQ runtime projection now also exports `QQBOT_APP_ID` and `QQBOT_CLIENT_SECRET`, matching the OpenClaw QQ Bot docs' env fallback while preserving the existing config patch.
 - Verified: `python -m unittest tests.test_social_channel_service -v` passed `7` tests; `python -m unittest tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v` passed `47` tests; `python -m unittest discover -s tests` passed `165` tests.
 - Verified package/runtime evidence: both source runtime and current dist contain `runtime\openclaw\dist\extensions\qqbot\openclaw.plugin.json`.
-- Current release note: this is a source-level integration hardening after `v2026.04.5`; a new package/release is still needed if the change should ship publicly.
+- Packaged smoke: rebuilt local `dist\OpenClaw-Portable` with `scripts\build-launcher.ps1`; `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` passed at `558.73MB / 25839` files with no warnings; short-launching `OpenClawLauncher.exe` returned `started_without_import_crash`.
+- Current release note: this hardening is committed and present in the local rebuilt dist, but a new public package/release is still needed if it should ship beyond this machine.

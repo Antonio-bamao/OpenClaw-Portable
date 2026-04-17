@@ -153,5 +153,5 @@
 
 - Completed: strengthened the existing launcher-first WeChat and QQ channel implementation.
 - Delivered: WeChat launcher state can now refresh from likely OpenClaw Weixin runtime status files and recognize logged-in QR state; QQ validation now checks for the bundled `qqbot` runtime extension when a real runtime tree is present; QQ projection now passes `QQBOT_APP_ID` and `QQBOT_CLIENT_SECRET` runtime env vars in addition to the existing config patch.
-- Verified: targeted social/controller/app/UI tests passed, and full `python -m unittest discover -s tests` passed `165` tests.
-- Next: rebuild and smoke the packaged launcher if this hardening should be tested through `dist\OpenClaw-Portable`, then cut a new release only if the public artifact must include it.
+- Verified: targeted social/controller/app/UI tests passed, full `python -m unittest discover -s tests` passed `165` tests, local `dist\OpenClaw-Portable` was rebuilt, package audit passed, and EXE short-launch smoke passed.
+- Next: cut a new release only if the public artifact must include this WeChat / QQ hardening; otherwise continue with real WeChat QR and QQ Open Platform credential E2E when those accounts are available.

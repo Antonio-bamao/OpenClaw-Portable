@@ -468,3 +468,10 @@
 - 结果：Launcher WeChat state can move forward after QR/login status is written by runtime, and QQ enable/test now catches missing bundled runtime support while passing credentials through supported env vars.
 - 验证：python -m unittest tests.test_social_channel_service -v passed 7 tests; python -m unittest tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v passed 47 tests; python -m unittest discover -s tests passed 165 tests; qqbot openclaw.plugin.json exists in both source runtime and current dist.
 - 下一步：Rebuild and smoke dist if this hardening should be exercised through the packaged EXE; cut a new release only if the public artifact must include it.
+
+## 2026-04-17｜Rebuild packaged launcher for WeChat and QQ hardening
+- 目标：Rebuild packaged launcher for WeChat and QQ hardening
+- 动作：Ran scripts\\build-launcher.ps1 after the WeChat/QQ integration hardening commit, then audited the rebuilt portable package and short-launched OpenClawLauncher.exe.
+- 结果：Local dist\\OpenClaw-Portable now contains the WeChat/QQ hardening changes and remains smoke-usable.
+- 验证：build-launcher.ps1 completed successfully; audit-portable-package passed at 558.73MB / 25839 files with no warnings; packaged EXE short launch returned started_without_import_crash.
+- 下一步：Create a new public release only if this hardening should ship externally; otherwise wait for real WeChat QR and QQ Open Platform credentials for E2E.
