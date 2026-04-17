@@ -148,3 +148,10 @@
 - Verified: full tests passed at `163` tests, portable package audit passed at `558.73MB / 25840` files, the packaged `_cffi_backend.cp312-win_amd64.pyd` exists, short-launching the EXE did not reproduce the import crash, and the local delivery gate passed package audit, release assets, and runtime stability.
 - Completed: committed and pushed the `v2026.04.5` version/context update, created and pushed the annotated `v2026.04.5` tag, published the GitHub Release assets, verified the public latest feed resolves to `v2026.04.5`, and verified the public zip URL returns HTTP `200`.
 - Next: collect external platform credential E2E evidence and multi-engine AV/SmartScreen evidence when available. No local release-packaging action is pending for `v2026.04.5`.
+
+## 2026-04-17 WeChat / QQ Integration Hardening Update
+
+- Completed: strengthened the existing launcher-first WeChat and QQ channel implementation.
+- Delivered: WeChat launcher state can now refresh from likely OpenClaw Weixin runtime status files and recognize logged-in QR state; QQ validation now checks for the bundled `qqbot` runtime extension when a real runtime tree is present; QQ projection now passes `QQBOT_APP_ID` and `QQBOT_CLIENT_SECRET` runtime env vars in addition to the existing config patch.
+- Verified: targeted social/controller/app/UI tests passed, and full `python -m unittest discover -s tests` passed `165` tests.
+- Next: rebuild and smoke the packaged launcher if this hardening should be tested through `dist\OpenClaw-Portable`, then cut a new release only if the public artifact must include it.

@@ -141,3 +141,11 @@
 - Verified public zip access: `curl.exe -L -I` against the `v2026.04.5` zip URL returned HTTP `200`.
 - Current local artifact state: `dist\OpenClaw-Portable` and `dist\release` are present for `v2026.04.5`; `dist\release` now mirrors the public release assets.
 - Remaining external validation: real Feishu/WeChat/QQ/WeCom credential E2E and multi-engine AV/SmartScreen evidence remain pending.
+
+### 2026-04-17 WeChat / QQ Integration Hardening
+
+- Completed: tightened the launcher-first WeChat / QQ channel slice without requiring real platform credentials. WeChat now refreshes launcher state from likely OpenClaw Weixin runtime status files, so a successful QR/login status can move the launcher from `待扫码` to `待启用` or `已启用`. QQ now refuses enable/test when a real packaged OpenClaw runtime is present but the bundled `qqbot` extension is missing.
+- Delivered: QQ runtime projection now also exports `QQBOT_APP_ID` and `QQBOT_CLIENT_SECRET`, matching the OpenClaw QQ Bot docs' env fallback while preserving the existing config patch.
+- Verified: `python -m unittest tests.test_social_channel_service -v` passed `7` tests; `python -m unittest tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v` passed `47` tests; `python -m unittest discover -s tests` passed `165` tests.
+- Verified package/runtime evidence: both source runtime and current dist contain `runtime\openclaw\dist\extensions\qqbot\openclaw.plugin.json`.
+- Current release note: this is a source-level integration hardening after `v2026.04.5`; a new package/release is still needed if the change should ship publicly.

@@ -229,6 +229,8 @@ class SocialChannelService:
     def validate_qq_config(self, config: QqChannelConfig) -> ChannelValidationResult:
         if not config.app_id.strip() or not config.app_secret.strip():
             return ChannelValidationResult(False, "invalid_config", "请填写 QQ Bot 的 AppID 和 AppSecret。")
+        if not self.qq_runtime_plugin_available():
+            return ChannelValidationResult(False, "missing_runtime_plugin", "当前便携包缺少内置 QQ Bot 扩展，请重新安装或更新 OpenClaw Portable。")
         return ChannelValidationResult(True, "pending_enable", "", self._utc_now_iso())
 
     def validate_wecom_config(self, config: WecomChannelConfig) -> ChannelValidationResult:
@@ -256,20 +258,27 @@ class SocialChannelService:
         )
 
     def build_qq_runtime_projection(self, config: QqChannelConfig) -> SocialRuntimeProjection:
+        app_id = config.app_id.strip()
+        app_secret = config.app_secret.strip()
         return SocialRuntimeProjection(
-            runtime_env={},
+            runtime_env={
+                "QQBOT_APP_ID": app_id,
+                "QQBOT_CLIENT_SECRET": app_secret,
+            }
+            if app_id and app_secret
+            else {},
             runtime_config_patch={
                 "channels": {
                     "qqbot": {
                         "defaultAccount": "default",
                         "enabled": config.enabled,
-                        "appId": config.app_id,
-                        "clientSecret": config.app_secret,
+                        "appId": app_id,
+                        "clientSecret": app_secret,
                         "accounts": {
                             "default": {
                                 "enabled": config.enabled,
-                                "appId": config.app_id,
-                                "clientSecret": config.app_secret,
+                                "appId": app_id,
+                                "clientSecret": app_secret,
                             }
                         },
                     }
@@ -296,6 +305,7 @@ class SocialChannelService:
         return (self.build_wechat_view_state(), self.build_qq_view_state(), self.build_wecom_view_state())
 
     def build_wechat_view_state(self) -> WechatChannelState:
+        self.refresh_wechat_runtime_status()
         config = self.load_wechat_config()
         status = self.load_wechat_status()
         label, detail = self._status_text(
@@ -316,6 +326,26 @@ class SocialChannelService:
             status_detail=detail,
             last_login_at=config.last_login_at,
             last_error=status.last_error,
+        )
+
+    def refresh_wechat_runtime_status(self) -> None:
+        runtime_status = self._load_wechat_runtime_status()
+        if not runtime_status or not self._runtime_status_is_logged_in(runtime_status):
+            return
+        config = self.load_wechat_config()
+        last_login_at = str(
+            runtime_status.get("lastLoginAt")
+            or runtime_status.get("last_login_at")
+            or runtime_status.get("loggedInAt")
+            or config.last_login_at
+            or self._utc_now_iso()
+        )
+        self.save_wechat_config(replace(config, installed=True, last_login_at=last_login_at))
+        self.save_wechat_status(
+            SocialChannelStatus(
+                state="enabled" if config.enabled else "pending_enable",
+                last_action_at=self._utc_now_iso(),
+            )
         )
 
     def build_qq_view_state(self) -> QqChannelState:
@@ -432,3 +462,35 @@ class SocialChannelService:
 
     def _utc_now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def qq_runtime_plugin_available(self) -> bool:
+        openclaw_dir = self.paths.runtime_dir / "openclaw"
+        if not openclaw_dir.exists():
+            return True
+        candidates = (
+            openclaw_dir / "dist" / "extensions" / "qqbot" / "openclaw.plugin.json",
+            openclaw_dir / "dist" / "extensions" / "qqbot" / "index.js",
+            openclaw_dir / "dist" / "extensions" / "qqbot",
+        )
+        return any(candidate.exists() for candidate in candidates)
+
+    def _load_wechat_runtime_status(self) -> dict[str, object]:
+        candidates = (
+            self.paths.state_dir / "channels" / "openclaw-weixin" / "status.json",
+            self.paths.state_dir / "channels" / "weixin" / "status.json",
+            self.paths.state_dir / "openclaw-weixin" / "status.json",
+        )
+        for candidate in candidates:
+            payload = self._load_json_object(candidate)
+            if payload:
+                return payload
+        return {}
+
+    def _runtime_status_is_logged_in(self, payload: dict[str, object]) -> bool:
+        for key in ("loggedIn", "authenticated", "connected", "ready"):
+            value = payload.get(key)
+            if isinstance(value, bool) and value:
+                return True
+        raw_state = str(payload.get("state") or payload.get("status") or payload.get("connectionState") or "").strip()
+        normalized = raw_state.lower().replace("-", "_")
+        return normalized in {"logged_in", "connected", "ready", "online", "authenticated"}

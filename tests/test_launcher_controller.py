@@ -469,6 +469,7 @@ class LauncherControllerTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw" / "dist" / "extensions" / "qqbot").mkdir(parents=True)
             runtime_adapter = FakeRuntimeAdapter()
             controller = LauncherController(
                 paths,

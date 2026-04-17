@@ -461,3 +461,10 @@
 - 结果：v2026.04.5 is now the public latest GitHub Release and includes the packaged launcher CFFI backend hotfix.
 - 验证：GitHub Release assets list shows OpenClaw-Portable-v2026.04.5.zip at 205700820 bytes and update.json at 251 bytes; public latest update.json resolves to v2026.04.5; curl.exe -L -I against the zip URL returned HTTP 200.
 - 下一步：Collect external channel E2E and multi-engine AV/SmartScreen evidence when credentials or third-party validation inputs are available.
+
+## 2026-04-17｜Harden WeChat and QQ launcher channel integration
+- 目标：Harden WeChat and QQ launcher channel integration
+- 动作：Added TDD coverage for WeChat runtime login-status refresh, QQ bundled-extension validation, and QQ env projection; updated SocialChannelService to read likely OpenClaw Weixin status files, validate packaged qqbot extension presence, and project QQBOT_APP_ID / QQBOT_CLIENT_SECRET.
+- 结果：Launcher WeChat state can move forward after QR/login status is written by runtime, and QQ enable/test now catches missing bundled runtime support while passing credentials through supported env vars.
+- 验证：python -m unittest tests.test_social_channel_service -v passed 7 tests; python -m unittest tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v passed 47 tests; python -m unittest discover -s tests passed 165 tests; qqbot openclaw.plugin.json exists in both source runtime and current dist.
+- 下一步：Rebuild and smoke dist if this hardening should be exercised through the packaged EXE; cut a new release only if the public artifact must include it.

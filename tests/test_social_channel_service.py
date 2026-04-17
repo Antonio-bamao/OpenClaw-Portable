@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import unittest
 import uuid
+import json
 from pathlib import Path
 
 from launcher.core.paths import PortablePaths
@@ -73,7 +74,41 @@ class SocialChannelServiceTests(unittest.TestCase):
             self.assertEqual(qqbot["appId"], "123456")
             self.assertEqual(qqbot["clientSecret"], "secret")
             self.assertTrue(qqbot["accounts"]["default"]["enabled"])
-            self.assertEqual(projection.runtime_env, {})
+            self.assertEqual(projection.runtime_env["QQBOT_APP_ID"], "123456")
+            self.assertEqual(projection.runtime_env["QQBOT_CLIENT_SECRET"], "secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_qq_validation_rejects_package_when_bundled_extension_is_missing(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw").mkdir(parents=True)
+            service = SocialChannelService(paths)
+
+            result = service.validate_qq_config(QqChannelConfig(app_id="123456", app_secret="secret"))
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.state, "missing_runtime_plugin")
+            self.assertIn("QQ Bot 扩展", result.error_message)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_refresh_marks_pending_enable_when_runtime_reports_logged_in(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            service = SocialChannelService(paths)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(json.dumps({"loggedIn": True, "lastLoginAt": "2026-04-17T10:00:00Z"}), encoding="utf-8")
+
+            service.refresh_wechat_runtime_status()
+            state = service.build_wechat_view_state()
+
+            self.assertEqual(state.status_label, "待启用")
+            self.assertEqual(state.last_login_at, "2026-04-17T10:00:00Z")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
