@@ -12,13 +12,19 @@ BORDER = "rgba(19, 37, 58, 0.08)"
 
 
 def preferred_font() -> QFont:
-    font = QFont("Segoe UI Variable Text")
-    if font.family() == "Segoe UI Variable Text":
-        font.setPointSize(10)
-        return font
-    fallback = QFont("Segoe UI")
-    fallback.setPointSize(10)
-    return fallback
+    font = QFont()
+    font.setFamilies(
+        [
+            "Segoe UI Variable Text",
+            "Microsoft YaHei UI",
+            "Microsoft YaHei",
+            "Segoe UI",
+            "Noto Sans SC",
+            "Noto Sans CJK SC",
+        ]
+    )
+    font.setPointSize(10)
+    return font
 
 
 def app_stylesheet() -> str:
@@ -58,8 +64,20 @@ def app_stylesheet() -> str:
             font-weight: 600;
             letter-spacing: 0.5px;
         }}
-        QLabel#HeroTitle {{
+        QLabel#DisplayTitle {{
             font-size: 34px;
+            font-weight: 700;
+        }}
+        QLabel#HeroStatusTitle {{
+            font-size: 28px;
+            font-weight: 700;
+        }}
+        QLabel#SectionTitle {{
+            font-size: 18px;
+            font-weight: 700;
+        }}
+        QLabel#SectionStatus {{
+            font-size: 14px;
             font-weight: 700;
         }}
         QLabel#HeroSubtitle, QLabel#MutedText {{
@@ -115,7 +133,7 @@ def app_stylesheet() -> str:
             background: white;
             padding: 0 14px;
         }}
-        QTextEdit {{
+        QTextEdit, QPlainTextEdit {{
             border-radius: 18px;
             border: 1px solid rgba(19, 37, 58, 0.12);
             background: white;

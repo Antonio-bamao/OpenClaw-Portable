@@ -8,6 +8,7 @@ import socket
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 from launcher.core.config_store import LauncherConfig
 from launcher.core.paths import PortablePaths
@@ -53,6 +54,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         self._runtime_config_patch = runtime_config_patch or {}
         self._runtime_env = runtime_env or {}
         self._openclaw_runtime_dir = self._resolve_openclaw_runtime_dir()
+        self._ensure_root_runtime_dependencies()
         self._apply_runtime_config_patch()
         self._last_state = "ready"
 
@@ -76,6 +78,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
                 encoding="utf-8",
                 errors="replace",
                 env=self.build_environment(),
+                creationflags=self._startup_creationflags(),
             )
         self._wait_until_ready()
         self._last_state = "running"
@@ -124,10 +127,15 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             return None
         return max(0, int(time.monotonic() - self._started_at_monotonic))
 
+    def _startup_creationflags(self) -> int:
+        if os.name != "nt":
+            return 0
+        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
     def webui_url(self) -> str:
         if not self._config or not self._port_resolution:
             raise RuntimeError("Runtime must be prepared before URL can be resolved")
-        return f"http://{self._config.bind_host}:{self._port_resolution.port + 2}"
+        return f"http://{self._config.bind_host}:{self._port_resolution.port}/#token={quote(self._webui_token(), safe='')}"
 
     def healthcheck(self) -> RuntimeHealth:
         if not self._config or not self._port_resolution:
@@ -161,7 +169,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             "OPENCLAW_GATEWAY_PORT": str(self._port_resolution.port),
             "OPENCLAW_HOME": str(self._paths.state_dir),
             "OPENCLAW_STATE_DIR": str(self._paths.state_dir),
-            "OPENCLAW_CONFIG_PATH": str(self._paths.config_file),
+            "OPENCLAW_CONFIG_PATH": str(self._paths.runtime_config_file),
             "OPENCLAW_WORKSPACE_DIR": str(self._paths.workspace_dir),
             "OPENCLAW_LOG_DIR": str(self._paths.logs_dir),
             "OPENCLAW_CACHE_DIR": str(self._paths.cache_dir),
@@ -285,17 +293,12 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
 
     def _wait_until_ready(self) -> None:
         deadline = time.monotonic() + self.startup_timeout_seconds
-        consecutive_successes = 0
         while time.monotonic() < deadline:
             if self._process and self._process.poll() is not None:
                 raise RuntimeError("OpenClaw runtime exited before becoming healthy")
             health = self.healthcheck()
             if health.ok:
-                consecutive_successes += 1
-                if consecutive_successes >= 2:
-                    return
-            else:
-                consecutive_successes = 0
+                return
             time.sleep(self.health_poll_interval_seconds)
         raise TimeoutError("OpenClaw runtime did not become healthy in time")
 
@@ -312,16 +315,29 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             return
         current_config = self._load_runtime_config()
         merged_config = self._deep_merge(current_config, self._runtime_config_patch)
-        self._paths.config_file.write_text(
+        self._paths.runtime_config_file.write_text(
             json.dumps(merged_config, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
+    def _webui_token(self) -> str:
+        runtime_config = self._load_runtime_config()
+        gateway = runtime_config.get("gateway")
+        if not isinstance(gateway, dict):
+            return "uclaw"
+        auth = gateway.get("auth")
+        if not isinstance(auth, dict):
+            return "uclaw"
+        token = auth.get("token")
+        if not isinstance(token, str) or not token.strip():
+            return "uclaw"
+        return token.strip()
+
     def _load_runtime_config(self) -> dict[str, object]:
-        if not self._paths or not self._paths.config_file.exists():
+        if not self._paths or not self._paths.runtime_config_file.exists():
             return {}
         try:
-            payload = json.loads(self._paths.config_file.read_text(encoding="utf-8"))
+            payload = json.loads(self._paths.runtime_config_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {}
         if not isinstance(payload, dict):
@@ -337,6 +353,55 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
                 continue
             merged[key] = value
         return merged
+
+    def _ensure_root_runtime_dependencies(self) -> None:
+        openclaw_dir = self._openclaw_dir()
+        extensions_dir = openclaw_dir / "dist" / "extensions"
+        if not extensions_dir.exists():
+            return
+        target_node_modules_dir = openclaw_dir / "node_modules"
+        visited_packages: set[str] = set()
+        for extension_dir in extensions_dir.iterdir():
+            node_modules_dir = extension_dir / "node_modules"
+            if not node_modules_dir.exists():
+                continue
+            for package_dir in _iter_node_modules_package_dirs(node_modules_dir):
+                self._bridge_runtime_dependency_tree(
+                    package_dir,
+                    source_node_modules_dir=node_modules_dir,
+                    target_node_modules_dir=target_node_modules_dir,
+                    visited_packages=visited_packages,
+                )
+
+    def _bridge_runtime_dependency_tree(
+        self,
+        package_dir: Path,
+        *,
+        source_node_modules_dir: Path,
+        target_node_modules_dir: Path,
+        visited_packages: set[str],
+    ) -> None:
+        package_name = _package_name_for_dir(package_dir)
+        if not package_name or package_name in visited_packages:
+            return
+        visited_packages.add(package_name)
+
+        target_dir = _node_modules_package_dir(target_node_modules_dir, package_name)
+        if not target_dir.exists():
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(package_dir, target_dir)
+
+        package_manifest = _load_package_manifest(package_dir)
+        for dependency_name in _runtime_dependency_names(package_manifest):
+            dependency_dir = _resolve_dependency_dir(package_dir, source_node_modules_dir, dependency_name)
+            if dependency_dir is None:
+                continue
+            self._bridge_runtime_dependency_tree(
+                dependency_dir,
+                source_node_modules_dir=source_node_modules_dir,
+                target_node_modules_dir=target_node_modules_dir,
+                visited_packages=visited_packages,
+            )
 
 
 def _is_removable_path(path: Path) -> bool:
@@ -381,3 +446,86 @@ def _copy_runtime_tree(source_dir: Path, target_dir: Path) -> None:
             raise RuntimeError(f"Failed to stage OpenClaw runtime cache with robocopy: {completed.stderr.strip()}")
         return
     shutil.copytree(source_dir, target_dir)
+
+
+def _find_node_modules_dir(package_dir: Path) -> Path | None:
+    current = package_dir.parent
+    while True:
+        if current.name == "node_modules":
+            return current
+        if current == current.parent:
+            return None
+        current = current.parent
+
+
+def _iter_node_modules_package_dirs(node_modules_dir: Path) -> tuple[Path, ...]:
+    package_dirs: list[Path] = []
+    for child in node_modules_dir.iterdir():
+        if not child.is_dir():
+            continue
+        if child.name.startswith("@"):
+            for scoped_child in child.iterdir():
+                if scoped_child.is_dir():
+                    package_dirs.append(scoped_child)
+            continue
+        package_dirs.append(child)
+    return tuple(package_dirs)
+
+
+def _package_name_for_dir(package_dir: Path) -> str | None:
+    manifest = _load_package_manifest(package_dir)
+    package_name = manifest.get("name")
+    if isinstance(package_name, str) and package_name.strip():
+        return package_name.strip()
+    package_leaf = package_dir.name
+    parent_name = package_dir.parent.name
+    if parent_name.startswith("@"):
+        return f"{parent_name}/{package_leaf}"
+    if package_leaf:
+        return package_leaf
+    return None
+
+
+def _node_modules_package_dir(node_modules_dir: Path, package_name: str) -> Path:
+    if package_name.startswith("@"):
+        scope, leaf = package_name.split("/", 1)
+        return node_modules_dir / scope / leaf
+    return node_modules_dir / package_name
+
+
+def _load_package_manifest(package_dir: Path) -> dict[str, object]:
+    manifest_path = package_dir / "package.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _runtime_dependency_names(package_manifest: dict[str, object]) -> tuple[str, ...]:
+    runtime_sections = ("dependencies", "optionalDependencies")
+    names: list[str] = []
+    for section_name in runtime_sections:
+        section = package_manifest.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        for dependency_name in section:
+            if isinstance(dependency_name, str) and dependency_name.strip():
+                names.append(dependency_name.strip())
+    return tuple(names)
+
+
+def _resolve_dependency_dir(package_dir: Path, source_node_modules_dir: Path, dependency_name: str) -> Path | None:
+    nested_node_modules_dir = package_dir / "node_modules"
+    candidates = (
+        _node_modules_package_dir(nested_node_modules_dir, dependency_name),
+        _node_modules_package_dir(source_node_modules_dir, dependency_name),
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None

@@ -80,7 +80,7 @@ class SetupWizardWindow(QMainWindow):
         shell_layout.setContentsMargins(24, 24, 24, 24)
         shell_layout.setSpacing(16)
 
-        shell_layout.addWidget(make_label("五步完成首启配置", "HeroTitle", size=18, weight=700))
+        shell_layout.addWidget(make_label("五步完成首启配置", "SectionTitle", size=18, weight=700))
         self.caption_label = make_label("每一步都只解决一件事，避免把太多技术细节一次性丢给用户。", "MutedText")
         shell_layout.addWidget(self.caption_label)
 
@@ -119,7 +119,7 @@ class SetupWizardWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setSpacing(16)
-        layout.addWidget(make_label(self._steps[0].title, "HeroTitle", size=18, weight=700))
+        layout.addWidget(make_label(self._steps[0].title, "SectionTitle", size=18, weight=700))
         layout.addWidget(make_label(self._steps[0].description, "MutedText"))
 
         form = QFormLayout()
@@ -137,7 +137,7 @@ class SetupWizardWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setSpacing(16)
-        layout.addWidget(make_label(self._steps[1].title, "HeroTitle", size=18, weight=700))
+        layout.addWidget(make_label(self._steps[1].title, "SectionTitle", size=18, weight=700))
         layout.addWidget(make_label(self._steps[1].description, "MutedText"))
 
         self.provider_combo = QComboBox()
@@ -151,7 +151,7 @@ class SetupWizardWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setSpacing(16)
-        layout.addWidget(make_label(self._steps[2].title, "HeroTitle", size=18, weight=700))
+        layout.addWidget(make_label(self._steps[2].title, "SectionTitle", size=18, weight=700))
         layout.addWidget(make_label(self._steps[2].description, "MutedText"))
 
         self.api_key_input = QLineEdit()
@@ -165,7 +165,7 @@ class SetupWizardWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setSpacing(16)
-        layout.addWidget(make_label(self._steps[3].title, "HeroTitle", size=18, weight=700))
+        layout.addWidget(make_label(self._steps[3].title, "SectionTitle", size=18, weight=700))
         layout.addWidget(make_label(self._steps[3].description, "MutedText"))
 
         self.connection_output = QPlainTextEdit()
@@ -190,7 +190,7 @@ class SetupWizardWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setSpacing(16)
-        layout.addWidget(make_label(self._steps[4].title, "HeroTitle", size=18, weight=700))
+        layout.addWidget(make_label(self._steps[4].title, "SectionTitle", size=18, weight=700))
         layout.addWidget(make_label(self._steps[4].description, "MutedText"))
 
         summary = QLabel("配置文件将写入 state/openclaw.json，敏感信息写入 state/.env，随后准备进入主控制面板。")

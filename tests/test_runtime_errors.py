@@ -27,8 +27,9 @@ class RuntimeErrorMessageTests(unittest.TestCase):
     def test_openclaw_exited_before_ready_message_mentions_logs(self) -> None:
         message = format_runtime_error(RuntimeError("OpenClaw runtime exited before becoming healthy"))
 
-        self.assertIn("OpenClaw 启动后提前退出", message)
+        self.assertIn("OpenClaw 在启动阶段退出", message)
         self.assertIn("openclaw-runtime.err.log", message)
+        self.assertNotIn("API Key", message)
 
     def test_unknown_error_falls_back_to_original_message(self) -> None:
         message = format_runtime_error(ValueError("custom failure"))

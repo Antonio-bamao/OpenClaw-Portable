@@ -5,7 +5,7 @@ import webbrowser
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
@@ -26,7 +26,7 @@ class BackgroundTaskSignals(QObject):
 
 class OpenClawLauncherApplication:
     def __init__(self, project_root: Path | None = None, node_command: str = "node", runtime_mode: str | None = None) -> None:
-        self.project_root = project_root or Path(__file__).resolve().parent.parent
+        self.project_root = project_root or self._default_project_root()
         self.paths = PortablePaths.for_root(self.project_root)
         selected_runtime_mode = resolve_runtime_mode(self.paths, requested_mode=runtime_mode)
         self.controller = LauncherController(self.paths, node_command=node_command, runtime_mode=selected_runtime_mode)
@@ -39,7 +39,16 @@ class OpenClawLauncherApplication:
         self._background_executor = ThreadPoolExecutor(max_workers=1)
         self._background_signals = BackgroundTaskSignals()
         self._background_signals.completed.connect(self._finish_background_action)
+        self._runtime_poll_timer = QTimer()
+        self._runtime_poll_timer.setInterval(1000)
+        self._runtime_poll_timer.timeout.connect(self._poll_runtime_state)
         self.app.aboutToQuit.connect(self._shutdown_background_executor)
+
+    @staticmethod
+    def _default_project_root() -> Path:
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve().parent
+        return Path(__file__).resolve().parent.parent
 
     def run(self) -> int:
         route = LauncherBootstrap(self.paths).initial_route()
@@ -95,6 +104,8 @@ class OpenClawLauncherApplication:
         self.main_window.apply_wechat_channel_state(self.controller.load_wechat_channel_state())
         self.main_window.apply_qq_channel_state(self.controller.load_qq_channel_state())
         self.main_window.apply_wecom_channel_state(self.controller.load_wecom_channel_state())
+        self._refresh_runtime_console()
+        self._runtime_poll_timer.start()
         self.main_window.show()
         if self.wizard_window:
             self.wizard_window.hide()
@@ -106,6 +117,7 @@ class OpenClawLauncherApplication:
         self.wizard_window.show()
         if self.main_window:
             self.main_window.hide()
+        self._runtime_poll_timer.stop()
 
     def _complete_setup(self, config, sensitive) -> None:
         self.controller.configure(config, sensitive)
@@ -339,6 +351,68 @@ class OpenClawLauncherApplication:
                 self._apply_qq_channel_state(self.controller.load_qq_channel_state())
             if hasattr(self.controller, "load_wecom_channel_state"):
                 self._apply_wecom_channel_state(self.controller.load_wecom_channel_state())
+            self._refresh_runtime_console()
+
+    def _poll_runtime_state(self) -> None:
+        if not self.main_window:
+            return
+        self.main_window.apply_view_state(self.controller.load_view_state())
+        self._refresh_runtime_console()
+
+    def _refresh_runtime_console(self) -> None:
+        if not self.main_window or not hasattr(self.main_window, "apply_runtime_console"):
+            return
+        output = self._runtime_console_output()
+        summary = self._runtime_console_summary(output)
+        self.main_window.apply_runtime_console(summary, output)
+
+    def _runtime_console_output(self) -> str:
+        if not hasattr(self, "paths"):
+            return (
+                "启动后这里会实时显示 OpenClaw 输出。\n"
+                "看到 [gateway] ready 说明主服务起来了。\n"
+                "看到 ws client ready 说明飞书私聊链路已经连上。"
+            )
+        stdout_path = self.paths.logs_dir / "openclaw-runtime.out.log"
+        stderr_path = self.paths.logs_dir / "openclaw-runtime.err.log"
+        sections: list[str] = []
+        stdout_text = self._tail_text(stdout_path)
+        stderr_text = self._tail_text(stderr_path)
+        if stdout_text:
+            sections.append("[stdout]\n" + stdout_text)
+        if stderr_text:
+            sections.append("[stderr]\n" + stderr_text)
+        if sections:
+            return "\n\n".join(sections)
+        return (
+            "启动后这里会实时显示 OpenClaw 输出。\n"
+            "看到 [gateway] ready 说明主服务起来了。\n"
+            "看到 ws client ready 说明飞书私聊链路已经连上。"
+        )
+
+    def _tail_text(self, path: Path, *, max_chars: int = 12000) -> str:
+        if not path.exists():
+            return ""
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        if len(text) <= max_chars:
+            return text.strip()
+        return text[-max_chars:].strip()
+
+    def _runtime_console_summary(self, output: str) -> str:
+        if "ws client ready" in output:
+            return "Gateway 已就绪，飞书已连接"
+        if "WebSocket client started" in output:
+            return "Gateway 已就绪，飞书正在建立连接"
+        if "[gateway] ready" in output:
+            return "Gateway 已就绪"
+        if "[gateway] starting" in output or "starting HTTP server" in output:
+            return "正在启动 OpenClaw…"
+        if "RuntimeError" in output or "Error:" in output or "ERR_" in output:
+            return "启动失败，请查看下方错误日志"
+        return "等待启动日志…"
 
     def _show_pending_runtime_state(self, action: str) -> None:
         if self.main_window:

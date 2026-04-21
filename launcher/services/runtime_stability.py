@@ -124,6 +124,7 @@ class RuntimeVerificationPathsFactory:
             logs_dir=temp_root / "logs",
             cache_dir=temp_root / "cache",
             config_file=state_root / "openclaw.json",
+            runtime_config_file=state_root / "runtime" / "openclaw.json",
             env_file=state_root / ".env",
             provider_templates_dir=state_root / "provider-templates",
             workspace_dir=state_root / "workspace",
@@ -188,7 +189,7 @@ class RealRuntimeStabilityRunner:
             shutil.copytree(source_templates, paths.provider_templates_dir, dirs_exist_ok=True)
         source_config = package_root / "state" / "openclaw.json"
         if source_config.exists():
-            shutil.copy2(source_config, paths.config_file)
+            shutil.copy2(source_config, paths.runtime_config_file)
         source_env = package_root / "state" / ".env"
         if source_env.exists():
             shutil.copy2(source_env, paths.env_file)

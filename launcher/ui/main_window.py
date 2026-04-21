@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -8,7 +9,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -46,6 +49,8 @@ class OpenClawLauncherWindow(QMainWindow):
         self.restore_update_backup_button: QPushButton | None = None
         self.factory_reset_button: QPushButton | None = None
         self.reconfigure_button: QPushButton | None = None
+        self.runtime_console_status_label: QLabel | None = None
+        self.runtime_console_output: QPlainTextEdit | None = None
         self.feishu_app_id_input: QLineEdit | None = None
         self.feishu_app_secret_input: QLineEdit | None = None
         self.feishu_bot_name_input: QLineEdit | None = None
@@ -161,6 +166,14 @@ class OpenClawLauncherWindow(QMainWindow):
             f"{'离线模式已开启' if view_state.offline_mode else '已配置 API Key，可进入联调'}"
         )
 
+    def apply_runtime_console(self, status: str, output: str) -> None:
+        self.runtime_console_status_label.setText(status)
+        if self.runtime_console_output.toPlainText() == output:
+            return
+        self.runtime_console_output.setPlainText(output)
+        scrollbar = self.runtime_console_output.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
     def apply_feishu_channel_state(self, state: FeishuChannelState) -> None:
         self.feishu_app_id_input.setText(state.app_id)
         self.feishu_app_secret_input.setText(state.app_secret)
@@ -258,7 +271,7 @@ class OpenClawLauncherWindow(QMainWindow):
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(24, 24, 24, 24)
         control_layout.setSpacing(18)
-        control_layout.addWidget(make_label("主控制台", "HeroTitle", size=18, weight=700))
+        control_layout.addWidget(make_label("主控制台", "SectionTitle", size=18, weight=700))
         self.message_label = make_label(self.view_state.message, "MutedText")
         control_layout.addWidget(self.message_label)
         self.status_detail_label = make_label(self.view_state.status_detail, "MutedText")
@@ -317,13 +330,36 @@ class OpenClawLauncherWindow(QMainWindow):
 
         layout.addWidget(control_card)
 
+        console_card = QFrame()
+        console_card.setObjectName("SectionCard")
+        apply_card_shadow(console_card, blur_radius=24, offset_y=8)
+        console_layout = QVBoxLayout(console_card)
+        console_layout.setContentsMargins(24, 24, 24, 24)
+        console_layout.setSpacing(12)
+        console_layout.addWidget(make_label("启动日志", "SectionTitle", size=18, weight=700))
+        self.runtime_console_status_label = make_label("等待启动日志…", "SectionStatus", size=14, weight=700)
+        console_layout.addWidget(self.runtime_console_status_label)
+        self.runtime_console_output = QPlainTextEdit()
+        self.runtime_console_output.setReadOnly(True)
+        self.runtime_console_output.setMinimumHeight(220)
+        self.runtime_console_output.setPlainText(
+            "启动后这里会实时显示 OpenClaw 输出。\n"
+            "看到 [gateway] ready 说明主服务起来了。\n"
+            "看到 ws client ready 说明飞书私聊链路已经连上。"
+        )
+        console_font = QFont("Consolas")
+        console_font.setPointSize(10)
+        self.runtime_console_output.setFont(console_font)
+        console_layout.addWidget(self.runtime_console_output)
+        layout.addWidget(console_card)
+
         feishu_card = QFrame()
         feishu_card.setObjectName("SectionCard")
         apply_card_shadow(feishu_card, blur_radius=24, offset_y=8)
         feishu_layout = QVBoxLayout(feishu_card)
         feishu_layout.setContentsMargins(24, 24, 24, 24)
         feishu_layout.setSpacing(14)
-        feishu_layout.addWidget(make_label("飞书私聊渠道", "HeroTitle", size=18, weight=700))
+        feishu_layout.addWidget(make_label("飞书私聊渠道", "SectionTitle", size=18, weight=700))
         feishu_layout.addWidget(make_label("配置飞书应用凭据，测试通过后启用私聊 Bot。", "MutedText"))
 
         form = QGridLayout()
@@ -344,7 +380,7 @@ class OpenClawLauncherWindow(QMainWindow):
         form.addWidget(self.feishu_bot_name_input, 2, 1)
         feishu_layout.addLayout(form)
 
-        self.feishu_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.feishu_status_label = make_label("未配置", "SectionStatus", size=14, weight=700)
         self.feishu_status_detail_label = make_label(
             "填写 App ID 和 App Secret 后，先测试连接再启用飞书私聊。",
             "MutedText",
@@ -393,9 +429,9 @@ class OpenClawLauncherWindow(QMainWindow):
         wechat_layout = QVBoxLayout(wechat_card)
         wechat_layout.setContentsMargins(24, 24, 24, 24)
         wechat_layout.setSpacing(12)
-        wechat_layout.addWidget(make_label("微信 ClawBot", "HeroTitle", size=18, weight=700))
+        wechat_layout.addWidget(make_label("微信 ClawBot", "SectionTitle", size=18, weight=700))
         wechat_layout.addWidget(make_label("安装腾讯微信通道插件，扫码后用私聊连接 OpenClaw。", "MutedText"))
-        self.wechat_status_label = make_label("未安装", "HeroTitle", size=14, weight=700)
+        self.wechat_status_label = make_label("未安装", "SectionStatus", size=14, weight=700)
         self.wechat_status_detail_label = make_label("先安装微信插件，再打开扫码窗口完成登录。", "MutedText")
         wechat_layout.addWidget(self.wechat_status_label)
         wechat_layout.addWidget(self.wechat_status_detail_label)
@@ -425,7 +461,7 @@ class OpenClawLauncherWindow(QMainWindow):
         qq_layout = QVBoxLayout(qq_card)
         qq_layout.setContentsMargins(24, 24, 24, 24)
         qq_layout.setSpacing(12)
-        qq_layout.addWidget(make_label("QQ Bot", "HeroTitle", size=18, weight=700))
+        qq_layout.addWidget(make_label("QQ Bot", "SectionTitle", size=18, weight=700))
         qq_layout.addWidget(make_label("QQ 扩展已随包内置，填入开放平台 AppID 和 AppSecret 即可启用。", "MutedText"))
         qq_form = QGridLayout()
         qq_form.setHorizontalSpacing(12)
@@ -440,7 +476,7 @@ class OpenClawLauncherWindow(QMainWindow):
         qq_form.addWidget(make_label("AppSecret", "MetricLabel"), 1, 0)
         qq_form.addWidget(self.qq_app_secret_input, 1, 1)
         qq_layout.addLayout(qq_form)
-        self.qq_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.qq_status_label = make_label("未配置", "SectionStatus", size=14, weight=700)
         self.qq_status_detail_label = make_label("创建 QQ 机器人后，把 AppID 和 AppSecret 填到这里。", "MutedText")
         qq_layout.addWidget(self.qq_status_label)
         qq_layout.addWidget(self.qq_status_detail_label)
@@ -468,7 +504,7 @@ class OpenClawLauncherWindow(QMainWindow):
         wecom_layout = QVBoxLayout(wecom_card)
         wecom_layout.setContentsMargins(24, 24, 24, 24)
         wecom_layout.setSpacing(12)
-        wecom_layout.addWidget(make_label("企业微信", "HeroTitle", size=18, weight=700))
+        wecom_layout.addWidget(make_label("企业微信", "SectionTitle", size=18, weight=700))
         wecom_layout.addWidget(make_label("安装企业微信插件后，填入机器人凭据启用 WebSocket 通道。", "MutedText"))
         wecom_form = QGridLayout()
         wecom_form.setHorizontalSpacing(12)
@@ -483,7 +519,7 @@ class OpenClawLauncherWindow(QMainWindow):
         wecom_form.addWidget(make_label("Secret", "MetricLabel"), 1, 0)
         wecom_form.addWidget(self.wecom_secret_input, 1, 1)
         wecom_layout.addLayout(wecom_form)
-        self.wecom_status_label = make_label("未配置", "HeroTitle", size=14, weight=700)
+        self.wecom_status_label = make_label("未配置", "SectionStatus", size=14, weight=700)
         self.wecom_status_detail_label = make_label("先安装企业微信插件，再填写凭据启用。", "MutedText")
         wecom_layout.addWidget(self.wecom_status_label)
         wecom_layout.addWidget(self.wecom_status_detail_label)
@@ -538,4 +574,10 @@ class OpenClawLauncherWindow(QMainWindow):
         )
         layout.addStretch(1)
 
-        self.setCentralWidget(root)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(root)
+
+        self.setCentralWidget(scroll)

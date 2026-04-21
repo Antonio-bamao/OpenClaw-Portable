@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -110,7 +111,13 @@ class LauncherController:
     def load_feishu_channel_state(self) -> FeishuChannelState:
         if not self.store.is_first_run():
             self._refresh_feishu_runtime_status()
-        return self.feishu_channel_service.build_view_state()
+        state = self.feishu_channel_service.build_view_state()
+        if self.runtime_mode != "openclaw" and state.enabled and state.status_label == "待启用":
+            return replace(
+                state,
+                status_detail="当前仍在 Node mock runtime。测试连接只校验 App 凭据；切到真实 OpenClaw runtime 并启动后，才能建立飞书私聊链路。",
+            )
+        return state
 
     def save_feishu_channel(self, app_id: str, app_secret: str, bot_app_name: str = "OpenClaw Bot") -> FeishuChannelState:
         current = self.feishu_channel_service.load_config()
@@ -313,7 +320,7 @@ class LauncherController:
         config, sensitive = self.store.load()
         self._prepare_if_needed()
         runtime_status = self.runtime_adapter.status()
-        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
+        self._refresh_feishu_runtime_status()
         status_label = self._map_status_label(runtime_status)
         port = runtime_status.port or config.gateway_port
         status_detail = self._build_status_detail(runtime_status)
@@ -336,7 +343,7 @@ class LauncherController:
         config, sensitive = self.store.load()
         self._prepare_if_needed()
         runtime_status = self.runtime_adapter.status()
-        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
+        self._refresh_feishu_runtime_status()
         port = runtime_status.port or config.gateway_port
 
         return LauncherViewState(
@@ -420,7 +427,11 @@ class LauncherController:
 
     def _refresh_feishu_runtime_status(self) -> None:
         runtime_status = self.runtime_adapter.status()
-        self.feishu_channel_service.refresh_runtime_status(runtime_status.state, runtime_status.message or "")
+        self.feishu_channel_service.refresh_runtime_status(
+            runtime_status.state,
+            runtime_status.message or "",
+            runtime_link_available=self.runtime_mode == "openclaw",
+        )
 
     def _reproject_feishu_runtime_if_configured(self) -> None:
         self._reproject_channels_if_configured()
@@ -541,8 +552,6 @@ class LauncherController:
         version_file = self.paths.project_root / "version.json"
         if not version_file.exists():
             raise FileNotFoundError("当前便携包缺少 version.json，无法检查更新。")
-        import json
-
         version_info = json.loads(version_file.read_text(encoding="utf-8"))
         version = str(version_info.get("version") or "").strip()
         if not version:

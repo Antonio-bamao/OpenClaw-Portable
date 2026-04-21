@@ -115,7 +115,6 @@ class FeishuChannelService:
                         "defaultAccount": "default",
                         "appId": config.app_id,
                         "appSecret": config.app_secret,
-                        "botAppName": config.bot_app_name,
                         "enabled": config.enabled,
                         "accounts": {
                             "default": {
@@ -128,15 +127,52 @@ class FeishuChannelService:
             },
         )
 
-    def refresh_runtime_status(self, runtime_state: str, runtime_message: str = "") -> FeishuChannelStatus:
+    def refresh_runtime_status(
+        self,
+        runtime_state: str,
+        runtime_message: str = "",
+        channel_probe_payload: dict[str, object] | None = None,
+        probe_attempted: bool = False,
+        runtime_link_available: bool = True,
+    ) -> FeishuChannelStatus:
         current = self.load_status()
         config = self.load_config()
         has_credentials = bool(config.app_id.strip() and config.app_secret.strip())
+        probe_account = self._extract_feishu_probe_account(channel_probe_payload)
 
         if not has_credentials and not config.enabled:
             next_status = FeishuChannelStatus()
+        elif not runtime_link_available and current.state == "invalid_config":
+            next_status = current
+        elif not runtime_link_available and has_credentials:
+            next_status = replace(current, state="pending_enable", last_error="")
         elif has_credentials and not config.enabled:
             next_status = replace(current, state="pending_enable", last_error="")
+        elif probe_account and self._probe_reports_needs_reconfigure(probe_account):
+            next_status = replace(
+                current,
+                state="needs_reconfigure",
+                last_error=self._probe_error_message(probe_account, runtime_message) or "当前飞书渠道需重新配置。",
+            )
+        elif probe_account and self._probe_reports_connected(probe_account):
+            next_status = FeishuChannelStatus(
+                state="connected",
+                last_error="",
+                last_connected_at=self._utc_now_iso(),
+                last_message_at=current.last_message_at,
+            )
+        elif probe_account and self._probe_reports_failure(probe_account):
+            next_status = replace(
+                current,
+                state="connection_failed",
+                last_error=self._probe_error_message(probe_account, runtime_message) or "飞书连接失败，可查看诊断并重试",
+            )
+        elif probe_attempted and config.enabled and has_credentials:
+            next_status = replace(
+                current,
+                state="connection_failed",
+                last_error=runtime_message.strip() or "飞书 live probe 失败，可查看诊断并重试。",
+            )
         elif runtime_state == "running" and config.enabled and has_credentials:
             next_status = FeishuChannelStatus(
                 state="connected",
@@ -145,7 +181,7 @@ class FeishuChannelService:
                 last_message_at=current.last_message_at,
             )
         elif runtime_state == "ready" and config.enabled:
-            next_status = replace(current, state="connecting", last_error="")
+            next_status = replace(current, state="pending_enable", last_error="")
         elif runtime_state in {"stopped", "idle"}:
             next_status = replace(current, state="pending_enable" if config.enabled else "unconfigured", last_error="")
         else:
@@ -158,13 +194,57 @@ class FeishuChannelService:
         self.save_status(next_status)
         return next_status
 
+    def _extract_feishu_probe_account(self, payload: dict[str, object] | None) -> dict[str, object] | None:
+        if not isinstance(payload, dict):
+            return None
+        accounts_by_channel = payload.get("channelAccounts")
+        if not isinstance(accounts_by_channel, dict):
+            return None
+        raw_accounts = accounts_by_channel.get("feishu")
+        if isinstance(raw_accounts, list):
+            for account in raw_accounts:
+                if isinstance(account, dict):
+                    return account
+        if isinstance(raw_accounts, dict):
+            return raw_accounts
+        return None
+
+    def _probe_reports_connected(self, account: dict[str, object]) -> bool:
+        probe = account.get("probe")
+        return isinstance(probe, dict) and probe.get("ok") is True
+
+    def _probe_reports_failure(self, account: dict[str, object]) -> bool:
+        probe = account.get("probe")
+        return isinstance(probe, dict) and probe.get("ok") is False
+
+    def _probe_reports_needs_reconfigure(self, account: dict[str, object]) -> bool:
+        configured = account.get("configured")
+        return configured is False
+
+    def _probe_error_message(self, account: dict[str, object], runtime_message: str) -> str:
+        direct_error = account.get("lastError")
+        if isinstance(direct_error, str) and direct_error.strip():
+            return direct_error.strip()
+        probe = account.get("probe")
+        if isinstance(probe, dict):
+            for key in ("error", "message", "reason"):
+                value = probe.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return runtime_message.strip()
+
     def build_view_state(self) -> FeishuChannelState:
         config = self.load_config()
         status = self.load_status()
+        pending_enable_detail = (
+            "飞书配置已写入运行时，启动服务后会尝试建立私聊链路。"
+            if config.enabled
+            else "凭据已保存，启用飞书私聊后会写入运行时配置。"
+        )
         labels = {
             "unconfigured": ("未配置", "填写 App ID 和 App Secret 后，先测试连接再启用飞书私聊。"),
             "invalid_config": ("配置无效", status.last_error or "配置无效，请检查 App ID / App Secret。"),
-            "pending_enable": ("待启用", "凭据已保存，启用飞书私聊后会写入运行时配置。"),
+            "pending_enable": ("待启用", pending_enable_detail),
             "connecting": ("连接中", "OpenClaw 正在准备飞书私聊链路。"),
             "connected": ("已连接", "飞书私聊链路已就绪，可接收私聊消息。"),
             "connection_failed": ("连接失败", status.last_error or "飞书连接失败，可查看诊断并重试。"),

@@ -15,8 +15,8 @@ def format_runtime_error(exc: Exception) -> str:
         )
     if "OpenClaw runtime exited before becoming healthy" in message:
         return (
-            "OpenClaw 启动后提前退出。请检查 Provider 配置与 API Key，"
-            "并把系统临时目录 OpenClawPortable\\logs\\openclaw-runtime.err.log 发给售后排查。"
+            "OpenClaw 在启动阶段退出。请检查系统临时目录 OpenClawPortable\\logs\\openclaw-runtime.err.log，"
+            "并将该日志发给售后排查。"
         )
     return message
 

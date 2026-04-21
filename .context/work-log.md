@@ -79,6 +79,13 @@
 - 验证：node runtime/openclaw/openclaw.mjs --help 通过；gateway 长轮询烟雾显示 ready；OpenClawRuntimeAdapter 烟雾测试返回 RuntimeStatus(state=running, port=19884) 与 RuntimeHealth(ok=True)；python -m unittest discover -s tests 通过 24 个测试。
 - 下一步：处理 runtime/openclaw 的交付体积、node_modules 纳入打包策略、内置 Node 24 下载与 PyInstaller onedir runtime 打包验证。
 
+## 2026-04-19 / Step 28｜修正 mock runtime 下飞书“连接中”误判并重打包启动器
+- 目标：消除飞书“测试连接”后在 Node mock runtime 中被误刷成“连接中”的假状态，避免用户误以为私聊链路已在准备中。
+- 动作：为 `FeishuChannelService.refresh_runtime_status()` 增加 `runtime_link_available` 分支；让 `LauncherController` 在 `runtime_mode != "openclaw"` 时把已启用飞书保持为 `pending_enable`，并在 UI 文案里明确提示“当前仍在 Node mock runtime，需要切到真实 OpenClaw runtime 才能建立私聊链路”；补充针对性单元测试并重建 `dist/OpenClaw-Portable/OpenClawLauncher.exe`。
+- 结果：用户点击“测试连接”后，凭据校验仍会执行，但 mock runtime 不会再误报“连接中”；界面会明确说明当前只能验证 App 凭据，不能在 mock runtime 下真正接入飞书私聊。
+- 验证：`python -m unittest tests.test_feishu_channel_service -v` 通过 10 项；`python -m unittest tests.test_launcher_controller -v` 通过 27 项；`python -m unittest discover -s tests` 通过 `190` 项；`.\\scripts\\build-launcher.ps1` 已成功重建打包版启动器。
+- 下一步：让用户重开新的 `dist/OpenClaw-Portable/OpenClawLauncher.exe` 复测飞书卡片状态；如果要拿到真正“已连接”，继续切到真实 OpenClaw runtime 并运行 live probe / E2E 证据脚本。
+
 ## 2026-04-08 / Phase 2 Step 05｜收口真实 OpenClaw runtime 产物策略与准备脚本
 - 目标：收口真实 OpenClaw runtime 产物策略与准备脚本
 - 动作：将 runtime/openclaw/ 标记为构建产物不进 git，新增 scripts/prepare-openclaw-runtime.ps1 负责从 npm 拉取 openclaw@2026.4.8、展开构建包、安装生产依赖并验证入口；调整 PyInstaller 打包脚本在缺少真实 runtime 时给出明确错误；补充 openclaw 模式下主面板运行时文案测试与实现。
@@ -489,3 +496,59 @@
 - 结果：QQ now runs the documented `channels add --channel qqbot --token "AppID:AppSecret"` flow when the launcher enables a new credential set, unchanged credentials do not rerun onboarding, onboarding failures keep QQ disabled with a direct launcher error, and WeChat users can manually confirm QR completion to refresh state immediately.
 - 验证：python -m unittest tests.test_social_channel_service -v passed 10 tests; python -m unittest tests.test_launcher_controller -v passed 22 tests; python -m unittest tests.test_launcher_app tests.test_launcher_bootstrap -v passed 31 tests; python -m unittest tests.test_social_channel_service tests.test_launcher_controller tests.test_launcher_app tests.test_launcher_bootstrap -v passed 63 tests; python -m unittest discover -s tests passed 174 tests; scripts\build-launcher.ps1 succeeded; python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5 passed at 558.74MB / 25841 files with no warnings; packaged EXE short launch returned started_without_import_crash.
 - 下一步：Either run real WeChat / QQ credential E2E against live accounts or prepare the next public release if this deeper launcher-owned onboarding flow should ship beyond the local rebuilt dist.
+
+## 2026-04-18｜同步 current-status 顶部摘要到最新交付状态
+- 目标：Refresh the top-level `.context/current-status.md` summary so it reflects the latest verified delivery state.
+- 动作：Reconciled the current-status overview with the later 2026-04-16 to 2026-04-18 entries, removing stale wording that still treated U-disk evidence as missing and adding the current public-release versus local-unreleased distinction for the latest WeChat/QQ hardening.
+- 结果：`current-status.md` top bullets now match the latest known facts: D-drive removable-media validation is complete, `v2026.04.5` is the current public latest release, the 2026-04-17/18 WeChat/QQ improvements are local-but-unreleased, and the remaining work is mainly external credential / AV / SmartScreen evidence.
+- 验证：Manual consistency check against `.context/current-status.md` detailed sections and `.context/work-log.md` latest entries completed after the summary rewrite.
+- 下一步：Keep the top summary synchronized when external E2E evidence lands or when a post-`v2026.04.5` release is cut.
+
+## 2026-04-18｜同步 task-breakdown 顶部优先级到当前阶段
+- 目标：Refresh `.context/task-breakdown.md` so its top priorities match the latest delivery phase.
+- 动作：Replaced the stale “start Phase 2 / pre-research Phase 3” priority block with the current work focus: context hygiene, external credential E2E, AV / SmartScreen evidence, and deciding whether to cut a post-`v2026.04.5` release for the local WeChat/QQ improvements.
+- 结果：`task-breakdown.md` now points future work at the real remaining bottlenecks instead of already-completed runtime-adapter and first-pass channel-scaffolding work.
+- 验证：Manual consistency check against `.context/current-status.md` top summary and the 2026-04-16 to 2026-04-18 detailed updates completed after the rewrite.
+- 下一步：When external evidence lands or a new public release is prepared, update both `current-status.md` and `task-breakdown.md` together.
+
+## 2026-04-18｜同步 master-plan 到“外部验证收口 + 下一版发布准备”阶段
+- 目标：Refresh `.context/master-plan.md` so the master plan reflects the current project phase instead of the earlier MVP/runtime-planning stage.
+- 动作：Updated the reality baseline, Phase 1-4 current-status notes, and the completion definition to reflect that runtime integration, update/recovery flows, first-pass channel management, and D-drive delivery verification are already complete locally, while the remaining gaps are external credential E2E, AV / SmartScreen evidence, and a possible post-`v2026.04.5` release.
+- 结果：`master-plan.md` now aligns with `current-status.md` and `task-breakdown.md`, so the three core context files describe the same current phase and remaining work.
+- 验证：Manual consistency check against `.context/current-status.md` top summary and `.context/task-breakdown.md` current priorities completed after the rewrite.
+- 下一步：Keep the three core context files updated together whenever external validation closes or a new public release is prepared.
+
+## 2026-04-18｜同步 .context README 到当前工作流
+- 目标：Refresh `.context/README.md` so its operating instructions match the current repository reality.
+- 动作：Updated README wording that still treated `MockRuntimeAdapter` as the pre-runtime main path, added the current focus on external validation and possible post-`v2026.04.5` release work, and replaced the nonexistent `validate_context.py` requirement with a manual consistency check across the three core context files.
+- 结果：The `.context` usage guide no longer points collaborators at a missing validation script or an outdated runtime phase.
+- 验证：Manual consistency check against the repository contents confirmed there is no local `scripts/validate_context.py`, and the updated README now matches the current-status / task-breakdown / master-plan workflow.
+- 下一步：If a real context validation script is added later, update the README again so the scripted check becomes part of the standard session-close checklist.
+
+## 2026-04-18｜飞书 live probe 状态校准
+- 目标：Make the launcher’s Feishu channel state reflect real channel probe results instead of optimistic runtime-process inference.
+- 动作：Added red/green regression tests in `tests/test_feishu_channel_service.py` and `tests/test_launcher_controller.py`, taught `LauncherController` to call `openclaw channels status --probe --json` while the real runtime is running, and extended `FeishuChannelService.refresh_runtime_status()` to map `channelAccounts.feishu[].probe`, `lastError`, and `configured` into `connected` / `connection_failed` / `needs_reconfigure`.
+- 结果：A running OpenClaw process no longer automatically makes the launcher show Feishu as connected; if the live probe says the Feishu account failed, the launcher now surfaces the probe error instead of a false-positive green state.
+- 验证：`python -m unittest tests.test_feishu_channel_service` passed 8 tests; `python -m unittest tests.test_launcher_controller` passed 24 tests; `python -m unittest discover -s tests` passed 178 tests.
+- 下一步：Run a real Feishu credential E2E in a reachable environment so the improved live-probe path produces external evidence rather than only test coverage.
+
+## 2026-04-18｜飞书 probe 证据采集脚本
+- 目标：Turn the remaining Feishu E2E follow-up into a single reusable local command that can emit evidence JSON once credentials are present.
+- 动作：Added `launcher/services/feishu_probe.py` with payload parsing and evidence-building helpers, created `scripts/verify-feishu-channel.py`, and covered the new path with `tests/test_feishu_probe.py`.
+- 结果：The repo now has a dedicated Feishu verifier that checks local launcher state, runs `openclaw channels status --probe --json`, and emits a structured pass/fail JSON document suitable for later delivery-gate evidence collection.
+- 验证：`python -m unittest tests.test_feishu_probe` passed 4 tests; `python -m unittest discover -s tests` passed 182 tests; `python scripts/verify-feishu-channel.py` failed cleanly in the current repo with `Feishu channel is not enabled in local launcher state.` because there is still no saved local Feishu config.
+- 下一步：Save real Feishu credentials in the launcher, enable the channel, start the real runtime, then rerun `python scripts/verify-feishu-channel.py --output <evidence.json>` to capture the first actual E2E artifact.
+
+## 2026-04-18｜补齐飞书 probe 失败时的 truthfulness 边界
+- 目标：Eliminate the remaining false-positive path where Feishu could still appear connected when live probe execution failed or returned unusable output.
+- 动作：Added RED tests for “probe command failed”, “probe output not JSON”, and “probe was attempted but missing payload”; confirmed they failed; then updated `LauncherController` to surface probe-attempt failure details and extended `FeishuChannelService.refresh_runtime_status()` with a `probe_attempted` path that maps missing/invalid probe results to `connection_failed` instead of the old runtime-running fallback.
+- 结果：在 openclaw 模式下，只要 launcher 实际尝试过飞书 live probe，却没有拿到可用的 Feishu payload，就不会再误报 `已连接`；状态会回落到 `connection_failed` 并保留失败原因。
+- 验证：`python -m unittest tests.test_feishu_channel_service tests.test_launcher_controller -v` passed 35 tests；`python -m unittest discover -s tests` passed 185 tests；`python scripts/verify-feishu-channel.py --output tmp/feishu-e2e-evidence.json` failed with `Feishu channel is not enabled in local launcher state.` because the current repo still has no saved/enabled Feishu credentials.
+- 下一步：Once real Feishu credentials are saved and enabled locally, start the real runtime and rerun `python scripts/verify-feishu-channel.py --output tmp/feishu-e2e-evidence.json` to capture the first passing E2E evidence artifact.
+
+## 2026-04-19｜修复 launcher 中文字体与布局错乱
+- 目标：修复主窗口在中文环境下出现的大标题误放大、文本重叠和内容被窗口高度硬裁切的问题。
+- 动作：按 TDD 先在 `tests/test_launcher_bootstrap.py` 增加 3 个 RED 用例，锁住“主窗口应包在滚动容器内”“渠道状态标题应小于分区标题”“首选字体应包含中文回退族”；确认失败后，在 `launcher/ui/theme.py` 里把字体改为带 `Microsoft YaHei UI / Microsoft YaHei` 的回退链，拆分 `DisplayTitle / HeroStatusTitle / SectionTitle / SectionStatus` 样式；在 `launcher/ui/widgets.py`、`launcher/ui/main_window.py`、`launcher/ui/wizard.py` 中改用新的标题层级，并把主窗口包进 `QScrollArea`；最后重建本地 `dist/OpenClaw-Portable`。
+- 结果：launcher 不再把所有标题都套用同一个超大 `HeroTitle` 样式，频道状态和分区标题恢复层级；窗口内容在较小高度下可滚动，不会再把下半页卡片直接挤出视口。源码和本地便携版都已包含这轮修复。
+- 验证：`python -m unittest tests.test_launcher_bootstrap.LauncherUiSmokeTests -v` passed 14 tests；`python -m unittest discover -s tests` passed 188 tests；`powershell -Command .\\scripts\\build-launcher.ps1` completed successfully and rebuilt `dist\\OpenClaw-Portable\\OpenClawLauncher.exe`。
+- 下一步：在有完整中文字库的真实桌面环境里重新打开 `OpenClawLauncher.exe` 做一次人工 UI smoke，确认字体表现与滚动行为都符合预期；若仍有单个控件挤压，再按具体卡片补精细布局。

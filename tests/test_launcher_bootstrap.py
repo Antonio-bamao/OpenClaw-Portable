@@ -7,12 +7,14 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QScrollArea
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.ui.main_window import OpenClawLauncherWindow
+from launcher.ui.theme import preferred_font
 from launcher.ui.wizard import SetupWizardWindow
 
 
@@ -85,13 +87,20 @@ class LauncherUiSmokeTests(unittest.TestCase):
             runtime_detail="OpenClaw gateway / v2026.4.8",
             provider_label="通义千问 / qwen-max",
             message="当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。",
-            webui_url="http://127.0.0.1:18791",
+            webui_url="http://127.0.0.1:18789/#token=uclaw",
             offline_mode=False,
         )
 
         window.apply_view_state(updated_state)
 
         self.assertEqual(window.status_detail_label.text(), updated_state.status_detail)
+
+    def test_main_window_includes_runtime_console_panel(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.runtime_console_status_label.text(), "等待启动日志…")
+        self.assertTrue(window.runtime_console_output.isReadOnly())
+        self.assertIn("启动后这里会实时显示", window.runtime_console_output.toPlainText())
 
     def test_main_window_disables_check_update_button_while_busy(self) -> None:
         window = OpenClawLauncherWindow()
@@ -129,6 +138,19 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertEqual(window.test_feishu_button.text(), "测试连接")
         self.assertEqual(window.enable_feishu_button.text(), "启用飞书私聊")
         self.assertEqual(window.open_feishu_help_button.text(), "接入帮助")
+
+    def test_main_window_wraps_content_in_scroll_area_for_smaller_windows(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertIsInstance(window.centralWidget(), QScrollArea)
+
+    def test_main_window_uses_smaller_status_heading_than_section_heading(self) -> None:
+        window = OpenClawLauncherWindow()
+        window.show()
+        self.app.processEvents()
+
+        section_title = next(label for label in window.findChildren(type(window.feishu_status_label)) if label.text() == "飞书私聊渠道")
+        self.assertLess(window.feishu_status_label.sizeHint().height(), section_title.sizeHint().height())
 
     def test_main_window_applies_feishu_channel_state(self) -> None:
         window = OpenClawLauncherWindow()
@@ -207,6 +229,12 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertTrue(qq_help.exists())
         self.assertIn("微信", wechat_help.read_text(encoding="utf-8"))
         self.assertIn("QQ Bot", qq_help.read_text(encoding="utf-8"))
+
+    def test_preferred_font_includes_chinese_fallback_families(self) -> None:
+        families = preferred_font().families()
+
+        self.assertIn("Microsoft YaHei UI", families)
+        self.assertIn("Microsoft YaHei", families)
 
 
 if __name__ == "__main__":

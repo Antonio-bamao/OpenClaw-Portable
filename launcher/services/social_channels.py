@@ -137,7 +137,7 @@ class OpenClawChannelCommandRunner:
             **os.environ,
             "OPENCLAW_HOME": str(self.paths.state_dir),
             "OPENCLAW_STATE_DIR": str(self.paths.state_dir),
-            "OPENCLAW_CONFIG_PATH": str(self.paths.config_file),
+            "OPENCLAW_CONFIG_PATH": str(self.paths.runtime_config_file),
             "OPENCLAW_WORKSPACE_DIR": str(self.paths.workspace_dir),
             "OPENCLAW_LOG_DIR": str(self.paths.logs_dir),
             "OPENCLAW_CACHE_DIR": str(self.paths.cache_dir),

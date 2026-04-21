@@ -25,7 +25,8 @@
   - `runtime/` 承载运行时与插件
   - `state/` 承载配置、会话、渠道状态
   - `%TEMP%\\OpenClawPortable\\` 承载日志与缓存
-- 在真实 OpenClaw runtime 接入前，`MockRuntimeAdapter` 仍是开发占位方案，但所有接口设计都要以未来平滑替换为前提。
+- 真实 OpenClaw runtime 已完成接入；`MockRuntimeAdapter` 现在主要用于开发态兜底和回归测试，后续接口演进仍必须保持 mock / real 可替换边界。
+- 当前阶段重点不再是从零搭 runtime 或渠道骨架，而是维护上下文一致性、补齐真实平台凭证 E2E、收集多厂商杀软 / SmartScreen 证据，并在需要时准备 post-`v2026.04.5` 的下一版公开发布。
 
 ## 结束会话前检查
 
@@ -35,4 +36,4 @@
 2. 如有异常，更新 `bug-log.md`
 3. 如有关键判断，更新 `decisions.md`
 4. 更新 `current-status.md`
-5. 运行 `project-context-os` 的 `validate_context.py`
+5. 检查 `current-status.md`、`task-breakdown.md`、`master-plan.md` 三份核心文档是否仍然描述同一阶段；如果仓库内未来补齐 context 校验脚本，再把该脚本纳入固定收尾步骤

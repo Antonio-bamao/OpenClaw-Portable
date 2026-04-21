@@ -91,6 +91,119 @@ class FeishuChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_status_stays_pending_enable_when_runtime_cannot_open_feishu_link(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            service = FeishuChannelService(paths)
+            service.save_config(FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True))
+            service.save_status(FeishuChannelStatus(state="connection_failed", last_error="stale runtime failure"))
+
+            service.refresh_runtime_status(
+                runtime_state="ready",
+                runtime_message="mock runtime ready",
+                runtime_link_available=False,
+            )
+
+            self.assertEqual(service.load_status().state, "pending_enable")
+            self.assertEqual(service.load_status().last_error, "")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_status_stays_pending_enable_when_runtime_is_ready_but_not_started(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            service = FeishuChannelService(paths)
+            service.save_config(FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True))
+
+            service.refresh_runtime_status(
+                runtime_state="ready",
+                runtime_message="runtime prepared",
+            )
+
+            self.assertEqual(service.load_status().state, "pending_enable")
+            self.assertEqual(service.load_status().last_error, "")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_status_transitions_to_connection_failed_when_probe_reports_error(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            service = FeishuChannelService(paths)
+            service.save_config(FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True))
+
+            service.refresh_runtime_status(
+                runtime_state="running",
+                runtime_message="feishu ready",
+                channel_probe_payload={
+                    "channelAccounts": {
+                        "feishu": [
+                            {
+                                "accountId": "default",
+                                "enabled": True,
+                                "configured": True,
+                                "probe": {"ok": False},
+                                "lastError": "tenant_access_token rejected",
+                            }
+                        ]
+                    }
+                },
+            )
+
+            self.assertEqual(service.load_status().state, "connection_failed")
+            self.assertIn("tenant_access_token rejected", service.load_status().last_error)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_status_transitions_to_connected_when_probe_reports_success(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            service = FeishuChannelService(paths)
+            service.save_config(FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True))
+
+            service.refresh_runtime_status(
+                runtime_state="running",
+                runtime_message="feishu ready",
+                channel_probe_payload={
+                    "channelAccounts": {
+                        "feishu": [
+                            {
+                                "accountId": "default",
+                                "enabled": True,
+                                "configured": True,
+                                "probe": {"ok": True, "bot": {"username": "openclaw-bot"}},
+                            }
+                        ]
+                    }
+                },
+            )
+
+            self.assertEqual(service.load_status().state, "connected")
+            self.assertEqual(service.load_status().last_error, "")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_status_transitions_to_connection_failed_when_probe_was_attempted_but_missing(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            service = FeishuChannelService(paths)
+            service.save_config(FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True))
+
+            service.refresh_runtime_status(
+                runtime_state="running",
+                runtime_message="Feishu live probe did not return valid JSON.",
+                probe_attempted=True,
+            )
+
+            self.assertEqual(service.load_status().state, "connection_failed")
+            self.assertIn("live probe", service.load_status().last_error)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_build_runtime_projection_includes_default_feishu_account(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -103,7 +216,7 @@ class FeishuChannelServiceTests(unittest.TestCase):
             self.assertEqual(projected.runtime_env["FEISHU_APP_ID"], "cli_xxx")
             self.assertEqual(projected.runtime_env["FEISHU_APP_SECRET"], "secret")
             self.assertTrue(projected.runtime_config_patch["channels"]["feishu"]["enabled"])
-            self.assertEqual(projected.runtime_config_patch["channels"]["feishu"]["botAppName"], "OpenClaw Bot")
+            self.assertNotIn("botAppName", projected.runtime_config_patch["channels"]["feishu"])
             self.assertEqual(projected.runtime_config_patch["channels"]["feishu"]["accounts"]["default"]["connectionMode"], "websocket")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

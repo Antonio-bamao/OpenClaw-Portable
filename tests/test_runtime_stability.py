@@ -218,9 +218,9 @@ class RuntimeStabilityTests(unittest.TestCase):
 
             runner._stage_verification_state(package_root=package_root, paths=paths)
 
-            self.assertEqual(paths.config_file.read_text(encoding="utf-8"), expected_config)
+            self.assertEqual(paths.runtime_config_file.read_text(encoding="utf-8"), expected_config)
             self.assertEqual(paths.env_file.read_text(encoding="utf-8"), "OPENCLAW_API_KEY=sk-demo\n")
-            self.assertNotIn("provider_id", paths.config_file.read_text(encoding="utf-8"))
+            self.assertNotIn("provider_id", paths.runtime_config_file.read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

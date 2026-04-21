@@ -17,7 +17,7 @@ def make_view_state(status_label: str, status_detail: str, message: str) -> Laun
         runtime_detail="OpenClaw gateway / v2026.4.8",
         provider_label="通义千问 / qwen-max",
         message=message,
-        webui_url="http://127.0.0.1:18791",
+        webui_url="http://127.0.0.1:18789/#token=uclaw",
         offline_mode=False,
     )
 
@@ -174,6 +174,7 @@ class FakeWindow:
         self.qq_states: list[QqChannelState] = []
         self.wecom_states: list[WecomChannelState] = []
         self.busy_actions: list[tuple[str, bool]] = []
+        self.console_snapshots: list[tuple[str, str]] = []
         self.feishu_app_id_input = FakeInput("cli_xxx")
         self.feishu_app_secret_input = FakeInput("secret")
         self.feishu_bot_name_input = FakeInput("Support Bot")
@@ -206,6 +207,10 @@ class FakeWindow:
         self.wecom_states.append(state)
         self.calls.append(f"apply_wecom:{state.status_label}")
 
+    def apply_runtime_console(self, status: str, output: str) -> None:
+        self.console_snapshots.append((status, output))
+        self.calls.append(f"console:{status}")
+
 
 class FakeQtApp:
     def __init__(self, calls: list[str]) -> None:
@@ -216,6 +221,19 @@ class FakeQtApp:
 
 
 class LauncherAppTests(unittest.TestCase):
+    def test_default_project_root_uses_module_root_in_source_mode(self) -> None:
+        project_root = OpenClawLauncherApplication._default_project_root()
+
+        self.assertEqual(project_root, Path(__file__).resolve().parent.parent)
+
+    def test_default_project_root_uses_executable_directory_when_frozen(self) -> None:
+        fake_executable = Path("C:/Portable/OpenClaw-Portable/OpenClawLauncher.exe")
+
+        with patch("launcher.app.sys", frozen=True, executable=str(fake_executable)):
+            project_root = OpenClawLauncherApplication._default_project_root()
+
+        self.assertEqual(project_root, fake_executable.parent)
+
     def test_handle_start_applies_pending_state_before_runtime_starts(self) -> None:
         calls: list[str] = []
         pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
@@ -229,7 +247,15 @@ class LauncherAppTests(unittest.TestCase):
 
         self.assertEqual(
             calls,
-            ["pending:start", "apply:启动中", "process_events", "start_runtime", "load_view_state", "apply:运行中"],
+            [
+                "pending:start",
+                "apply:启动中",
+                "process_events",
+                "start_runtime",
+                "load_view_state",
+                "apply:运行中",
+                "console:Gateway 已就绪，飞书已连接",
+            ],
         )
 
     def test_handle_start_ignores_duplicate_click_while_busy(self) -> None:
@@ -259,7 +285,15 @@ class LauncherAppTests(unittest.TestCase):
 
         self.assertEqual(
             calls,
-            ["pending:restart", "apply:重启中", "process_events", "restart_runtime", "load_view_state", "apply:运行中"],
+            [
+                "pending:restart",
+                "apply:重启中",
+                "process_events",
+                "restart_runtime",
+                "load_view_state",
+                "apply:运行中",
+                "console:Gateway 已就绪，飞书已连接",
+            ],
         )
 
 
@@ -419,6 +453,63 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("enable_feishu_channel", calls)
         self.assertEqual(application.main_window.feishu_states[-1].status_label, "连接中")
 
+    def test_refresh_runtime_console_applies_live_log_summary_and_tail(self) -> None:
+        temp_dir = Path.cwd() / "tmp" / "runtime-console-test"
+        logs_dir = temp_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (logs_dir / "openclaw-runtime.out.log").write_text(
+                "[gateway] ready\n[feishu] feishu[default]: WebSocket client started\n[info]: [ '[ws]', 'ws client ready' ]\n",
+                encoding="utf-8",
+            )
+            (logs_dir / "openclaw-runtime.err.log").write_text("", encoding="utf-8")
+
+            calls: list[str] = []
+            application = object.__new__(OpenClawLauncherApplication)
+            application.paths = type("Paths", (), {"logs_dir": logs_dir})()
+            application.main_window = FakeWindow(calls)
+
+            application._refresh_runtime_console()
+
+            summary, output = application.main_window.console_snapshots[-1]
+            self.assertIn("Gateway 已就绪", summary)
+            self.assertIn("飞书已连接", summary)
+            self.assertIn("[gateway] ready", output)
+        finally:
+            if temp_dir.exists():
+                import shutil
+
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_poll_runtime_state_refreshes_view_and_console(self) -> None:
+        temp_dir = Path.cwd() / "tmp" / "runtime-poll-test"
+        logs_dir = temp_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (logs_dir / "openclaw-runtime.out.log").write_text("[gateway] starting...\n", encoding="utf-8")
+            (logs_dir / "openclaw-runtime.err.log").write_text("", encoding="utf-8")
+
+            calls: list[str] = []
+            application = object.__new__(OpenClawLauncherApplication)
+            application.paths = type("Paths", (), {"logs_dir": logs_dir})()
+            application.controller = FakeController(
+                make_view_state("启动中", "pending", "please wait"),
+                make_view_state("运行中", "running", "ready"),
+                calls,
+            )
+            application.main_window = FakeWindow(calls)
+
+            application._poll_runtime_state()
+
+            self.assertIn("load_view_state", calls)
+            self.assertIn("apply:运行中", calls)
+            self.assertTrue(any(call.startswith("console:") for call in calls))
+        finally:
+            if temp_dir.exists():
+                import shutil
+
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
 
     def test_handle_wechat_install_login_and_enable_apply_states(self) -> None:
         calls: list[str] = []
@@ -473,6 +564,23 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("save_wecom_channel:wwbot:wecom-secret", calls)
         self.assertIn("enable_wecom_channel", calls)
         self.assertEqual(application.main_window.wecom_states[-1].status_label, "已启用")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_webui_opens_runtime_gateway_dashboard_url(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(
+            make_view_state("启动中", "pending", "please wait"),
+            make_view_state("运行中", "running", "ready"),
+            calls,
+        )
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+
+        application._handle_open_webui()
+
+        mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
+        self.assertEqual(calls, ["load_view_state"])
 
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_handle_open_wechat_help_opens_packaged_help_page(self, mock_open_new_tab) -> None:
