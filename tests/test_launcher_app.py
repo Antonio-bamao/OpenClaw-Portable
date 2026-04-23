@@ -99,6 +99,10 @@ class FakeController:
         self.calls.append("disable_feishu_channel")
         return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "disabled")
 
+    def should_auto_start_runtime(self) -> bool:
+        self.calls.append("should_auto_start_runtime")
+        return True
+
 
     def install_wechat_channel(self) -> WechatChannelState:
         self.calls.append("install_wechat_channel")
@@ -295,6 +299,55 @@ class LauncherAppTests(unittest.TestCase):
                 "console:Gateway 已就绪，飞书已连接",
             ],
         )
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_auto_start_starts_runtime_and_opens_dashboard(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._auto_start_attempted = False
+        application._auto_opened_webui = False
+
+        application._auto_start_runtime()
+
+        self.assertEqual(
+            calls,
+            [
+                "should_auto_start_runtime",
+                "pending:start",
+                "apply:启动中",
+                "process_events",
+                "start_runtime",
+                "load_view_state",
+                "apply:运行中",
+                "console:Gateway 已就绪，飞书已连接",
+                "load_view_state",
+            ],
+        )
+        mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_auto_start_runs_only_once(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(
+            make_view_state("启动中", "pending", ""),
+            make_view_state("运行中", "running", "ready"),
+            calls,
+        )
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._auto_start_attempted = True
+        application._auto_opened_webui = False
+
+        application._auto_start_runtime()
+
+        self.assertEqual(calls, [])
+        mock_open_new_tab.assert_not_called()
 
 
     def test_handle_export_diagnostics_shows_success_message(self) -> None:

@@ -305,6 +305,56 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_real_openclaw_runtime_auto_starts_after_configuration(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            self.assertTrue(controller.should_auto_start_runtime())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_mock_runtime_does_not_auto_start_like_packaged_openclaw(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            self.assertFalse(controller.should_auto_start_runtime())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_running_openclaw_runtime_does_not_auto_start_again(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            self.assertFalse(controller.should_auto_start_runtime())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_starts_and_stops_runtime_through_controller(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:

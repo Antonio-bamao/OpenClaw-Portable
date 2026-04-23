@@ -36,6 +36,8 @@ class OpenClawLauncherApplication:
         self.main_window: OpenClawLauncherWindow | None = None
         self.wizard_window: SetupWizardWindow | None = None
         self._busy_actions: set[str] = set()
+        self._auto_start_attempted = False
+        self._auto_opened_webui = False
         self._background_executor = ThreadPoolExecutor(max_workers=1)
         self._background_signals = BackgroundTaskSignals()
         self._background_signals.completed.connect(self._finish_background_action)
@@ -109,6 +111,7 @@ class OpenClawLauncherApplication:
         self.main_window.show()
         if self.wizard_window:
             self.wizard_window.hide()
+        self._schedule_auto_start_runtime()
 
     def show_setup_wizard(self) -> None:
         provider_templates = self.registry.load()
@@ -128,6 +131,36 @@ class OpenClawLauncherApplication:
             return
         self._show_pending_runtime_state("start")
         self._run_background_action("start_runtime", self.controller.start_runtime, lambda _: self._refresh_main_view(), call_on_none=True)
+
+    def _schedule_auto_start_runtime(self) -> None:
+        QTimer.singleShot(0, self._auto_start_runtime)
+
+    def _auto_start_runtime(self) -> None:
+        if getattr(self, "_auto_start_attempted", False):
+            return
+        if not self.controller.should_auto_start_runtime():
+            return
+        self._auto_start_attempted = True
+        self._show_pending_runtime_state("start")
+        self._run_background_action(
+            "start_runtime",
+            self.controller.start_runtime,
+            lambda _: self._after_auto_start_runtime(),
+            call_on_none=True,
+        )
+
+    def _after_auto_start_runtime(self) -> None:
+        self._refresh_main_view()
+        self._open_webui_once_after_auto_start()
+
+    def _open_webui_once_after_auto_start(self) -> None:
+        if getattr(self, "_auto_opened_webui", False):
+            return
+        view_state = self.controller.load_view_state()
+        if not view_state.webui_url:
+            return
+        self._auto_opened_webui = True
+        webbrowser.open_new_tab(view_state.webui_url)
 
     def _handle_stop(self) -> None:
         self._run_background_action("stop_runtime", self.controller.stop_runtime, lambda _: self._refresh_main_view(), call_on_none=True)

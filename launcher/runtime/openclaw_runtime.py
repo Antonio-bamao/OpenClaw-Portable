@@ -4,11 +4,12 @@ import json
 import os
 import hashlib
 import shutil
-import socket
 import subprocess
 import time
 from pathlib import Path
 from urllib.parse import quote
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 from launcher.core.config_store import LauncherConfig
 from launcher.core.paths import PortablePaths
@@ -140,16 +141,27 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
     def healthcheck(self) -> RuntimeHealth:
         if not self._config or not self._port_resolution:
             return RuntimeHealth(ok=False, error="Runtime must be prepared before healthcheck")
+        url = f"http://{self._config.bind_host}:{self._port_resolution.port}/"
         try:
-            with socket.create_connection((self._config.bind_host, self._port_resolution.port), timeout=2):
+            with urlopen(url, timeout=2) as response:
                 return RuntimeHealth(
                     ok=True,
                     details={
                         "gatewayPort": self._port_resolution.port,
                         "controlUiUrl": self.webui_url(),
+                        "httpStatus": getattr(response, "status", 200),
                     },
                 )
-        except OSError as exc:
+        except HTTPError as exc:
+            return RuntimeHealth(
+                ok=True,
+                details={
+                    "gatewayPort": self._port_resolution.port,
+                    "controlUiUrl": self.webui_url(),
+                    "httpStatus": exc.code,
+                },
+            )
+        except (OSError, URLError) as exc:
             return RuntimeHealth(ok=False, error=str(exc))
 
     def resolved_node_command(self) -> str:
@@ -185,7 +197,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
     def build_command(self) -> list[str]:
         if not self._config or not self._port_resolution:
             raise RuntimeError("Runtime must be prepared before command can be built")
-        return [
+        command = [
             self.resolved_node_command(),
             str(self._entrypoint_script()),
             "gateway",
@@ -196,6 +208,9 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
             "loopback",
             "--allow-unconfigured",
         ]
+        if _truthy_env("OPENCLAW_GATEWAY_FORCE"):
+            command.append("--force")
+        return command
 
     def _openclaw_dir(self) -> Path:
         if not self._paths:
@@ -446,6 +461,10 @@ def _copy_runtime_tree(source_dir: Path, target_dir: Path) -> None:
             raise RuntimeError(f"Failed to stage OpenClaw runtime cache with robocopy: {completed.stderr.strip()}")
         return
     shutil.copytree(source_dir, target_dir)
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _find_node_modules_dir(package_dir: Path) -> Path | None:

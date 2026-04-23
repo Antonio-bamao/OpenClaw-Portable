@@ -77,6 +77,13 @@ class LauncherController:
         self.runtime_adapter.restart()
         self._refresh_feishu_runtime_status()
 
+    def should_auto_start_runtime(self) -> bool:
+        if self.store.is_first_run() or self.runtime_mode != "openclaw":
+            return False
+        self._prepare_if_needed()
+        runtime_status = self.runtime_adapter.status()
+        return runtime_status.state in {"idle", "ready", "stopped"}
+
     def export_diagnostics_bundle(self) -> Path:
         return self.diagnostics_exporter.export_bundle()
 

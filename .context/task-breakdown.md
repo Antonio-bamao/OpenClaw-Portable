@@ -4,14 +4,14 @@
 
 1. 维护项目上下文系统与摘要一致性
    - 保持 `.context/current-status.md`、`.context/task-breakdown.md`、`.context/work-log.md` 与实际交付状态同步
-   - 明确区分“已公开发布的 `v2026.04.5`”与“仅在本地源码 / dist 中存在、尚未公开发布的 2026-04-17/18 微信 / QQ 改进”
+   - 明确区分“已公开发布的 `v2026.04.5`”与“仅在本地源码 / dist 中存在、尚未公开发布的 2026-04-17 至 2026-04-23 微信 / QQ、UI 与启动体验改进”
    - 当外部 E2E 证据补齐或下一版 release 发出时，及时更新摘要，避免旧阶段表述误导后续工作
 2. 补齐外部验证证据
    - 用真实飞书应用凭证完成私聊 E2E
    - 用真实微信账号完成二维码登录联调，用真实 QQ Open Platform 凭证完成 QQ Bot 联调，并在可用时补企业微信凭证验证
    - 收集多厂商杀软 / SmartScreen 信誉证据，补齐当前 delivery gate 中仍为 `pending` 的外部检查项
 3. 决定并准备下一版公开发布
-   - 若要让用户拿到 2026-04-17/18 的微信 / QQ 帮助、状态 UX 与真实 onboarding 改进，则基于当前源码和 `dist/OpenClaw-Portable` 准备 post-`v2026.04.5` release
+   - 若要让用户拿到 2026-04-17 至 2026-04-23 的微信 / QQ 帮助、状态 UX、真实 onboarding、中文 UI 布局修复、mock 飞书状态修正、HTTP readiness 与自动启动 / 自动打开 dashboard 改进，则基于当前源码和 `dist/OpenClaw-Portable` 准备 post-`v2026.04.5` release
    - 发版前复用现有 `scripts/verify-delivery-flow.py`、包审计、签名、release 资产与公开下载入口验证流程
    - 若暂不发版，则把当前重点留在外部凭证联调和安全信誉证据收集，不重复做无收益的重建或 U 盘验证
 4. 持续关注交付风险与体积纪律

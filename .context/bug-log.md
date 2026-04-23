@@ -254,3 +254,11 @@
 - Resolution: Added `--hidden-import _cffi_backend` to the PyInstaller command in `scripts/build-launcher.ps1` and rebuilt the local portable package.
 - Prevention: Added `tests/test_build_launcher_script.py` to assert the build script keeps the hidden import.
 - Status: Resolved locally; requires a new release build/tag to replace any already-published artifact that lacks the dependency.
+## 2026-04-23｜Windows OpenClaw gateway `--force` causes fuser permission failure
+
+- 现象：对齐 `u-claw` 参考项目时，将 gateway 命令改为默认携带 `--force` 后，打包版真实 runtime smoke 立即失败，错误为 `OpenClaw runtime exited before becoming healthy`。
+- 触发条件：Windows 11 上运行 `python scripts\verify-portable-runtime-stability.py --package-root dist\OpenClaw-Portable --cold-runs 1 --restart-runs 0 --timeout-seconds 90`。
+- 证据：stdout 只到 `[gateway] loading configuration...`；stderr 显示 `Force: Error: fuser permission denied while forcing gateway port`。
+- 根因：`u-claw` 参考项目使用的 `--force` 启动模式在当前打包的 OpenClaw `v2026.4.8` Windows runtime 中会走 fuser/强制释放端口路径，而该路径在当前权限下不可用。OpenClaw Portable 已有端口自动避让，不需要默认强制释放端口。
+- 修复：`OpenClawRuntimeAdapter.build_command()` 默认不再添加 `--force`；如确实需要复现实验，可通过 `OPENCLAW_GATEWAY_FORCE=1` 显式开启。
+- 预防措施：以后从参考项目迁移启动参数时，必须先跑真实 packaged runtime smoke。参考项目参数不能直接视为当前 OpenClaw 版本和 Windows 权限模型下的安全默认值。

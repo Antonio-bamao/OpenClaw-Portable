@@ -7,6 +7,7 @@ import unittest
 import uuid
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from launcher.core.config_store import LauncherConfig
 from launcher.core.paths import PortablePaths
@@ -153,6 +154,39 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    @patch("launcher.runtime.openclaw_runtime.urlopen")
+    def test_healthcheck_waits_for_http_gateway_response_instead_of_socket_only(self, mock_urlopen) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            adapter = OpenClawRuntimeAdapter()
+            config = make_config(reserve_free_port())
+            adapter.prepare(config, paths)
+
+            health = adapter.healthcheck()
+
+            self.assertTrue(health.ok)
+            mock_urlopen.assert_called_once()
+            self.assertEqual(mock_urlopen.call_args.args[0], f"http://127.0.0.1:{config.gateway_port}/")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @patch("launcher.runtime.openclaw_runtime.urlopen")
+    def test_healthcheck_treats_http_error_response_as_reachable_gateway(self, mock_urlopen) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            adapter = OpenClawRuntimeAdapter()
+            adapter.prepare(make_config(reserve_free_port()), paths)
+            mock_urlopen.side_effect = HTTPError("http://127.0.0.1/", 404, "not found", hdrs=None, fp=None)
+
+            health = adapter.healthcheck()
+
+            self.assertTrue(health.ok)
+            self.assertEqual(health.details["httpStatus"], 404)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_build_environment_merges_runtime_environment_projection(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -236,6 +270,23 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
                     "--allow-unconfigured",
                 ],
             )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_gateway_force_flag_is_opt_in_to_avoid_windows_fuser_failure(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            adapter = OpenClawRuntimeAdapter()
+            config = make_config(reserve_free_port())
+            entrypoint = paths.runtime_dir / "openclaw" / "openclaw.mjs"
+            entrypoint.parent.mkdir(parents=True, exist_ok=True)
+            entrypoint.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+
+            with patch.dict(os.environ, {"OPENCLAW_GATEWAY_FORCE": "1"}):
+                adapter.prepare(config, paths)
+
+                self.assertIn("--force", adapter.build_command())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
