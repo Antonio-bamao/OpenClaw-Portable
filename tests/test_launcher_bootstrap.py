@@ -6,6 +6,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication
 from PySide6.QtWidgets import QScrollArea
 
@@ -13,8 +14,10 @@ from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
-from launcher.ui.main_window import OpenClawLauncherWindow
+from launcher.ui.close_dialog import CloseActionDialog
+from launcher.ui.main_window import OpenClawLauncherWindow, _brand_icon_path
 from launcher.ui.theme import app_stylesheet, preferred_font
+from launcher.ui.window_branding import resolve_app_icon_path, _colorref_from_hex
 from launcher.ui.wizard import SetupWizardWindow
 
 
@@ -175,10 +178,66 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertEqual(window.enable_feishu_button.text(), "启用飞书私聊")
         self.assertEqual(window.open_feishu_help_button.text(), "接入帮助")
 
+    def test_channel_connectors_start_collapsed_behind_logo_buttons(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.channel_detail_stack.currentIndex(), 0)
+        self.assertEqual(
+            [button.text().splitlines()[0] for button in window.channel_selector_buttons.values()],
+            ["飞书", "微信", "QQ", "企业微信"],
+        )
+        for button in window.channel_selector_buttons.values():
+            self.assertEqual(button.objectName(), "ChannelSelectorButton")
+            self.assertGreaterEqual(button.minimumHeight(), 44)
+            self.assertGreaterEqual(button.minimumWidth(), 176)
+            self.assertFalse(button.icon().isNull())
+
+    def test_channel_connectors_use_downloaded_brand_icon_assets(self) -> None:
+        expected_files = {
+            "feishu": "lark.ico",
+            "wechat": "wechat.ico",
+            "qq": "qq.ico",
+            "wecom": "wecom.ico",
+        }
+
+        for channel, filename in expected_files.items():
+            icon_path = _brand_icon_path(channel)
+            self.assertIsNotNone(icon_path)
+            self.assertEqual(icon_path.name, filename)
+            self.assertGreater(icon_path.stat().st_size, 100)
+
+    def test_selecting_channel_reveals_only_that_connector_detail(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        window.select_channel("qq")
+
+        self.assertIs(window.channel_detail_stack.currentWidget(), window.qq_channel_detail)
+        self.assertTrue(window.channel_selector_buttons["qq"].isChecked())
+        self.assertFalse(window.channel_selector_buttons["wechat"].isChecked())
+
     def test_main_window_wraps_content_in_scroll_area_for_smaller_windows(self) -> None:
         window = OpenClawLauncherWindow()
 
         self.assertIsInstance(window.centralWidget(), QScrollArea)
+
+    def test_main_window_close_event_delegates_to_close_handler(self) -> None:
+        window = OpenClawLauncherWindow()
+        calls: list[str] = []
+        window.set_close_requested_handler(lambda: (calls.append("close_requested"), False)[1])
+        event = QCloseEvent()
+
+        window.closeEvent(event)
+
+        self.assertEqual(calls, ["close_requested"])
+        self.assertFalse(event.isAccepted())
+
+    def test_close_action_dialog_uses_explicit_lightweight_controls(self) -> None:
+        dialog = CloseActionDialog()
+
+        self.assertEqual(dialog.windowTitle(), "关闭 OpenClaw Portable")
+        self.assertEqual(dialog.minimize_button.text(), "最小化到托盘")
+        self.assertEqual(dialog.exit_button.text(), "完全退出")
+        self.assertIn("以后点击 X 直接最小化到托盘", dialog.remember_checkbox.text())
 
     def test_main_window_uses_smaller_status_heading_than_section_heading(self) -> None:
         window = OpenClawLauncherWindow()
@@ -271,6 +330,25 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertIn("Microsoft YaHei UI", families)
         self.assertIn("Microsoft YaHei", families)
+
+    def test_resolve_app_icon_path_prefers_assets_root_icon(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            assets_dir = temp_dir / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            branding_dir = assets_dir / "branding"
+            branding_dir.mkdir(parents=True, exist_ok=True)
+            root_icon = assets_dir / "app-icon.ico"
+            fallback_icon = branding_dir / "app-icon.png"
+            root_icon.write_bytes(b"ico")
+            fallback_icon.write_bytes(b"png")
+
+            self.assertEqual(resolve_app_icon_path(assets_dir), root_icon)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_colorref_conversion_matches_windows_bgr_order(self) -> None:
+        self.assertEqual(_colorref_from_hex("#E8E5DC"), 0xDCE5E8)
 
 
 if __name__ == "__main__":

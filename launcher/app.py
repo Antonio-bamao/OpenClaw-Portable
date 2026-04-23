@@ -6,7 +6,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, QTimer
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.paths import PortablePaths
@@ -15,8 +16,11 @@ from launcher.services.provider_registry import ProviderTemplateRegistry
 from launcher.services.runtime_errors import format_runtime_error
 from launcher.services.runtime_mode import resolve_runtime_mode
 from launcher.services.online_update import UpdateCheckResult
+from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
+from launcher.ui.close_dialog import CloseActionDialog
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.theme import preferred_font
+from launcher.ui.window_branding import apply_app_icon, apply_windows_title_bar_palette, load_app_icon
 from launcher.ui.wizard import SetupWizardWindow
 
 
@@ -33,8 +37,15 @@ class OpenClawLauncherApplication:
         self.registry = ProviderTemplateRegistry(self.paths.provider_templates_dir)
         self.app = QApplication.instance() or QApplication(sys.argv)
         self.app.setFont(preferred_font())
+        self.app.setQuitOnLastWindowClosed(False)
+        apply_app_icon(self.app, None, self.paths.assets_dir)
+        self.close_preferences = WindowPreferenceStore(self.paths.state_dir)
         self.main_window: OpenClawLauncherWindow | None = None
         self.wizard_window: SetupWizardWindow | None = None
+        self.tray_icon: QSystemTrayIcon | None = None
+        self.tray_menu: QMenu | None = None
+        self._tray_message_shown = False
+        self._exiting = False
         self._busy_actions: set[str] = set()
         self._auto_start_attempted = False
         self._auto_opened_webui = False
@@ -44,7 +55,8 @@ class OpenClawLauncherApplication:
         self._runtime_poll_timer = QTimer()
         self._runtime_poll_timer.setInterval(1000)
         self._runtime_poll_timer.timeout.connect(self._poll_runtime_state)
-        self.app.aboutToQuit.connect(self._shutdown_background_executor)
+        self._setup_tray_icon()
+        self.app.aboutToQuit.connect(self._handle_about_to_quit)
 
     @staticmethod
     def _default_project_root() -> Path:
@@ -64,6 +76,7 @@ class OpenClawLauncherApplication:
         view_state = self.controller.load_view_state()
         if not self.main_window:
             self.main_window = OpenClawLauncherWindow(view_state)
+            self.main_window.set_close_requested_handler(self._handle_main_window_close_request)
             self.main_window.bind_handlers(
                 on_start=self._handle_start,
                 on_stop=self._handle_stop,
@@ -108,16 +121,134 @@ class OpenClawLauncherApplication:
         self.main_window.apply_wecom_channel_state(self.controller.load_wecom_channel_state())
         self._refresh_runtime_console()
         self._runtime_poll_timer.start()
+        apply_app_icon(self.app, self.main_window, self.paths.assets_dir)
         self.main_window.show()
+        apply_windows_title_bar_palette(
+            self.main_window,
+            caption_color="#E8E5DC",
+            text_color="#1F2020",
+            border_color="#C9C5BA",
+        )
         if self.wizard_window:
             self.wizard_window.hide()
         self._schedule_auto_start_runtime()
+
+    def _setup_tray_icon(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        icon = load_app_icon(self.paths.assets_dir)
+        if not icon:
+            icon = self.app.windowIcon()
+        self.tray_icon = QSystemTrayIcon(icon, self.app)
+        self.tray_icon.setToolTip("OpenClaw Portable")
+        self.tray_menu = QMenu()
+        open_action = QAction("打开控制台", self.tray_menu)
+        open_action.triggered.connect(self._restore_from_tray)
+        exit_action = QAction("完全退出", self.tray_menu)
+        exit_action.triggered.connect(self._exit_application)
+        self.tray_menu.addAction(open_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(exit_action)
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self._handle_tray_activated)
+        self.tray_icon.show()
+
+    def _handle_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._restore_from_tray()
+
+    def _restore_from_tray(self) -> None:
+        if not self.main_window:
+            self.show_main_window()
+            return
+        self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+
+    def _handle_main_window_close_request(self) -> bool:
+        remembered_action = self.close_preferences.load_close_action()
+        if remembered_action == CloseAction.MINIMIZE_TO_TRAY:
+            self._minimize_main_window_to_tray()
+            return False
+        if remembered_action == CloseAction.EXIT:
+            self._exit_application()
+            return True
+
+        close_action, remember_minimize = self._ask_close_action()
+        if close_action is None:
+            return False
+        if close_action == CloseAction.MINIMIZE_TO_TRAY:
+            if remember_minimize:
+                self.close_preferences.save_close_action(CloseAction.MINIMIZE_TO_TRAY)
+            self._minimize_main_window_to_tray()
+            return False
+
+        self._exit_application()
+        return True
+
+    def _ask_close_action(self) -> tuple[CloseAction | None, bool]:
+        dialog = CloseActionDialog(None)
+        apply_app_icon(self.app, dialog, self.paths.assets_dir)
+        apply_windows_title_bar_palette(
+            dialog,
+            caption_color="#E8E5DC",
+            text_color="#1F2020",
+            border_color="#C9C5BA",
+        )
+        dialog.exec()
+        selected_action = dialog.selected_action
+        if selected_action is None:
+            return None, False
+        return selected_action, dialog.remember_choice()
+
+    def _minimize_main_window_to_tray(self) -> None:
+        if self.main_window:
+            tray_icon = getattr(self, "tray_icon", None)
+            if not hasattr(self, "tray_icon") or (tray_icon and tray_icon.isVisible()):
+                self.main_window.hide()
+                self._show_tray_message()
+                return
+            self.main_window.showMinimized()
+
+    def _show_tray_message(self) -> None:
+        tray_icon = getattr(self, "tray_icon", None)
+        if getattr(self, "_tray_message_shown", False) or not tray_icon:
+            return
+        self._tray_message_shown = True
+        tray_icon.showMessage(
+            "OpenClaw Portable",
+            "OpenClaw 已最小化到系统托盘。右键托盘图标可完全退出。",
+            QSystemTrayIcon.MessageIcon.Information,
+            3500,
+        )
+
+    def _exit_application(self) -> None:
+        if getattr(self, "_exiting", False):
+            return
+        self._exiting = True
+        if hasattr(self, "_runtime_poll_timer"):
+            self._runtime_poll_timer.stop()
+        try:
+            self.controller.stop_runtime()
+        except Exception as exc:  # noqa: BLE001
+            self._show_error(format_runtime_error(exc))
+        tray_icon = getattr(self, "tray_icon", None)
+        if tray_icon:
+            tray_icon.hide()
+        self.app.quit()
 
     def show_setup_wizard(self) -> None:
         provider_templates = self.registry.load()
         self.wizard_window = SetupWizardWindow(provider_templates)
         self.wizard_window.bind_handlers(on_complete=self._complete_setup, on_cancel=self.show_main_window)
+        apply_app_icon(self.app, self.wizard_window, self.paths.assets_dir)
         self.wizard_window.show()
+        apply_windows_title_bar_palette(
+            self.wizard_window,
+            caption_color="#E8E5DC",
+            text_color="#1F2020",
+            border_color="#C9C5BA",
+        )
         if self.main_window:
             self.main_window.hide()
         self._runtime_poll_timer.stop()
@@ -156,7 +287,6 @@ class OpenClawLauncherApplication:
     def _route_after_auto_start(self) -> None:
         view_state = self.controller.load_view_state()
         if view_state.offline_mode:
-            self.show_setup_wizard()
             return
         self._open_webui_once_after_auto_start(view_state)
 
@@ -505,6 +635,16 @@ class OpenClawLauncherApplication:
 
     def _shutdown_background_executor(self) -> None:
         self._background_executor.shutdown(wait=False, cancel_futures=True)
+
+    def _handle_about_to_quit(self) -> None:
+        if hasattr(self, "_runtime_poll_timer"):
+            self._runtime_poll_timer.stop()
+        if not getattr(self, "_exiting", False):
+            try:
+                self.controller.stop_runtime()
+            except Exception:  # noqa: BLE001
+                pass
+        self._shutdown_background_executor()
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self.main_window or self.wizard_window, "OpenClaw Portable", message)

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+import sys
+from pathlib import Path
+from typing import Callable
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QCloseEvent, QFont, QIcon
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QFrame,
     QGridLayout,
     QLabel,
@@ -11,6 +16,9 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +51,63 @@ def _make_action_grid(buttons: tuple[QPushButton, ...], *, columns: int) -> QGri
     for column in range(columns):
         grid.setColumnStretch(column, 1)
     return grid
+
+
+CHANNEL_ICON_FILES = {
+    "feishu": "lark.ico",
+    "wechat": "wechat.ico",
+    "qq": "qq.ico",
+    "wecom": "wecom.ico",
+}
+
+
+def _assets_dir_candidates() -> tuple[Path, ...]:
+    executable_dir = Path(sys.executable).resolve().parent
+    project_root = Path(__file__).resolve().parents[2]
+    return (
+        executable_dir / "assets",
+        Path.cwd() / "assets",
+        project_root / "assets",
+    )
+
+
+def _brand_icon_path(channel: str) -> Path | None:
+    filename = CHANNEL_ICON_FILES[channel]
+    for assets_dir in _assets_dir_candidates():
+        candidate = assets_dir / "brand" / filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _make_channel_icon(channel: str) -> QIcon:
+    path = _brand_icon_path(channel)
+    if path is None:
+        return QIcon()
+    return QIcon(str(path))
+
+
+def _make_channel_selector(channel: str, title: str, subtitle: str) -> QToolButton:
+    button = QToolButton()
+    button.setObjectName("ChannelSelectorButton")
+    button.setText(f"{title}\n{subtitle}")
+    button.setIcon(_make_channel_icon(channel))
+    button.setIconSize(QSize(52, 52))
+    button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+    button.setCheckable(True)
+    button.setCursor(Qt.PointingHandCursor)
+    button.setMinimumHeight(98)
+    button.setMinimumWidth(176)
+    button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    return button
+
+
+def _make_channel_page() -> tuple[QWidget, QVBoxLayout]:
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    layout.setContentsMargins(0, 18, 0, 0)
+    layout.setSpacing(12)
+    return page, layout
 
 
 class OpenClawLauncherWindow(QMainWindow):
@@ -99,8 +164,16 @@ class OpenClawLauncherWindow(QMainWindow):
         self.test_wecom_button: QPushButton | None = None
         self.enable_wecom_button: QPushButton | None = None
         self.disable_wecom_button: QPushButton | None = None
+        self.channel_detail_stack: QStackedWidget | None = None
+        self.channel_selector_buttons: dict[str, QToolButton] = {}
+        self._channel_stack_indexes: dict[str, int] = {}
+        self.feishu_channel_detail: QWidget | None = None
+        self.wechat_channel_detail: QWidget | None = None
+        self.qq_channel_detail: QWidget | None = None
+        self.wecom_channel_detail: QWidget | None = None
         self._buttons_by_action: dict[str, QPushButton] = {}
         self._default_button_texts: dict[QPushButton, str] = {}
+        self._close_requested_handler: Callable[[], bool] | None = None
         self._build_ui()
 
     def primary_action_texts(self) -> list[str]:
@@ -108,6 +181,18 @@ class OpenClawLauncherWindow(QMainWindow):
 
     def secondary_action_texts(self) -> list[str]:
         return [button.text() for button in self._secondary_buttons]
+
+    def set_close_requested_handler(self, handler: Callable[[], bool]) -> None:
+        self._close_requested_handler = handler
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self._close_requested_handler is None:
+            super().closeEvent(event)
+            return
+        if self._close_requested_handler():
+            event.accept()
+            return
+        event.ignore()
 
     def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_check_update, on_import_update, on_restore_update_backup, on_factory_reset, on_reconfigure) -> None:
         self.start_button.clicked.connect(on_start)
@@ -216,6 +301,13 @@ class OpenClawLauncherWindow(QMainWindow):
         self.wecom_status_detail_label.setText(state.status_detail)
         self.enable_wecom_button.setEnabled(not state.enabled)
         self.disable_wecom_button.setEnabled(state.enabled)
+
+    def select_channel(self, channel: str) -> None:
+        if channel not in self._channel_stack_indexes:
+            return
+        self.channel_detail_stack.setCurrentIndex(self._channel_stack_indexes[channel])
+        for name, button in self.channel_selector_buttons.items():
+            button.setChecked(name == channel)
 
     def set_action_busy(self, action: str, busy: bool) -> None:
         runtime_actions = {
@@ -363,15 +455,46 @@ class OpenClawLauncherWindow(QMainWindow):
         console_layout.addWidget(self.runtime_console_output)
         layout.addWidget(console_card)
 
-        feishu_card = QFrame()
-        feishu_card.setObjectName("SectionCard")
-        apply_card_shadow(feishu_card, blur_radius=22, offset_y=7)
-        feishu_layout = QVBoxLayout(feishu_card)
-        feishu_layout.setContentsMargins(24, 24, 24, 24)
-        feishu_layout.setSpacing(14)
+        channel_card = QFrame()
+        channel_card.setObjectName("SectionCard")
+        apply_card_shadow(channel_card, blur_radius=22, offset_y=7)
+        channel_layout = QVBoxLayout(channel_card)
+        channel_layout.setContentsMargins(24, 24, 24, 24)
+        channel_layout.setSpacing(14)
+        channel_layout.addWidget(make_label("连接渠道", "SectionTitle", size=18, weight=700))
+        channel_layout.addWidget(make_label("选择一个平台后再显示对应配置，主界面只保留品牌入口。", "MutedText"))
+
+        selector_grid = QGridLayout()
+        selector_grid.setHorizontalSpacing(12)
+        selector_grid.setVerticalSpacing(12)
+        selector_group = QButtonGroup(self)
+        selector_group.setExclusive(True)
+        self.channel_selector_buttons = {
+            "feishu": _make_channel_selector("feishu", "飞书", "Lark"),
+            "wechat": _make_channel_selector("wechat", "微信", "ClawBot"),
+            "qq": _make_channel_selector("qq", "QQ", "Bot"),
+            "wecom": _make_channel_selector("wecom", "企业微信", "WeCom"),
+        }
+        for index, (channel, button) in enumerate(self.channel_selector_buttons.items()):
+            row, column = divmod(index, 4)
+            selector_grid.addWidget(button, row, column)
+            selector_grid.setColumnStretch(column, 1)
+            selector_group.addButton(button)
+            button.clicked.connect(lambda checked=False, selected=channel: self.select_channel(selected))
+        channel_layout.addLayout(selector_grid)
+
+        self.channel_detail_stack = QStackedWidget()
+        self.channel_detail_stack.setObjectName("ChannelDetailStack")
+        placeholder_page, placeholder_layout = _make_channel_page()
+        placeholder_label = make_label("点击上方平台 Logo 后，这里才显示连接配置。", "MutedText")
+        placeholder_label.setAlignment(Qt.AlignCenter)
+        placeholder_layout.addWidget(placeholder_label)
+        placeholder_layout.addStretch(1)
+        self.channel_detail_stack.addWidget(placeholder_page)
+
+        self.feishu_channel_detail, feishu_layout = _make_channel_page()
         feishu_layout.addWidget(make_label("飞书私聊渠道", "SectionTitle", size=18, weight=700))
         feishu_layout.addWidget(make_label("配置飞书应用凭据，测试通过后启用私聊 Bot。", "MutedText"))
-
         form = QGridLayout()
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(10)
@@ -389,7 +512,6 @@ class OpenClawLauncherWindow(QMainWindow):
         form.addWidget(make_label("Bot 名称", "MetricLabel"), 2, 0)
         form.addWidget(self.feishu_bot_name_input, 2, 1)
         feishu_layout.addLayout(form)
-
         self.feishu_status_label = make_label("未配置", "SectionStatus", size=14, weight=700)
         self.feishu_status_detail_label = make_label(
             "填写 App ID 和 App Secret 后，先测试连接再启用飞书私聊。",
@@ -397,7 +519,6 @@ class OpenClawLauncherWindow(QMainWindow):
         )
         feishu_layout.addWidget(self.feishu_status_label)
         feishu_layout.addWidget(self.feishu_status_detail_label)
-
         self.save_feishu_button = make_button("保存飞书配置")
         self.test_feishu_button = make_button("测试连接", primary=True)
         self.enable_feishu_button = make_button("启用飞书私聊")
@@ -415,30 +536,9 @@ class OpenClawLauncherWindow(QMainWindow):
                 columns=5,
             )
         )
-        self._buttons_by_action.update(
-            {
-                "test_feishu_channel": self.test_feishu_button,
-                "enable_feishu_channel": self.enable_feishu_button,
-            }
-        )
-        self._default_button_texts.update(
-            {
-                self.test_feishu_button: self.test_feishu_button.text(),
-                self.enable_feishu_button: self.enable_feishu_button.text(),
-            }
-        )
-        layout.addWidget(feishu_card)
+        self.channel_detail_stack.addWidget(self.feishu_channel_detail)
 
-        social_grid = QGridLayout()
-        social_grid.setHorizontalSpacing(16)
-        social_grid.setVerticalSpacing(16)
-
-        wechat_card = QFrame()
-        wechat_card.setObjectName("SectionCard")
-        apply_card_shadow(wechat_card, blur_radius=20, offset_y=6)
-        wechat_layout = QVBoxLayout(wechat_card)
-        wechat_layout.setContentsMargins(24, 24, 24, 24)
-        wechat_layout.setSpacing(12)
+        self.wechat_channel_detail, wechat_layout = _make_channel_page()
         wechat_layout.addWidget(make_label("微信 ClawBot", "SectionTitle", size=18, weight=700))
         wechat_layout.addWidget(make_label("安装腾讯微信通道插件，扫码后用私聊连接 OpenClaw。", "MutedText"))
         self.wechat_status_label = make_label("未安装", "SectionStatus", size=14, weight=700)
@@ -464,13 +564,9 @@ class OpenClawLauncherWindow(QMainWindow):
                 columns=3,
             )
         )
+        self.channel_detail_stack.addWidget(self.wechat_channel_detail)
 
-        qq_card = QFrame()
-        qq_card.setObjectName("SectionCard")
-        apply_card_shadow(qq_card, blur_radius=20, offset_y=6)
-        qq_layout = QVBoxLayout(qq_card)
-        qq_layout.setContentsMargins(24, 24, 24, 24)
-        qq_layout.setSpacing(12)
+        self.qq_channel_detail, qq_layout = _make_channel_page()
         qq_layout.addWidget(make_label("QQ Bot", "SectionTitle", size=18, weight=700))
         qq_layout.addWidget(make_label("QQ 扩展已随包内置，填入开放平台 AppID 和 AppSecret 即可启用。", "MutedText"))
         qq_form = QGridLayout()
@@ -507,13 +603,9 @@ class OpenClawLauncherWindow(QMainWindow):
                 columns=3,
             )
         )
+        self.channel_detail_stack.addWidget(self.qq_channel_detail)
 
-        wecom_card = QFrame()
-        wecom_card.setObjectName("SectionCard")
-        apply_card_shadow(wecom_card, blur_radius=20, offset_y=6)
-        wecom_layout = QVBoxLayout(wecom_card)
-        wecom_layout.setContentsMargins(24, 24, 24, 24)
-        wecom_layout.setSpacing(12)
+        self.wecom_channel_detail, wecom_layout = _make_channel_page()
         wecom_layout.addWidget(make_label("企业微信", "SectionTitle", size=18, weight=700))
         wecom_layout.addWidget(make_label("安装企业微信插件后，填入机器人凭据启用 WebSocket 通道。", "MutedText"))
         wecom_form = QGridLayout()
@@ -550,11 +642,10 @@ class OpenClawLauncherWindow(QMainWindow):
                 columns=3,
             )
         )
-
-        social_grid.addWidget(wechat_card, 0, 0)
-        social_grid.addWidget(qq_card, 0, 1)
-        social_grid.addWidget(wecom_card, 1, 0, 1, 2)
-        layout.addLayout(social_grid)
+        self.channel_detail_stack.addWidget(self.wecom_channel_detail)
+        self._channel_stack_indexes = {"feishu": 1, "wechat": 2, "qq": 3, "wecom": 4}
+        channel_layout.addWidget(self.channel_detail_stack)
+        layout.addWidget(channel_card)
 
         self._buttons_by_action.update(
             {

@@ -9,6 +9,7 @@ $portableDist = Join-Path $root "dist\\OpenClaw-Portable"
 $buildDir = Join-Path $root "build\\pyinstaller"
 $nodeRuntime = Join-Path $root "runtime\\node\\node.exe"
 $openclawRuntime = Join-Path $root "runtime\\openclaw\\openclaw.mjs"
+$iconIco = Join-Path $root "assets\\app-icon.ico"
 
 function Assert-PathInsideRoot {
   param([string]$Path)
@@ -61,16 +62,23 @@ if (-not (Test-Path $nodeRuntime)) {
   throw "Missing runtime\\node\\node.exe. Run scripts\\prepare-node-runtime.ps1 before building the portable package."
 }
 
-& $PythonExe -m PyInstaller `
-  --noconfirm `
-  --clean `
-  --windowed `
-  --onedir `
-  --hidden-import _cffi_backend `
-  --name OpenClawLauncher `
-  --distpath $pyiDist `
-  --workpath $buildDir `
-  (Join-Path $root "main.py")
+$pyInstallerArgs = @(
+  "-m", "PyInstaller",
+  "--noconfirm",
+  "--clean",
+  "--windowed",
+  "--onedir",
+  "--hidden-import", "_cffi_backend",
+  "--name", "OpenClawLauncher",
+  "--distpath", $pyiDist,
+  "--workpath", $buildDir
+)
+if (Test-Path $iconIco) {
+  $pyInstallerArgs += @("--icon", $iconIco)
+}
+$pyInstallerArgs += (Join-Path $root "main.py")
+
+& $PythonExe @pyInstallerArgs
 
 New-Item -ItemType Directory -Force -Path $portableDist | Out-Null
 Copy-Item (Join-Path $pyiDist "OpenClawLauncher\\*") $portableDist -Recurse -Force

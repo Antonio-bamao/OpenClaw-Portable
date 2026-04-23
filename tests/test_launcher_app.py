@@ -7,6 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from launcher.app import OpenClawLauncherApplication
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
+from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 
 
 def make_view_state(status_label: str, status_detail: str, message: str, *, offline_mode: bool = False) -> LauncherViewState:
@@ -47,6 +48,9 @@ class FakeController:
 
     def restart_runtime(self) -> None:
         self.calls.append("restart_runtime")
+
+    def stop_runtime(self) -> None:
+        self.calls.append("stop_runtime")
 
     def load_view_state(self) -> LauncherViewState:
         self.calls.append("load_view_state")
@@ -187,6 +191,18 @@ class FakeWindow:
         self.wecom_bot_id_input = FakeInput("wwbot")
         self.wecom_secret_input = FakeInput("wecom-secret")
 
+    def hide(self) -> None:
+        self.calls.append("hide_window")
+
+    def show(self) -> None:
+        self.calls.append("show_window")
+
+    def raise_(self) -> None:
+        self.calls.append("raise_window")
+
+    def activateWindow(self) -> None:
+        self.calls.append("activate_window")
+
     def apply_view_state(self, state: LauncherViewState) -> None:
         self.states.append(state)
         self.calls.append(f"apply:{state.status_label}")
@@ -222,6 +238,9 @@ class FakeQtApp:
 
     def processEvents(self) -> None:
         self.calls.append("process_events")
+
+    def quit(self) -> None:
+        self.calls.append("app_quit")
 
 
 class LauncherAppTests(unittest.TestCase):
@@ -331,7 +350,7 @@ class LauncherAppTests(unittest.TestCase):
         mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
 
     @patch("launcher.app.webbrowser.open_new_tab")
-    def test_auto_start_opens_configuration_when_api_key_is_missing(self, mock_open_new_tab) -> None:
+    def test_auto_start_keeps_main_window_when_api_key_is_missing(self, mock_open_new_tab) -> None:
         calls: list[str] = []
         pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
         final_state = make_view_state(
@@ -350,7 +369,21 @@ class LauncherAppTests(unittest.TestCase):
 
         application._auto_start_runtime()
 
-        self.assertIn("show_setup_wizard", calls)
+        self.assertNotIn("show_setup_wizard", calls)
+        self.assertEqual(
+            calls,
+            [
+                "should_auto_start_runtime",
+                "pending:start",
+                "apply:启动中",
+                "process_events",
+                "start_runtime",
+                "load_view_state",
+                "apply:运行中",
+                "console:Gateway 已就绪，飞书已连接",
+                "load_view_state",
+            ],
+        )
         mock_open_new_tab.assert_not_called()
 
     @patch("launcher.app.webbrowser.open_new_tab")
@@ -501,6 +534,96 @@ class LauncherAppTests(unittest.TestCase):
         application._handle_check_update()
 
         self.assertNotIn("check_for_updates", calls)
+
+    def test_close_request_minimizes_to_tray_without_stopping_runtime(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application.close_preferences = type("Prefs", (), {"load_close_action": lambda self: CloseAction.ASK})()
+        application._ask_close_action = lambda: (CloseAction.MINIMIZE_TO_TRAY, False)
+        application._show_tray_message = lambda: calls.append("tray_message")
+
+        should_close = application._handle_main_window_close_request()
+
+        self.assertFalse(should_close)
+        self.assertIn("hide_window", calls)
+        self.assertIn("tray_message", calls)
+        self.assertNotIn("stop_runtime", calls)
+        self.assertNotIn("app_quit", calls)
+
+    def test_close_request_full_exit_stops_runtime_before_quitting(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application.close_preferences = type("Prefs", (), {"load_close_action": lambda self: CloseAction.ASK})()
+        application._ask_close_action = lambda: (CloseAction.EXIT, False)
+
+        should_close = application._handle_main_window_close_request()
+
+        self.assertTrue(should_close)
+        self.assertLess(calls.index("stop_runtime"), calls.index("app_quit"))
+
+    def test_close_request_can_remember_minimize_to_tray(self) -> None:
+        calls: list[str] = []
+
+        class FakePreferences:
+            def __init__(self) -> None:
+                self.saved: list[CloseAction] = []
+
+            def load_close_action(self) -> CloseAction:
+                return CloseAction.ASK
+
+            def save_close_action(self, action: CloseAction) -> None:
+                self.saved.append(action)
+
+        preferences = FakePreferences()
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application.close_preferences = preferences
+        application._ask_close_action = lambda: (CloseAction.MINIMIZE_TO_TRAY, True)
+        application._show_tray_message = lambda: None
+
+        should_close = application._handle_main_window_close_request()
+
+        self.assertFalse(should_close)
+        self.assertEqual(preferences.saved, [CloseAction.MINIMIZE_TO_TRAY])
+
+    def test_remembered_minimize_to_tray_skips_close_prompt(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application.close_preferences = type("Prefs", (), {"load_close_action": lambda self: CloseAction.MINIMIZE_TO_TRAY})()
+        application._ask_close_action = lambda: (_ for _ in ()).throw(AssertionError("prompt should not be shown"))
+        application._show_tray_message = lambda: calls.append("tray_message")
+
+        should_close = application._handle_main_window_close_request()
+
+        self.assertFalse(should_close)
+        self.assertIn("hide_window", calls)
+
+    def test_window_close_preference_store_persists_remembered_action(self) -> None:
+        temp_dir = Path.cwd() / "tmp" / "window-preferences-test"
+        try:
+            store = WindowPreferenceStore(temp_dir)
+
+            self.assertEqual(store.load_close_action(), CloseAction.ASK)
+
+            store.save_close_action(CloseAction.MINIMIZE_TO_TRAY)
+
+            self.assertEqual(WindowPreferenceStore(temp_dir).load_close_action(), CloseAction.MINIMIZE_TO_TRAY)
+        finally:
+            if temp_dir.exists():
+                import shutil
+
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
 
     def test_handle_save_feishu_channel_reads_inputs_and_applies_state(self) -> None:

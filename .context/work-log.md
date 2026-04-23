@@ -594,3 +594,59 @@
 - 结果：主界面从娱乐化复古掌机气质转为理性、克制、功能主义的桌面设备控制台气质，仍保留主/次/危险按钮层级、指标卡、主控制台、日志和渠道卡片结构。
 - 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 21 tests；`python -m unittest discover -s tests` passed `215` tests；首次重建因 dist 内四个 `node.exe` 残留进程锁住 `runtime\\node\\node.exe` 失败，确认路径后只停止这些 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 19:12:25`。
 - 下一步：在真实桌面环境打开新版 EXE 做人工视觉确认；若继续打磨，优先把 Setup Wizard 的步骤条、输入表单和渠道卡片也进一步统一成 Braun 式设备说明面板语言。
+
+## 2026-04-23｜修复未配置 API Key 时自动启动后强制跳回向导
+- 目标：修复“主窗口先加载一会，然后又自动退回首次启动向导”的回退体验问题。
+- 动作：按 systematic-debugging 先查根因：确认 `dist\\OpenClaw-Portable\\state\\openclaw.json` 中 `first_run_completed=true`，并确认 `state\\.env` 中 `OPENCLAW_API_KEY=` 为空；再锁定 `launcher\\app.py::_route_after_auto_start()` 中 `offline_mode=True -> show_setup_wizard()` 的强制跳转分支。随后按 TDD 先把 `tests\\test_launcher_app.py` 改成“离线模式自动启动后保留主窗口”的 failing test，看到 RED 后，删掉这条强制跳向导的分支。
+- 结果：未配置 API Key 时，launcher 仍可自动启动 runtime，但会停留在主控制台，不会再自己把用户踢回首次启动向导；首次启动是否显示向导仍只由 `LauncherBootstrap.initial_route()` 决定。
+- 验证：`python -m unittest tests.test_launcher_app.LauncherAppTests.test_auto_start_keeps_main_window_when_api_key_is_missing -v` 先 FAIL 后 PASS；`python -m unittest tests.test_launcher_app tests.test_launcher_bootstrap -v` passed 47 tests；`python -m unittest discover -s tests` passed `215` tests；首次重建因 dist 内两个 `node.exe` 残留进程锁住 `runtime\\node\\node.exe` 失败，确认路径后只停止这两个 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 19:30:58`。
+- 下一步：用新版 EXE 复测“无 API Key 自动启动”路径，确认它现在会停留在主控制台；如果还要继续优化，可以把主控制台里的离线提示做得更显眼，而不是再用强制页面跳转。
+
+## 2026-04-23｜适配 Windows 原生标题栏与应用图标入口
+- 目标：保留 Windows 原生标题栏的拖拽、缩放、最大化和系统菜单能力，同时让标题栏颜色适配 Braun / Dieter Rams 风格，并接入用户放入的应用图标。
+- 动作：新增 `launcher/ui/window_branding.py`，集中处理 `assets/app-icon.ico` / `assets/app-icon.png` 图标查找、Qt 应用/窗口图标应用，以及 Windows DWM 原生标题栏 caption/text/border 配色；在 `launcher/app.py` 中给主窗口和首次启动向导应用图标与暖灰标题栏配色；在 `scripts/build-launcher.ps1` 中检测 `assets/app-icon.ico` 并传给 PyInstaller；发现用户放入的 `assets/app-icon.ico` 实际是 PNG 数据后，先备份为 `assets/app-icon-source.png`，再用 Qt 转成真正的 Windows ICO。
+- 结果：launcher 继续使用稳定的原生标题栏，但标题栏从默认白框变成与 Braun 暖灰界面匹配的系统标题栏；窗口图标和 EXE 图标入口固定为 `assets/app-icon.ico`，用户原始图像保留在 `assets/app-icon-source.png`。
+- 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 23 tests；`python -m unittest discover -s tests` passed `217` tests；`powershell -Command .\\scripts\\build-launcher.ps1` 在修正 ICO 后 succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `572.87MB / 26146` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 20:23:08`。
+- 下一步：人工重新打开新版 EXE，确认 Windows 标题栏颜色、任务栏/窗口图标和主界面 Braun 视觉在真实桌面环境里一致；如果 Windows 资源管理器仍显示旧图标，优先考虑图标缓存而不是回滚功能代码。
+
+## 2026-04-23｜连接渠道改成 Logo 入口与点击展开
+- 目标：解决飞书、微信、QQ、企业微信配置表单全部摊开导致主界面过长、过杂的问题，保留现有渠道功能，只重构渠道区的信息呈现。
+- 动作：把原来的飞书大卡片和微信/QQ/企业微信多卡片网格合并为一个 `连接渠道` 面板；新增四个品牌入口按钮（飞书、微信、QQ、企业微信），默认只显示入口与选择提示；点击某个平台后，通过 `QStackedWidget` 展开对应配置表单与原有保存/测试/启用/停用按钮；保留原按钮对象与 handler 绑定，不改渠道保存、测试、启用业务逻辑。初版误用了程序绘制的临时图标，随后已移除手绘图标实现，改为下载并读取 `assets/brand/{lark,wechat,qq,wecom}.ico` 官方站点图标资源。
+- 结果：主界面渠道区从多张长表单压缩成一排平台入口，用户只在需要配置某个平台时展开对应内容；入口图标不再是手绘假图标，而是随包复制到 `dist\\OpenClaw-Portable\\assets\\brand` 的官方来源图标。
+- 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 26 tests；`python -m unittest discover -s tests` passed `220` tests；首次重建因旧 dist Node 进程锁住 `runtime\\node\\node.exe` 失败，确认路径后只停止两个 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `572.90MB / 26150` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 21:32:36`。
+- 下一步：人工打开新版 EXE，确认四个官方图标、渠道切换和详情页按钮在真实 Windows 中文字体环境下显示正常。
+
+## 2026-04-23｜关闭窗口改为托盘最小化 / 完全退出双路径
+- 目标：解决用户点击左上角 `X` 后画面消失但 OpenClaw / Node 运行时仍在后台占用文件的问题，同时保留“最小化到 Windows 托盘继续运行”的合理桌面应用行为。
+- 动作：按 TDD 新增关闭行为测试；新增 `launcher/services/window_preferences.py` 保存窗口关闭偏好；让 `OpenClawLauncherWindow.closeEvent()` 委托应用层处理；应用启动时创建系统托盘图标和右键菜单；初版使用 `QMessageBox` 作为关闭提示框，但在用户真实 Windows 环境里出现黑底黑字难以辨认，且当对话框未产生有效按钮选择时会错误地回落为“最小化到托盘”，导致第一次点 `X` 可能不弹框就直接缩到托盘。随后改为 `launcher/ui/close_dialog.py` 自绘浅色关闭对话框，并把“无选择”分支改成直接取消，不再偷偷最小化；完全退出路径同步调用 `controller.stop_runtime()` 后再 `app.quit()`，托盘最小化路径只隐藏主窗口且不停止 runtime。
+- 结果：点击 `X` 不再无提示地造成“窗口没了但用户不知道服务还在跑”；关闭提示框回到可读的浅色界面；首次点击 `X` 会稳定弹出选择框；选择完全退出会清理该启动器拉起的运行时进程；勾选记住后，后续点击 `X` 直接最小化到托盘，可通过托盘菜单再次打开控制台或完全退出。
+- 验证：`python -m unittest tests.test_launcher_app tests.test_launcher_bootstrap -v` passed 59 tests；`python -m unittest discover -s tests` passed `227` tests；自绘关闭对话框已用本地离屏渲染截图复核；重建前检查 `dist\\OpenClaw-Portable` 下无旧进程且无 `state\\window-preferences.json` 预置偏好；`powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `572.91MB / 26150` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 21:59:49`。
+- 下一步：人工打开新版 EXE，验证三条真实桌面路径：首次点 `X` 立即弹浅色选择框；勾选后再次点 `X` 直接进托盘；托盘菜单“完全退出”后任务管理器中不再保留该便携目录下的 OpenClawLauncher / node 进程。
+
+## 2026-04-23｜准备 v2026.04.6 本地 release candidate
+- 目标：把 2026-04-17 至 2026-04-23 的本地 launcher 改进收口为可发布的下一版候选资产，确认除外部证据外的本地发布链路全部可用。
+- 动作：将根 `version.json` 从 `v2026.04.5` 提升到 `v2026.04.6`；运行 `python -m unittest discover -s tests` 先确认源码态 `227` 项测试全绿；随后执行 `powershell -ExecutionPolicy Bypass -File .\\scripts\\build-release-assets.ps1 -Note "Post-v2026.04.5 launcher UX, branding, tray-close, and channel selector improvements"`，让脚本重建干净 `dist\\OpenClaw-Portable`、为 `update-manifest.json` 生成签名，并输出 `dist\\release\\OpenClaw-Portable-v2026.04.6.zip` 与新的 `update.json`；最后运行 `python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` 和 `python scripts\\verify-delivery-flow.py --package-root dist\\OpenClaw-Portable --release-dir dist\\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\\delivery-flow-gate-v2026.04.6.json` 做本地发布 gate。
+- 结果：`v2026.04.6` 本地 release candidate 已准备完成；当前源码、便携包与 release 资产都已切到 `v2026.04.6`，并收口了 post-`v2026.04.5` 的启动体验、品牌化、渠道入口与托盘关闭语义改进。
+- 验证：`python -m unittest discover -s tests` passed `227` tests；`dist\\release\\OpenClaw-Portable-v2026.04.6.zip` 已生成，大小 `208664018` bytes；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `572.91MB / 26151` files；`python scripts\\verify-delivery-flow.py --package-root dist\\OpenClaw-Portable --release-dir dist\\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\\delivery-flow-gate-v2026.04.6.json` returned `status=pending`，其中 package audit、release assets、runtime stability 全部通过，runtime cold start `19.62s`、restart `21.83s`、max `21.83s`、avg `20.73s`。
+- 下一步：若决定公开分发这批本地改进，就以当前 `v2026.04.6` 资产创建 tag / GitHub Release 并验证 public latest feed；若暂不发版，则继续收集 Feishu 私聊 E2E、removable-media 与多引擎 AV / SmartScreen 证据。
+
+## 2026-04-23｜清理本地构建与临时产物
+- 目标：删除当前工作区里明确不参与运行、打包和参考分析的本地构建残留，同时避免误删 `u-claw`、`dist`、`runtime` 与 `.worktrees`。
+- 动作：先用 `rg`、`git ls-files --stage`、`git worktree list` 和目录清单确认边界：`u-claw` 是被 Git 记录的独立入口，仅作为参考仓存在；`.worktrees/openclaw-simple-startup` 仍是活跃 worktree；`dist`、`runtime` 是当前候选版和运行时必需目录。随后仅删除 `build/`、`tmp/` 与 `OpenClawLauncher.spec`。
+- 结果：本地构建缓存与临时验证目录已清理干净，项目运行/打包必需目录和参考仓均保留。
+- 验证：删除后复查确认 `build=False`、`tmp=False`、`OpenClawLauncher.spec=False`，同时 `u-claw=True`、`dist=True`、`runtime=True`、`.worktrees=True`。
+- 下一步：如果后续要继续瘦身，再单独评估 `u-claw` 这个 Git 追踪入口是否应从仓库结构中正式移除，而不是把它当普通垃圾目录直接删掉。
+
+## 2026-04-23｜清理主工作区 Python 字节码缓存
+- 目标：继续删除当前主工作区里明确可再生、不会影响功能的 Python 运行缓存，同时避免碰到活跃 `.worktrees` 内容。
+- 动作：先用 `git status --short --ignored` 与目录扫描确认当前主工作区和 `.worktrees/openclaw-simple-startup` 下都存在 `__pycache__`；再用引用搜索确认 `assets/app-icon-source.png`、`assets/brand/`、`launcher/services/window_preferences.py`、`launcher/ui/close_dialog.py`、`launcher/ui/window_branding.py` 都已在代码中实际使用，因此不能当成垃圾文件删掉。随后只删除主工作区下的 `launcher/__pycache__`、`launcher/core/__pycache__`、`launcher/runtime/__pycache__`、`launcher/services/__pycache__`、`launcher/ui/__pycache__` 与 `tests/__pycache__`，明确保留 `.worktrees/openclaw-simple-startup/**/__pycache__`。
+- 结果：主工作区里的 Python 字节码缓存已清理，工作树更干净；活跃 worktree 及其缓存未受影响。
+- 验证：删除后逐项复查确认上述 6 个主工作区 `__pycache__` 目录均不存在；全仓扫描仅剩 `.worktrees/openclaw-simple-startup` 下的 `__pycache__`；`git status --short --ignored` 仍保留 `.local/`、`.worktrees/`、`dist/`、`runtime/openclaw/`、`state/.env` 等预期忽略项，没有新增异常缺失。
+- 下一步：若还要继续清理，只建议继续做“边查边删”的保守路径，例如单独评估 `.worktrees` 内缓存、`state/backups/` 是否还有保留价值，以及 `u-claw` 是否要作为 Git 追踪入口正式移除。
+
+## 2026-04-23｜清理活跃 worktree 内的 Python 字节码缓存
+- 目标：在不影响主仓当前改动和备份数据的前提下，继续删除活跃 `.worktrees/openclaw-simple-startup` 里的可再生缓存。
+- 动作：先确认 `.worktrees/openclaw-simple-startup` 下仅剩 6 个 `__pycache__` 目录，而 `state/backups/` 里只有一个 `openclaw-diagnostics-20260412-035031.zip` 诊断备份，因此先不动任何备份。随后只删除 worktree 下的 `launcher/__pycache__`、`launcher/core/__pycache__`、`launcher/runtime/__pycache__`、`launcher/services/__pycache__`、`launcher/ui/__pycache__` 与 `tests/__pycache__`。
+- 结果：主仓和活跃 worktree 两侧的 Python 字节码缓存都已清理完，仓库中不再残留 `__pycache__` 目录；状态备份、`u-claw` 参考仓和运行时产物仍完整保留。
+- 验证：删除后全仓扫描 `__pycache__` 返回空结果；`state/backups/` 仍保留 `openclaw-diagnostics-20260412-035031.zip`；`git status --short --ignored` 继续只显示预期中的 `.local/`、`.worktrees/`、`dist/`、`runtime/openclaw/`、`state/.env`、`state/backups/` 等忽略项。
+- 下一步：如果还要继续做保守清理，下一层可评估对象只剩 `state/backups/` 这类历史备份和 `u-claw` 这类 Git 追踪参考入口；这两类都不应在没有明确意图的情况下直接删除。

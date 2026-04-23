@@ -173,6 +173,27 @@ def app_stylesheet() -> str:
             background: #EFECE3;
             border-color: {ACCENT_DEEP};
         }}
+        QToolButton#ChannelSelectorButton {{
+            min-height: 94px;
+            border-radius: 4px;
+            padding: 10px 12px;
+            border: 1px solid #B8B3A8;
+            background: #FDFBF6;
+            color: {PRIMARY};
+            font-weight: 700;
+        }}
+        QToolButton#ChannelSelectorButton:hover {{
+            background: #F3F0E8;
+            border-color: #8F8A80;
+        }}
+        QToolButton#ChannelSelectorButton:checked {{
+            background: #EFECE3;
+            border: 2px solid {PRIMARY};
+            border-bottom: 3px solid {ACCENT};
+        }}
+        QToolButton#ChannelSelectorButton:focus {{
+            border: 2px solid {PRIMARY};
+        }}
         QLineEdit, QComboBox {{
             min-height: 42px;
             border-radius: 3px;
@@ -197,6 +218,11 @@ def app_stylesheet() -> str:
             selection-background-color: {ACCENT};
         }}
         QStackedWidget {{
+            background: transparent;
+        }}
+        QStackedWidget#ChannelDetailStack {{
+            border-top: 1px solid {BORDER};
+            margin-top: 4px;
             background: transparent;
         }}
         QScrollArea {{
