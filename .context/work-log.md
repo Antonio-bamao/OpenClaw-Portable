@@ -560,8 +560,8 @@
 - 验证：`python -m unittest tests.test_openclaw_runtime_adapter tests.test_launcher_controller tests.test_feishu_channel_service tests.test_launcher_app` 在隔离 worktree 中 passed 75 tests；`python -m unittest discover -s tests` 在隔离 worktree 中 passed 202 tests；`powershell -Command .\\scripts\\build-launcher.ps1` 在主工作区 succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `570.92MB / 26144` files。
 - 下一步：如果要对外分发 2026-04-17 至 2026-04-19 的本地改进，准备 post-`v2026.04.5` release；否则继续补齐真实平台凭证 E2E 和多厂商杀软 / SmartScreen 证据。
 
-## 2026-04-23｜对齐 u-claw 参考项目的真实启动体验
-- 目标：把启动器从“用户进控制台后手动点启动”改成更接近 `u-claw` 参考项目的可用体验：真实 runtime 可用时自动启动，本地 gateway 真正 HTTP 可达后自动打开 dashboard。
+## 2026-04-23｜对齐参考桌面项目的真实启动体验
+- 目标：把启动器从“用户进控制台后手动点启动”改成更接近参考桌面项目的可用体验：真实 runtime 可用时自动启动，本地 gateway 真正 HTTP 可达后自动打开 dashboard。
 - 动作：按 TDD 增加 HTTP gateway readiness、自动启动、自动打开 dashboard、`--force` opt-in 的测试；将 `OpenClawRuntimeAdapter.healthcheck()` 从 TCP socket 探测改为 HTTP GET 根路径响应探测；让真实 `openclaw` 模式在已配置状态下自动启动，并在启动成功后只打开一次 WebUI；验证发现照搬参考项目的 `--force` 会在当前 Windows OpenClaw runtime 上触发 `fuser permission denied`，因此改为 `OPENCLAW_GATEWAY_FORCE=1` 显式开启，默认依赖已有端口自动避让。
 - 结果：双击打包版进入主窗口后，真实 runtime 会自动启动并在 gateway ready 后打开 `http://127.0.0.1:<port>/#token=...`；readiness 不再被“端口刚 accept 但 HTTP 还没 ready”的假阳性误导；当前 Windows 默认不再因 `--force` 直接提前退出。
 - 验证：`python -m unittest tests.test_openclaw_runtime_adapter tests.test_launcher_controller tests.test_launcher_app -v` passed 72 tests；`python -m unittest discover -s tests` passed 210 tests；`powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `576.75MB / 27205` files；`python scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 1 --restart-runs 0 --timeout-seconds 90 --output tmp\\runtime-http-health-smoke.json` passed with cold start `20.86s` and `healthOk=true`。
@@ -631,22 +631,43 @@
 - 下一步：若决定公开分发这批本地改进，就以当前 `v2026.04.6` 资产创建 tag / GitHub Release 并验证 public latest feed；若暂不发版，则继续收集 Feishu 私聊 E2E、removable-media 与多引擎 AV / SmartScreen 证据。
 
 ## 2026-04-23｜清理本地构建与临时产物
-- 目标：删除当前工作区里明确不参与运行、打包和参考分析的本地构建残留，同时避免误删 `u-claw`、`dist`、`runtime` 与 `.worktrees`。
-- 动作：先用 `rg`、`git ls-files --stage`、`git worktree list` 和目录清单确认边界：`u-claw` 是被 Git 记录的独立入口，仅作为参考仓存在；`.worktrees/openclaw-simple-startup` 仍是活跃 worktree；`dist`、`runtime` 是当前候选版和运行时必需目录。随后仅删除 `build/`、`tmp/` 与 `OpenClawLauncher.spec`。
+- 目标：删除当前工作区里明确不参与运行、打包和参考分析的本地构建残留，同时避免误删参考仓入口、`dist`、`runtime` 与 `.worktrees`。
+- 动作：先用 `rg`、`git ls-files --stage`、`git worktree list` 和目录清单确认边界：参考仓入口当时仍是被 Git 记录的独立入口；`.worktrees/openclaw-simple-startup` 仍是活跃 worktree；`dist`、`runtime` 是当前候选版和运行时必需目录。随后仅删除 `build/`、`tmp` 与 `OpenClawLauncher.spec`。
 - 结果：本地构建缓存与临时验证目录已清理干净，项目运行/打包必需目录和参考仓均保留。
-- 验证：删除后复查确认 `build=False`、`tmp=False`、`OpenClawLauncher.spec=False`，同时 `u-claw=True`、`dist=True`、`runtime=True`、`.worktrees=True`。
-- 下一步：如果后续要继续瘦身，再单独评估 `u-claw` 这个 Git 追踪入口是否应从仓库结构中正式移除，而不是把它当普通垃圾目录直接删掉。
+- 验证：删除后复查确认 `build=False`、`tmp=False`、`OpenClawLauncher.spec=False`，同时参考仓入口仍在、`dist=True`、`runtime=True`、`.worktrees=True`。
+- 下一步：如果后续要继续瘦身，再单独评估这个 Git 追踪的参考仓入口是否应从仓库结构中正式移除，而不是把它当普通垃圾目录直接删掉。
 
 ## 2026-04-23｜清理主工作区 Python 字节码缓存
 - 目标：继续删除当前主工作区里明确可再生、不会影响功能的 Python 运行缓存，同时避免碰到活跃 `.worktrees` 内容。
 - 动作：先用 `git status --short --ignored` 与目录扫描确认当前主工作区和 `.worktrees/openclaw-simple-startup` 下都存在 `__pycache__`；再用引用搜索确认 `assets/app-icon-source.png`、`assets/brand/`、`launcher/services/window_preferences.py`、`launcher/ui/close_dialog.py`、`launcher/ui/window_branding.py` 都已在代码中实际使用，因此不能当成垃圾文件删掉。随后只删除主工作区下的 `launcher/__pycache__`、`launcher/core/__pycache__`、`launcher/runtime/__pycache__`、`launcher/services/__pycache__`、`launcher/ui/__pycache__` 与 `tests/__pycache__`，明确保留 `.worktrees/openclaw-simple-startup/**/__pycache__`。
 - 结果：主工作区里的 Python 字节码缓存已清理，工作树更干净；活跃 worktree 及其缓存未受影响。
 - 验证：删除后逐项复查确认上述 6 个主工作区 `__pycache__` 目录均不存在；全仓扫描仅剩 `.worktrees/openclaw-simple-startup` 下的 `__pycache__`；`git status --short --ignored` 仍保留 `.local/`、`.worktrees/`、`dist/`、`runtime/openclaw/`、`state/.env` 等预期忽略项，没有新增异常缺失。
-- 下一步：若还要继续清理，只建议继续做“边查边删”的保守路径，例如单独评估 `.worktrees` 内缓存、`state/backups/` 是否还有保留价值，以及 `u-claw` 是否要作为 Git 追踪入口正式移除。
+- 下一步：若还要继续清理，只建议继续做“边查边删”的保守路径，例如单独评估 `.worktrees` 内缓存、`state/backups/` 是否还有保留价值，以及参考仓入口是否要作为 Git 追踪内容正式移除。
 
 ## 2026-04-23｜清理活跃 worktree 内的 Python 字节码缓存
 - 目标：在不影响主仓当前改动和备份数据的前提下，继续删除活跃 `.worktrees/openclaw-simple-startup` 里的可再生缓存。
 - 动作：先确认 `.worktrees/openclaw-simple-startup` 下仅剩 6 个 `__pycache__` 目录，而 `state/backups/` 里只有一个 `openclaw-diagnostics-20260412-035031.zip` 诊断备份，因此先不动任何备份。随后只删除 worktree 下的 `launcher/__pycache__`、`launcher/core/__pycache__`、`launcher/runtime/__pycache__`、`launcher/services/__pycache__`、`launcher/ui/__pycache__` 与 `tests/__pycache__`。
-- 结果：主仓和活跃 worktree 两侧的 Python 字节码缓存都已清理完，仓库中不再残留 `__pycache__` 目录；状态备份、`u-claw` 参考仓和运行时产物仍完整保留。
+- 结果：主仓和活跃 worktree 两侧的 Python 字节码缓存都已清理完，仓库中不再残留 `__pycache__` 目录；状态备份、参考仓入口和运行时产物仍完整保留。
 - 验证：删除后全仓扫描 `__pycache__` 返回空结果；`state/backups/` 仍保留 `openclaw-diagnostics-20260412-035031.zip`；`git status --short --ignored` 继续只显示预期中的 `.local/`、`.worktrees/`、`dist/`、`runtime/openclaw/`、`state/.env`、`state/backups/` 等忽略项。
-- 下一步：如果还要继续做保守清理，下一层可评估对象只剩 `state/backups/` 这类历史备份和 `u-claw` 这类 Git 追踪参考入口；这两类都不应在没有明确意图的情况下直接删除。
+- 下一步：如果还要继续做保守清理，下一层可评估对象只剩 `state/backups/` 这类历史备份和参考仓入口这类 Git 追踪内容；这两类都不应在没有明确意图的情况下直接删除。
+
+## 2026-04-23｜移除参考仓入口
+- 目标：在不影响当前 OpenClaw Portable 运行、测试和打包链路的前提下，把不再需要的参考仓从当前项目中移除。
+- 动作：先再次验证主项目边界：`python -m unittest discover -s tests` 通过，`python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 3` 无警告，确认当前项目不依赖该参考目录参与运行或打包。随后检查发现该目录不是普通未跟踪目录，而是一个 Git 追踪的 gitlink 入口；`git rm` 因索引写权限与 submodule 名称解析问题未直接成功，于是改用 `git update-index --force-remove` 把它从主仓索引移除，再删除磁盘上的参考仓目录。
+- 结果：参考仓已从当前项目磁盘目录和 Git 索引中一并移除；当前仓库结构不再包含这个外部参考入口。
+- 验证：删除后参考仓目录不存在；`git status --short` 显示对应删除变更；再次执行 `python -m unittest discover -s tests` 仍通过 `227` 项测试；`python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 3` 仍无 warnings。
+- 下一步：如果希望连文档里的历史引用也一起清掉，可再单独整理 `.context`、`bug-log` 和 `docs/superpowers/specs/2026-04-19-openclaw-simple-startup-design.md` 中的说明；这不是运行必要项，所以本轮先不混在删除动作里。
+
+## 2026-04-23｜做用户交付前的最新 readiness check
+- 目标：在决定是否把当前包直接交给用户之前，用本次会话里的最新命令确认“本地链路已通过”和“仍未清零的外部风险”。
+- 动作：先读取 `.context/current-status.md` 顶部摘要与当前工作树状态；随后运行 `python -m unittest discover -s tests`、`python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 3`，最后执行 `python scripts\verify-delivery-flow.py --package-root dist\OpenClaw-Portable --release-dir dist\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\\delivery-flow-gate-readiness-check.json`。
+- 结果：当前 `v2026.04.6` 本地交付包在本地维度上仍是可用的：测试、包审计、release 资产和 runtime stability 都通过；delivery gate 仍是 `pending`，但 pending 只剩真实飞书 E2E、真实 removable-media 证据和多引擎 AV / SmartScreen 信誉三项外部证据。
+- 验证：`python -m unittest discover -s tests` passed `227` tests；`verify-delivery-flow.py` 返回 `status=pending`，其中 package audit passed at `602.93MB / 30109` files，release-assets passed，runtime stability passed with cold `17.91s`、restart `17.70s`、max `17.91s`、avg `17.80s`。
+- 下一步：若只是交付给受控用户做内测或点对点使用，可以基于当前 `dist/release/OpenClaw-Portable-v2026.04.6.zip` 发出；若目标是更广泛对外分发，则仍建议先补齐外部 E2E、U 盘实机证据和安全信誉证据。
+
+## 2026-04-23｜整理源码状态准备正式发版
+- 目标：把删除参考仓后的源码状态和文档状态整理干净，为后续正式发布 `v2026.04.6` 做准备。
+- 动作：确认 `main` 与 `origin/main` 已包含功能代码、托盘关闭语义和参考仓移除提交；将 `.context`、bug 记录和启动简化设计文档里的外部参考仓专名改成中性“参考实现 / 参考桌面项目”表述，避免仓库结构已经移除后文档仍像依赖该目录。
+- 结果：当前未提交范围收敛为文档与上下文收尾改动；源码功能侧已经干净，`version.json`、`dist/release/update.json` 与 release zip 均指向 `v2026.04.6`。
+- 验证：`python -m unittest discover -s tests` passed `227` tests；`python scripts\\verify-delivery-flow.py --package-root dist\\OpenClaw-Portable --release-dir dist\\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\\delivery-flow-gate-final-source-cleanup.json` returned `status=pending`，其中 package audit、release assets、runtime stability 全部 passed，runtime cold `19.86s`、restart `19.59s`、max `19.86s`、avg `19.73s`。
+- 下一步：提交这批文档收尾改动；提交后如要公开发布，再创建并推送 `v2026.04.6` tag，上传 `dist/release/OpenClaw-Portable-v2026.04.6.zip` 与 `dist/release/update.json`，并验证 public latest feed。

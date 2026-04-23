@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep the current PySide launcher UI and channel/config surfaces, but replace the fragile startup path with a minimal OpenClaw boot flow modeled after `u-claw`: spawn bundled `node.exe` with `openclaw.mjs gateway run`, wait for the local gateway port to become reachable, then treat the runtime as started.
+Keep the current PySide launcher UI and channel/config surfaces, but replace the fragile startup path with a minimal OpenClaw boot flow modeled after a simpler reference desktop implementation: spawn bundled `node.exe` with `openclaw.mjs gateway run`, wait for the local gateway port to become reachable, then treat the runtime as started.
 
 ## Problem Summary
 
@@ -22,7 +22,7 @@ That means the OpenClaw runtime can start, but the launcher's extra orchestratio
 
 ## Recommended Approach
 
-Adopt `u-claw`'s simpler boot model while keeping our existing UI shell:
+Adopt the simpler reference boot model while keeping our existing UI shell:
 
 1. Prepare config and environment before launch.
 2. Spawn the bundled Node runtime with the OpenClaw entrypoint.
@@ -37,7 +37,7 @@ This keeps the launcher responsible for packaging, config projection, and UI, wh
 ### In Scope
 
 - simplify `OpenClawRuntimeAdapter.start()` readiness checks
-- align runtime process launch with the `u-claw` spawn pattern
+- align runtime process launch with the reference implementation's spawn pattern
 - hide the Windows child console for the OpenClaw process
 - remove startup-critical dependence on Feishu live probe results
 - tighten controller/runtime error messaging so startup failure reflects actual process state
@@ -46,7 +46,7 @@ This keeps the launcher responsible for packaging, config projection, and UI, wh
 ### Out of Scope
 
 - replacing the PySide UI with Electron
-- copying `u-claw`'s codebase wholesale
+- copying the reference implementation's codebase wholesale
 - redesigning channel onboarding UX
 - changing the packaged OpenClaw version
 
@@ -113,9 +113,9 @@ The user-facing error should match the observed state instead of defaulting to "
 - rerun the targeted launcher/runtime/channel test suite
 - rebuild the packaged launcher and verify the new executable no longer opens the blank console window
 
-## Why Not Replace Everything With `u-claw`
+## Why Not Replace Everything With The Reference App
 
-`u-claw` is useful as a reference because its launch path is simple and robust, but it is not a drop-in replacement for this project:
+The reference app is useful because its launch path is simple and robust, but it is not a drop-in replacement for this project:
 
 - its portable mode is mostly script-driven and browser-driven
 - its Electron app has a much smaller feature surface than this launcher
