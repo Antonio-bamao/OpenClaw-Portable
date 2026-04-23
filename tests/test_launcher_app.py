@@ -9,7 +9,7 @@ from launcher.app import OpenClawLauncherApplication
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 
 
-def make_view_state(status_label: str, status_detail: str, message: str) -> LauncherViewState:
+def make_view_state(status_label: str, status_detail: str, message: str, *, offline_mode: bool = False) -> LauncherViewState:
     return LauncherViewState(
         status_label=status_label,
         status_detail=status_detail,
@@ -18,7 +18,7 @@ def make_view_state(status_label: str, status_detail: str, message: str) -> Laun
         provider_label="通义千问 / qwen-max",
         message=message,
         webui_url="http://127.0.0.1:18789/#token=uclaw",
-        offline_mode=False,
+        offline_mode=offline_mode,
     )
 
 
@@ -329,6 +329,29 @@ class LauncherAppTests(unittest.TestCase):
             ],
         )
         mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_auto_start_opens_configuration_when_api_key_is_missing(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state(
+            "运行中",
+            "本地运行时正在响应请求，已运行 00:01。",
+            "通义千问 的 API Key 尚未配置。",
+            offline_mode=True,
+        )
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(pending_state, final_state, calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._auto_start_attempted = False
+        application._auto_opened_webui = False
+        application.show_setup_wizard = lambda: calls.append("show_setup_wizard")
+
+        application._auto_start_runtime()
+
+        self.assertIn("show_setup_wizard", calls)
+        mock_open_new_tab.assert_not_called()
 
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_auto_start_runs_only_once(self, mock_open_new_tab) -> None:

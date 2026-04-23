@@ -566,3 +566,10 @@
 - 结果：双击打包版进入主窗口后，真实 runtime 会自动启动并在 gateway ready 后打开 `http://127.0.0.1:<port>/#token=...`；readiness 不再被“端口刚 accept 但 HTTP 还没 ready”的假阳性误导；当前 Windows 默认不再因 `--force` 直接提前退出。
 - 验证：`python -m unittest tests.test_openclaw_runtime_adapter tests.test_launcher_controller tests.test_launcher_app -v` passed 72 tests；`python -m unittest discover -s tests` passed 210 tests；`powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `576.75MB / 27205` files；`python scripts\\verify-portable-runtime-stability.py --package-root dist\\OpenClaw-Portable --cold-runs 1 --restart-runs 0 --timeout-seconds 90 --output tmp\\runtime-http-health-smoke.json` passed with cold start `20.86s` and `healthOk=true`。
 - 下一步：做一次真实桌面人工 smoke，确认自动打开浏览器 / dashboard 符合预期；若要给外部用户使用，基于这版 dist 准备 post-`v2026.04.5` release。
+
+## 2026-04-23｜未配置 API Key 时自动进入配置向导
+- 目标：在不破坏刚跑通的自动启动链路前提下，避免未配置 API Key 的用户被自动带进空聊天页。
+- 动作：只调整自动启动成功后的路由：`offline_mode=false` 时继续自动打开 WebUI dashboard；`offline_mode=true` 时不打开浏览器，转入启动器配置向导，让用户先补 API Key。启动、HTTP readiness、端口选择和 runtime 进程控制均未改动。
+- 结果：已配置 Key 的用户仍保持“启动后自动进 dashboard”；未配置 Key 的用户会看到配置入口，不再面对空聊天页发懵。
+- 验证：`python -m unittest tests.test_launcher_app -v` passed 26 tests；`python -m unittest discover -s tests` passed 211 tests；首次 `build-launcher.ps1` 因旧 `dist\\runtime\\node\\node.exe` 进程锁失败，确认是验证残留进程后只停止两个 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 17:45:58`。
+- 下一步：人工打开新版 launcher，分别验证“无 Key -> 配置向导”和“有 Key -> WebUI dashboard”两个分支。

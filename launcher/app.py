@@ -151,12 +151,19 @@ class OpenClawLauncherApplication:
 
     def _after_auto_start_runtime(self) -> None:
         self._refresh_main_view()
-        self._open_webui_once_after_auto_start()
+        self._route_after_auto_start()
 
-    def _open_webui_once_after_auto_start(self) -> None:
+    def _route_after_auto_start(self) -> None:
+        view_state = self.controller.load_view_state()
+        if view_state.offline_mode:
+            self.show_setup_wizard()
+            return
+        self._open_webui_once_after_auto_start(view_state)
+
+    def _open_webui_once_after_auto_start(self, view_state=None) -> None:
         if getattr(self, "_auto_opened_webui", False):
             return
-        view_state = self.controller.load_view_state()
+        view_state = view_state or self.controller.load_view_state()
         if not view_state.webui_url:
             return
         self._auto_opened_webui = True
