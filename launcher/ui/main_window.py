@@ -5,7 +5,6 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -31,6 +30,19 @@ DEFAULT_VIEW_STATE = LauncherViewState(
     webui_url="http://127.0.0.1:18789",
     offline_mode=False,
 )
+
+
+def _make_action_grid(buttons: tuple[QPushButton, ...], *, columns: int) -> QGridLayout:
+    grid = QGridLayout()
+    grid.setHorizontalSpacing(10)
+    grid.setVerticalSpacing(10)
+    grid.setContentsMargins(0, 0, 0, 0)
+    for index, button in enumerate(buttons):
+        row, column = divmod(index, columns)
+        grid.addWidget(button, row, column)
+    for column in range(columns):
+        grid.setColumnStretch(column, 1)
+    return grid
 
 
 class OpenClawLauncherWindow(QMainWindow):
@@ -243,8 +255,8 @@ class OpenClawLauncherWindow(QMainWindow):
 
         root = QWidget()
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(22)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(18)
 
         hero = HeroPanel(
             "把复杂启动过程，包进一个可靠的桌面控制台。",
@@ -263,22 +275,22 @@ class OpenClawLauncherWindow(QMainWindow):
         metrics.addWidget(self.port_card, 0, 1)
         metrics.addWidget(self.runtime_card, 0, 2)
         metrics.addWidget(self.provider_card, 0, 3)
+        for column in range(4):
+            metrics.setColumnStretch(column, 1)
         layout.addLayout(metrics)
 
         control_card = QFrame()
         control_card.setObjectName("SectionCard")
-        apply_card_shadow(control_card, blur_radius=28, offset_y=10)
+        apply_card_shadow(control_card)
         control_layout = QVBoxLayout(control_card)
-        control_layout.setContentsMargins(24, 24, 24, 24)
-        control_layout.setSpacing(18)
+        control_layout.setContentsMargins(24, 22, 24, 22)
+        control_layout.setSpacing(16)
         control_layout.addWidget(make_label("主控制台", "SectionTitle", size=18, weight=700))
         self.message_label = make_label(self.view_state.message, "MutedText")
         control_layout.addWidget(self.message_label)
         self.status_detail_label = make_label(self.view_state.status_detail, "MutedText")
         control_layout.addWidget(self.status_detail_label)
 
-        button_row = QHBoxLayout()
-        button_row.setSpacing(12)
         self.start_button = make_button("启动服务", primary=True)
         self.stop_button = make_button("停止服务")
         self.restart_button = make_button("重新启动")
@@ -287,7 +299,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.check_update_button = make_button("检查更新")
         self.import_update_button = make_button("导入更新包")
         self.restore_update_backup_button = make_button("恢复更新备份")
-        self.factory_reset_button = make_button("恢复出厂")
+        self.factory_reset_button = make_button("恢复出厂", danger=True)
         self.reconfigure_button = make_button("重新配置")
         self._default_button_texts = {
             button: button.text()
@@ -315,10 +327,7 @@ class OpenClawLauncherWindow(QMainWindow):
             self.factory_reset_button,
             self.reconfigure_button,
         ]
-        for button in self._primary_buttons + self._secondary_buttons:
-            button_row.addWidget(button)
-        button_row.addStretch(1)
-        control_layout.addLayout(button_row)
+        control_layout.addLayout(_make_action_grid(tuple(self._primary_buttons + self._secondary_buttons), columns=5))
 
         self.footnote_label = QLabel(
             f"地址 {self.view_state.webui_url}  ·  "
@@ -332,7 +341,7 @@ class OpenClawLauncherWindow(QMainWindow):
 
         console_card = QFrame()
         console_card.setObjectName("SectionCard")
-        apply_card_shadow(console_card, blur_radius=24, offset_y=8)
+        apply_card_shadow(console_card, blur_radius=22, offset_y=7)
         console_layout = QVBoxLayout(console_card)
         console_layout.setContentsMargins(24, 24, 24, 24)
         console_layout.setSpacing(12)
@@ -340,6 +349,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.runtime_console_status_label = make_label("等待启动日志…", "SectionStatus", size=14, weight=700)
         console_layout.addWidget(self.runtime_console_status_label)
         self.runtime_console_output = QPlainTextEdit()
+        self.runtime_console_output.setObjectName("ConsoleOutput")
         self.runtime_console_output.setReadOnly(True)
         self.runtime_console_output.setMinimumHeight(220)
         self.runtime_console_output.setPlainText(
@@ -355,7 +365,7 @@ class OpenClawLauncherWindow(QMainWindow):
 
         feishu_card = QFrame()
         feishu_card.setObjectName("SectionCard")
-        apply_card_shadow(feishu_card, blur_radius=24, offset_y=8)
+        apply_card_shadow(feishu_card, blur_radius=22, offset_y=7)
         feishu_layout = QVBoxLayout(feishu_card)
         feishu_layout.setContentsMargins(24, 24, 24, 24)
         feishu_layout.setSpacing(14)
@@ -388,23 +398,23 @@ class OpenClawLauncherWindow(QMainWindow):
         feishu_layout.addWidget(self.feishu_status_label)
         feishu_layout.addWidget(self.feishu_status_detail_label)
 
-        feishu_actions = QHBoxLayout()
-        feishu_actions.setSpacing(12)
         self.save_feishu_button = make_button("保存飞书配置")
         self.test_feishu_button = make_button("测试连接", primary=True)
         self.enable_feishu_button = make_button("启用飞书私聊")
         self.disable_feishu_button = make_button("停用")
         self.open_feishu_help_button = make_button("接入帮助", subtle=True)
-        for button in (
-            self.save_feishu_button,
-            self.test_feishu_button,
-            self.enable_feishu_button,
-            self.disable_feishu_button,
-            self.open_feishu_help_button,
-        ):
-            feishu_actions.addWidget(button)
-        feishu_actions.addStretch(1)
-        feishu_layout.addLayout(feishu_actions)
+        feishu_layout.addLayout(
+            _make_action_grid(
+                (
+                    self.save_feishu_button,
+                    self.test_feishu_button,
+                    self.enable_feishu_button,
+                    self.disable_feishu_button,
+                    self.open_feishu_help_button,
+                ),
+                columns=5,
+            )
+        )
         self._buttons_by_action.update(
             {
                 "test_feishu_channel": self.test_feishu_button,
@@ -435,25 +445,25 @@ class OpenClawLauncherWindow(QMainWindow):
         self.wechat_status_detail_label = make_label("先安装微信插件，再打开扫码窗口完成登录。", "MutedText")
         wechat_layout.addWidget(self.wechat_status_label)
         wechat_layout.addWidget(self.wechat_status_detail_label)
-        wechat_actions = QHBoxLayout()
-        wechat_actions.setSpacing(10)
         self.install_wechat_button = make_button("安装微信插件")
         self.login_wechat_button = make_button("扫码登录", primary=True)
         self.confirm_wechat_button = make_button("确认已扫码")
         self.open_wechat_help_button = make_button("接入帮助", subtle=True)
         self.enable_wechat_button = make_button("启用微信")
         self.disable_wechat_button = make_button("停用")
-        for button in (
-            self.install_wechat_button,
-            self.login_wechat_button,
-            self.confirm_wechat_button,
-            self.open_wechat_help_button,
-            self.enable_wechat_button,
-            self.disable_wechat_button,
-        ):
-            wechat_actions.addWidget(button)
-        wechat_actions.addStretch(1)
-        wechat_layout.addLayout(wechat_actions)
+        wechat_layout.addLayout(
+            _make_action_grid(
+                (
+                    self.install_wechat_button,
+                    self.login_wechat_button,
+                    self.confirm_wechat_button,
+                    self.open_wechat_help_button,
+                    self.enable_wechat_button,
+                    self.disable_wechat_button,
+                ),
+                columns=3,
+            )
+        )
 
         qq_card = QFrame()
         qq_card.setObjectName("SectionCard")
@@ -480,23 +490,23 @@ class OpenClawLauncherWindow(QMainWindow):
         self.qq_status_detail_label = make_label("创建 QQ 机器人后，把 AppID 和 AppSecret 填到这里。", "MutedText")
         qq_layout.addWidget(self.qq_status_label)
         qq_layout.addWidget(self.qq_status_detail_label)
-        qq_actions = QHBoxLayout()
-        qq_actions.setSpacing(10)
         self.open_qq_help_button = make_button("接入帮助", subtle=True)
         self.save_qq_button = make_button("保存 QQ 配置")
         self.test_qq_button = make_button("检查 QQ 配置")
         self.enable_qq_button = make_button("启用 QQ", primary=True)
         self.disable_qq_button = make_button("停用")
-        for button in (
-            self.open_qq_help_button,
-            self.save_qq_button,
-            self.test_qq_button,
-            self.enable_qq_button,
-            self.disable_qq_button,
-        ):
-            qq_actions.addWidget(button)
-        qq_actions.addStretch(1)
-        qq_layout.addLayout(qq_actions)
+        qq_layout.addLayout(
+            _make_action_grid(
+                (
+                    self.open_qq_help_button,
+                    self.save_qq_button,
+                    self.test_qq_button,
+                    self.enable_qq_button,
+                    self.disable_qq_button,
+                ),
+                columns=3,
+            )
+        )
 
         wecom_card = QFrame()
         wecom_card.setObjectName("SectionCard")
@@ -523,23 +533,23 @@ class OpenClawLauncherWindow(QMainWindow):
         self.wecom_status_detail_label = make_label("先安装企业微信插件，再填写凭据启用。", "MutedText")
         wecom_layout.addWidget(self.wecom_status_label)
         wecom_layout.addWidget(self.wecom_status_detail_label)
-        wecom_actions = QHBoxLayout()
-        wecom_actions.setSpacing(10)
         self.install_wecom_button = make_button("安装企业微信插件")
         self.save_wecom_button = make_button("保存企业微信配置")
         self.test_wecom_button = make_button("检查企业微信配置")
         self.enable_wecom_button = make_button("启用企业微信", primary=True)
         self.disable_wecom_button = make_button("停用")
-        for button in (
-            self.install_wecom_button,
-            self.save_wecom_button,
-            self.test_wecom_button,
-            self.enable_wecom_button,
-            self.disable_wecom_button,
-        ):
-            wecom_actions.addWidget(button)
-        wecom_actions.addStretch(1)
-        wecom_layout.addLayout(wecom_actions)
+        wecom_layout.addLayout(
+            _make_action_grid(
+                (
+                    self.install_wecom_button,
+                    self.save_wecom_button,
+                    self.test_wecom_button,
+                    self.enable_wecom_button,
+                    self.disable_wecom_button,
+                ),
+                columns=3,
+            )
+        )
 
         social_grid.addWidget(wechat_card, 0, 0)
         social_grid.addWidget(qq_card, 0, 1)

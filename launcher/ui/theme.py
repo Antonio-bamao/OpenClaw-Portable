@@ -3,12 +3,18 @@ from __future__ import annotations
 from PySide6.QtGui import QColor, QFont
 
 
-ACCENT = "#0F6CBD"
-ACCENT_DEEP = "#094A87"
-SURFACE = "#F5F8FC"
-TEXT = "#13253A"
-MUTED = "#5B6B7E"
-BORDER = "rgba(19, 37, 58, 0.08)"
+PRIMARY = "#2F3233"
+ACCENT = "#D66A1F"
+ACCENT_DEEP = "#A64D16"
+SUCCESS = "#4F6F52"
+SURFACE = "#E8E5DC"
+PANEL = "#F7F5EF"
+TEXT = "#1F2020"
+MUTED = "#63625D"
+BORDER = "#C9C5BA"
+FIELD = "#FCFBF7"
+METAL = "#D8D5CC"
+RING = "#2F3233"
 
 
 def preferred_font() -> QFont:
@@ -38,45 +44,47 @@ def app_stylesheet() -> str:
             background: {SURFACE};
         }}
         QFrame#HeroCard {{
-            background: qlineargradient(
-                x1: 0, y1: 0, x2: 1, y2: 1,
-                stop: 0 rgba(255, 255, 255, 0.96),
-                stop: 1 rgba(238, 245, 255, 0.92)
-            );
-            border: 1px solid rgba(15, 108, 189, 0.10);
-            border-radius: 28px;
+            background: {PANEL};
+            border: 1px solid {BORDER};
+            border-top: 4px solid {PRIMARY};
+            border-radius: 4px;
         }}
         QFrame#SectionCard {{
-            background: rgba(255, 255, 255, 0.96);
+            background: {PANEL};
             border: 1px solid {BORDER};
-            border-radius: 24px;
+            border-radius: 4px;
         }}
         QFrame#MetricCard {{
-            background: rgba(255, 255, 255, 0.92);
-            border: 1px solid rgba(15, 108, 189, 0.08);
-            border-radius: 18px;
+            background: #FDFBF6;
+            border: 1px solid {BORDER};
+            border-radius: 4px;
         }}
         QLabel#Eyebrow {{
-            color: {ACCENT};
-            background: rgba(15, 108, 189, 0.10);
-            border-radius: 14px;
-            padding: 6px 12px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
+            color: {PRIMARY};
+            background: #ECE8DD;
+            border: 1px solid {BORDER};
+            border-bottom: 2px solid {ACCENT};
+            border-radius: 3px;
+            padding: 5px 11px;
+            font-weight: 700;
         }}
         QLabel#DisplayTitle {{
-            font-size: 34px;
+            color: {PRIMARY};
+            font-size: 32px;
             font-weight: 700;
         }}
         QLabel#HeroStatusTitle {{
-            font-size: 28px;
+            color: {PRIMARY};
+            font-size: 24px;
             font-weight: 700;
         }}
         QLabel#SectionTitle {{
+            color: {PRIMARY};
             font-size: 18px;
             font-weight: 700;
         }}
         QLabel#SectionStatus {{
+            color: {PRIMARY};
             font-size: 14px;
             font-weight: 700;
         }}
@@ -84,66 +92,135 @@ def app_stylesheet() -> str:
             color: {MUTED};
             line-height: 1.5;
         }}
+        QFrame#HeroCard QLabel#MutedText {{
+            color: {MUTED};
+        }}
         QLabel#StatusBadge {{
-            color: #0B7A0B;
-            background: rgba(11, 122, 11, 0.10);
-            border-radius: 16px;
-            padding: 8px 14px;
-            font-weight: 600;
+            color: {PRIMARY};
+            background: #EFECE3;
+            border: 1px solid {BORDER};
+            border-left: 4px solid {ACCENT};
+            border-radius: 3px;
+            padding: 7px 12px;
+            font-weight: 700;
         }}
         QLabel#MetricLabel {{
             color: {MUTED};
             font-size: 12px;
             font-weight: 600;
-            letter-spacing: 0.8px;
         }}
         QLabel#MetricValue {{
-            font-size: 22px;
+            color: {PRIMARY};
+            font-size: 21px;
             font-weight: 700;
         }}
         QPushButton {{
-            min-height: 44px;
-            border-radius: 16px;
-            padding: 0 18px;
-            border: 1px solid rgba(19, 37, 58, 0.08);
-            background: rgba(255, 255, 255, 0.96);
+            min-height: 42px;
+            border-radius: 3px;
+            padding: 0 16px;
+            border: 1px solid #B8B3A8;
+            background: #F9F7F1;
+            color: {PRIMARY};
+            font-weight: 700;
         }}
         QPushButton:hover {{
-            background: rgba(15, 108, 189, 0.06);
+            background: #F1EEE6;
+            border-color: #8F8A80;
+        }}
+        QPushButton:pressed {{
+            background: {METAL};
+            border-color: {PRIMARY};
+        }}
+        QPushButton:focus {{
+            border: 2px solid {RING};
+        }}
+        QPushButton:disabled {{
+            color: #9A9890;
+            background: #E4E0D7;
+            border-color: #D0CCC2;
         }}
         QPushButton#PrimaryButton {{
             background: {ACCENT};
-            color: white;
-            font-weight: 600;
-            border: none;
+            color: #FFFFFF;
+            font-weight: 800;
+            border: 1px solid {ACCENT_DEEP};
         }}
         QPushButton#PrimaryButton:hover {{
             background: {ACCENT_DEEP};
+            border-color: {ACCENT_DEEP};
+        }}
+        QPushButton#PrimaryButton:pressed {{
+            background: #7E3C12;
         }}
         QPushButton#SubtleButton {{
-            background: rgba(15, 108, 189, 0.08);
-            color: {ACCENT};
-            border: 1px solid rgba(15, 108, 189, 0.12);
-            font-weight: 600;
+            background: {METAL};
+            color: {PRIMARY};
+            border: 1px solid #AAA69B;
+            font-weight: 700;
+        }}
+        QPushButton#SubtleButton:hover {{
+            background: #E4E0D7;
+            border-color: #878177;
+        }}
+        QPushButton#DangerButton {{
+            background: #F7F5EF;
+            color: {PRIMARY};
+            border: 1px solid #AFA99E;
+            border-left: 4px solid {ACCENT};
+            font-weight: 700;
+        }}
+        QPushButton#DangerButton:hover {{
+            background: #EFECE3;
+            border-color: {ACCENT_DEEP};
         }}
         QLineEdit, QComboBox {{
             min-height: 42px;
-            border-radius: 14px;
-            border: 1px solid rgba(19, 37, 58, 0.12);
-            background: white;
+            border-radius: 3px;
+            border: 1px solid #B8B3A8;
+            background: {FIELD};
             padding: 0 14px;
         }}
+        QLineEdit:focus, QComboBox:focus {{
+            border: 2px solid {PRIMARY};
+            background: #FFFFFF;
+        }}
         QTextEdit, QPlainTextEdit {{
-            border-radius: 18px;
-            border: 1px solid rgba(19, 37, 58, 0.12);
-            background: white;
+            border-radius: 3px;
+            border: 1px solid #B8B3A8;
+            background: {FIELD};
             padding: 12px;
+        }}
+        QPlainTextEdit#ConsoleOutput {{
+            color: #E8E5DC;
+            background: #242626;
+            border: 1px solid #151616;
+            selection-background-color: {ACCENT};
         }}
         QStackedWidget {{
             background: transparent;
+        }}
+        QScrollArea {{
+            border: none;
+            background: {SURFACE};
+        }}
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 10px;
+            margin: 2px;
+        }}
+        QScrollBar::handle:vertical {{
+            background: #AFA99E;
+            border-radius: 3px;
+            min-height: 36px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {PRIMARY};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0;
         }}
     """
 
 
 def shadow_color() -> QColor:
-    return QColor(18, 37, 58, 30)
+    return QColor(47, 50, 51, 18)

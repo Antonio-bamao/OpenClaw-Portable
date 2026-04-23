@@ -573,3 +573,24 @@
 - 结果：已配置 Key 的用户仍保持“启动后自动进 dashboard”；未配置 Key 的用户会看到配置入口，不再面对空聊天页发懵。
 - 验证：`python -m unittest tests.test_launcher_app -v` passed 26 tests；`python -m unittest discover -s tests` passed 211 tests；首次 `build-launcher.ps1` 因旧 `dist\\runtime\\node\\node.exe` 进程锁失败，确认是验证残留进程后只停止两个 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 5` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 17:45:58`。
 - 下一步：人工打开新版 launcher，分别验证“无 Key -> 配置向导”和“有 Key -> WebUI dashboard”两个分支。
+
+## 2026-04-23｜打磨 launcher 主界面视觉与按钮层级
+- 目标：只改 UI 画面和按钮观感，不触碰刚跑通的启动、配置、渠道功能链路。
+- 动作：按 `ui-ux-pro-max` 的工具类控制台方向重整主题 token、卡片圆角/边框/阴影、按钮 hover/pressed/disabled/focus 状态；将主控制台与渠道卡片的动作按钮从单排挤压改成响应式网格；为恢复出厂加入危险按钮视觉角色；让日志框使用独立深色控制台样式，并让指标卡值换行避免模型名截断。
+- 结果：主界面从松散的大圆角淡色卡片改成更清晰的专业控制台视觉；主要动作、次要动作和危险动作有了可识别层级，按钮不再在窗口宽度内挤成一条。
+- 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 19 tests；`python -m unittest discover -s tests` passed `213` tests；`powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `570.92MB / 26144` files。
+- 下一步：在真实桌面打开新版 `dist\\OpenClaw-Portable\\OpenClawLauncher.exe` 做一次人工视觉确认；如果继续优化 UI，优先细化向导页和社交渠道卡片密度。
+
+## 2026-04-23｜改成红白机怀旧配色与实体按键组件
+- 目标：在不改功能的前提下，把主界面从普通控制台视觉改成更有记忆点的红白机配色与按钮组件。
+- 动作：继续按 `ui-ux-pro-max` 约束做怀旧控制台风格：主题切到暖白机身、红色面板、深酒红描边和金色 focus ring；按钮改为厚描边、4px 底边的实体按键样式，pressed 状态模拟按下；Hero 右侧红底区域使用浅色专用文字样式，避免只追求风格导致可读性下降。
+- 结果：launcher 主界面已经具备红白机外壳感和更有特色的按键组件，同时保留主/次/危险动作层级与 44px 以上触控高度。
+- 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 21 tests；`python -m unittest discover -s tests` passed `215` tests；首次重建因旧 `OpenClawLauncher.exe` 进程锁住 `_sodium.pyd` 失败，确认后只停止该旧启动器进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 18:21:47`。
+- 下一步：人工打开新版 EXE 看真实中文字体下的红白机风格效果；若继续打磨，优先给向导页补同风格步骤条与输入控件细节。
+
+## 2026-04-23｜从红白机风格重构为 Braun / Dieter Rams 工业控制台
+- 目标：保留当前信息架构、模块顺序和业务逻辑，只把“红白掌机 / 游戏机 / 复古电子设备”视觉语言收敛为 Braun / Dieter Rams inspired functional UI。
+- 动作：用低饱和暖灰、浅象牙白、石墨灰和少量安全橙替换红白机高饱和色；去掉大面积红色 Hero 面板、厚重红框、4px 实体按键底边和玩具感按钮；按钮改为平直细边框、低圆角、克制 hover/pressed/focus 状态；状态 badge、品牌 eyebrow 和危险操作仅用橙色细线点缀；日志区改成深石墨专业工具日志面板。
+- 结果：主界面从娱乐化复古掌机气质转为理性、克制、功能主义的桌面设备控制台气质，仍保留主/次/危险按钮层级、指标卡、主控制台、日志和渠道卡片结构。
+- 验证：`python -m unittest tests.test_launcher_bootstrap -v` passed 21 tests；`python -m unittest discover -s tests` passed `215` tests；首次重建因 dist 内四个 `node.exe` 残留进程锁住 `runtime\\node\\node.exe` 失败，确认路径后只停止这些 dist Node 进程；随后 `powershell -Command .\\scripts\\build-launcher.ps1` succeeded；`python scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable` passed with no warnings at `570.92MB / 26144` files；`dist\\OpenClaw-Portable\\OpenClawLauncher.exe` timestamp refreshed to `2026-04-23 19:12:25`。
+- 下一步：在真实桌面环境打开新版 EXE 做人工视觉确认；若继续打磨，优先把 Setup Wizard 的步骤条、输入表单和渠道卡片也进一步统一成 Braun 式设备说明面板语言。

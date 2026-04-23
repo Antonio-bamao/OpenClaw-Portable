@@ -14,7 +14,7 @@ from launcher.core.config_store import LauncherConfig, LauncherConfigStore, Sens
 from launcher.core.paths import PortablePaths
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.ui.main_window import OpenClawLauncherWindow
-from launcher.ui.theme import preferred_font
+from launcher.ui.theme import app_stylesheet, preferred_font
 from launcher.ui.wizard import SetupWizardWindow
 
 
@@ -99,8 +99,44 @@ class LauncherUiSmokeTests(unittest.TestCase):
         window = OpenClawLauncherWindow()
 
         self.assertEqual(window.runtime_console_status_label.text(), "等待启动日志…")
+        self.assertEqual(window.runtime_console_output.objectName(), "ConsoleOutput")
         self.assertTrue(window.runtime_console_output.isReadOnly())
         self.assertIn("启动后这里会实时显示", window.runtime_console_output.toPlainText())
+
+    def test_main_window_uses_distinct_button_visual_roles(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertEqual(window.start_button.objectName(), "PrimaryButton")
+        self.assertEqual(window.open_webui_button.objectName(), "SubtleButton")
+        self.assertEqual(window.factory_reset_button.objectName(), "DangerButton")
+        for button in (window.start_button, window.open_webui_button, window.factory_reset_button):
+            self.assertGreaterEqual(button.minimumHeight(), 44)
+            self.assertGreaterEqual(button.minimumWidth(), 112)
+
+    def test_theme_uses_braun_functional_design_language(self) -> None:
+        stylesheet = app_stylesheet()
+
+        self.assertIn("#E8E5DC", stylesheet)
+        self.assertIn("#2F3233", stylesheet)
+        self.assertIn("#D66A1F", stylesheet)
+        self.assertNotIn("#B3212F", stylesheet)
+        self.assertNotIn("border-bottom: 4px", stylesheet)
+
+    def test_hero_status_copy_uses_neutral_panel_text(self) -> None:
+        window = OpenClawLauncherWindow()
+        neutral_status_labels = [
+            label.text()
+            for label in window.findChildren(type(window.status_detail_label))
+            if label.objectName() == "MutedText"
+        ]
+
+        self.assertIn("当前状态", neutral_status_labels)
+        self.assertIn("健康检查与本地 WebUI 已预留。", neutral_status_labels)
+
+    def test_metric_values_wrap_instead_of_clipping(self) -> None:
+        window = OpenClawLauncherWindow()
+
+        self.assertTrue(window.provider_card.value_label.wordWrap())
 
     def test_main_window_disables_check_update_button_while_busy(self) -> None:
         window = OpenClawLauncherWindow()
