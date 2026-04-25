@@ -16,6 +16,7 @@ DEFAULT_PRUNE_PATTERNS = (
     "*.spec.*",
 )
 DEFAULT_PRUNE_DIRECTORY_NAMES = ("__tests__", "test")
+DEFAULT_PRESERVE_PATTERNS = ("docs/reference/templates/*.md",)
 
 
 @dataclass(frozen=True)
@@ -29,9 +30,10 @@ def prune_runtime_tree(
     *,
     patterns: tuple[str, ...] = DEFAULT_PRUNE_PATTERNS,
     directory_names: tuple[str, ...] = DEFAULT_PRUNE_DIRECTORY_NAMES,
+    preserve_patterns: tuple[str, ...] = DEFAULT_PRESERVE_PATTERNS,
     dry_run: bool = False,
 ) -> RuntimePruneResult:
-    candidates = _collect_prunable_files(runtime_root, patterns, directory_names)
+    candidates = _collect_prunable_files(runtime_root, patterns, directory_names, preserve_patterns)
     bytes_freed = sum(candidate.stat().st_size for candidate in candidates)
     if not dry_run:
         for candidate in candidates:
@@ -43,6 +45,7 @@ def _collect_prunable_files(
     runtime_root: Path,
     patterns: tuple[str, ...],
     directory_names: tuple[str, ...],
+    preserve_patterns: tuple[str, ...],
 ) -> list[Path]:
     candidates: dict[Path, None] = {}
     directory_name_set = {name for name in directory_names if name}
@@ -51,6 +54,8 @@ def _collect_prunable_files(
             continue
         relative_path = candidate.relative_to(runtime_root)
         relative_posix = relative_path.as_posix()
+        if any(fnmatch(candidate.name, pattern) or fnmatch(relative_posix, pattern) for pattern in preserve_patterns):
+            continue
         if any(fnmatch(candidate.name, pattern) or fnmatch(relative_posix, pattern) for pattern in patterns):
             candidates[candidate] = None
             continue

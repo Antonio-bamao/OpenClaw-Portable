@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 
+from launcher.services.runtime_pruning import DEFAULT_PRESERVE_PATTERNS
+
+DEFAULT_RUNTIME_PRESERVE_PATHS = tuple(f"runtime/openclaw/{pattern}" for pattern in DEFAULT_PRESERVE_PATTERNS)
+
 
 DEFAULT_REQUIRED_PATHS = (
     "OpenClawLauncher.exe",
@@ -30,6 +34,7 @@ DEFAULT_PRUNE_CANDIDATE_RULES = (
         "risk": "low",
         "description": "Markdown documentation files already removed by the default release pruning step.",
         "patterns": ("*.md",),
+        "exclude_patterns": DEFAULT_RUNTIME_PRESERVE_PATHS,
     },
     {
         "name": "type_declarations",

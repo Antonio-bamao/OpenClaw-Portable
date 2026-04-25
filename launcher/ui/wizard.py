@@ -244,7 +244,9 @@ class SetupWizardWindow(QMainWindow):
     def _simulate_connection_test(self) -> None:
         self._sync_session_from_inputs()
         if self.session.api_key:
-            self.connection_output.setPlainText("✅ 已模拟通过连接测试，后续接真实运行时时会替换为真实探测。")
+            self.connection_output.setPlainText(
+                "已记录当前 Provider 与 API Key。本页不会直接连接远端，真实探测会在保存配置并启动本地运行时后执行。"
+            )
         else:
             self.connection_output.setPlainText("⚠ 未提供 API Key，将以离线模式继续。")
 
