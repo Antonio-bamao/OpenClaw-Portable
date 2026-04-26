@@ -404,7 +404,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         target_dir = _node_modules_package_dir(target_node_modules_dir, package_name)
         if not target_dir.exists():
             target_dir.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(package_dir, target_dir)
+            _copy_runtime_tree(package_dir, target_dir)
 
         package_manifest = _load_package_manifest(package_dir)
         for dependency_name in _runtime_dependency_names(package_manifest):

@@ -44,6 +44,21 @@ def reserve_free_port() -> int:
     return port
 
 
+def long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def write_text_long(path: Path, content: str) -> None:
+    os.makedirs(long_path(path.parent), exist_ok=True)
+    with open(long_path(path), "w", encoding="utf-8") as handle:
+        handle.write(content)
+
+
 class OpenClawRuntimeAdapterTests(unittest.TestCase):
     def test_defaults_to_90_second_startup_timeout_for_real_runtime(self) -> None:
         adapter = OpenClawRuntimeAdapter()
@@ -365,6 +380,51 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
 
             bridged_sdk = source_runtime / "node_modules" / "@larksuiteoapi" / "node-sdk" / "package.json"
             self.assertTrue(bridged_sdk.exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @unittest.skipUnless(os.name == "nt", "Windows long-path behavior")
+    def test_prepare_bridges_long_extension_runtime_dependency_paths(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            source_runtime = paths.runtime_dir / "openclaw"
+            sdk_dir = (
+                source_runtime
+                / "dist"
+                / "extensions"
+                / "amazon-bedrock-mantle"
+                / "node_modules"
+                / "@aws-sdk"
+                / "client-cognito-identity"
+            )
+            deep_file = (
+                sdk_dir
+                / "dist-es"
+                / "commands"
+                / "GetOpenIdTokenForDeveloperIdentityCommand.js"
+            )
+            write_text_long(source_runtime / "openclaw.mjs", "#!/usr/bin/env node\n")
+            write_text_long(source_runtime / "package.json", '{"name":"openclaw","version":"test"}')
+            write_text_long(
+                sdk_dir / "package.json",
+                '{"name":"@aws-sdk/client-cognito-identity","version":"3.0.0"}',
+            )
+            write_text_long(deep_file, "export {};\n")
+
+            adapter = OpenClawRuntimeAdapter()
+            adapter.prepare(make_config(reserve_free_port()), paths)
+
+            bridged_file = (
+                source_runtime
+                / "node_modules"
+                / "@aws-sdk"
+                / "client-cognito-identity"
+                / "dist-es"
+                / "commands"
+                / "GetOpenIdTokenForDeveloperIdentityCommand.js"
+            )
+            self.assertTrue(os.path.exists(long_path(bridged_file)))
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
