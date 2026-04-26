@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
 
@@ -18,7 +18,7 @@ class ProviderConnectionTestResult:
 
 class ProviderConnectionTester:
     def __init__(self, *, urlopen: Callable | None = None, timeout_seconds: int = 20) -> None:
-        self._urlopen = urlopen or globals()["urlopen"]
+        self._urlopen = urlopen or build_opener(ProxyHandler({})).open
         self._timeout_seconds = timeout_seconds
 
     def test(self, config: LauncherConfig, sensitive: SensitiveConfig) -> ProviderConnectionTestResult:

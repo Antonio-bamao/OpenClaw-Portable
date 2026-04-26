@@ -136,6 +136,13 @@ class ProviderBridge:
                     },
                 },
             }
+            patch["models"] = {
+                "providers": {
+                    provider_type: {
+                        "baseUrl": config.base_url.strip(),
+                    },
+                },
+            }
         if provider_type == "custom-compatible":
             patch["models"] = {
                 "providers": {

@@ -2,6 +2,7 @@ import json
 import unittest
 from io import BytesIO
 from urllib.error import HTTPError, URLError
+from unittest.mock import patch
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
 from launcher.services.provider_connection_tester import ProviderConnectionTester
@@ -61,6 +62,21 @@ class ProviderConnectionTesterTests(unittest.TestCase):
         self.assertEqual(captured["body"]["model"], "qwen3.5-plus")
         self.assertEqual(captured["body"]["max_tokens"], 1)
         self.assertNotIn("sk-secret", result.message)
+
+    def test_default_network_client_bypasses_environment_proxy_settings(self) -> None:
+        class FakeOpener:
+            def open(self, request, timeout):
+                return FakeResponse()
+
+        with patch("launcher.services.provider_connection_tester.ProxyHandler", create=True) as proxy_handler:
+            with patch("launcher.services.provider_connection_tester.build_opener", return_value=FakeOpener(), create=True) as build_opener:
+                tester = ProviderConnectionTester()
+
+        result = tester.test(make_config(), SensitiveConfig(api_key="sk-secret"))
+
+        self.assertTrue(result.ok)
+        proxy_handler.assert_called_once_with({})
+        build_opener.assert_called_once_with(proxy_handler.return_value)
 
     def test_posts_anthropic_messages_probe(self) -> None:
         captured = {}
