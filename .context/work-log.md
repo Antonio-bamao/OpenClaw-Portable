@@ -552,3 +552,10 @@
 - 结果：launcher 不再把所有标题都套用同一个超大 `HeroTitle` 样式，频道状态和分区标题恢复层级；窗口内容在较小高度下可滚动，不会再把下半页卡片直接挤出视口。源码和本地便携版都已包含这轮修复。
 - 验证：`python -m unittest tests.test_launcher_bootstrap.LauncherUiSmokeTests -v` passed 14 tests；`python -m unittest discover -s tests` passed 188 tests；`powershell -Command .\\scripts\\build-launcher.ps1` completed successfully and rebuilt `dist\\OpenClaw-Portable\\OpenClawLauncher.exe`。
 - 下一步：在有完整中文字库的真实桌面环境里重新打开 `OpenClawLauncher.exe` 做一次人工 UI smoke，确认字体表现与滚动行为都符合预期；若仍有单个控件挤压，再按具体卡片补精细布局。
+
+## 2026-04-23｜收口 OpenClaw 简化启动路径计划
+- 目标：查看当前进度并继续未收口的 `2026-04-19-openclaw-simple-startup` 计划。
+- 动作：创建隔离 worktree `openclaw-simple-startup` 复核当前提交，确认 `e32d713` 已包含简化启动实现；补齐计划勾选和 `.context` 顶部状态，使文档反映“启动成功只依赖本地 gateway 可达，飞书 live probe 不再位于启动关键路径”的当前事实。
+- 结果：计划中的 runtime adapter、controller/Feishu 状态、错误文案和验证步骤已同步标记完成；当前本地未发布改进范围扩展为 2026-04-17 至 2026-04-19。
+- 验证：`python -m unittest tests.test_openclaw_runtime_adapter tests.test_launcher_controller tests.test_feishu_channel_service tests.test_launcher_app` 在隔离 worktree 中 passed 75 tests；`python -m unittest discover -s tests` 在隔离 worktree 中 passed 202 tests。
+- 下一步：在主工作区使用已有 ignored runtime/dist 资产执行 `scripts\\build-launcher.ps1` 与打包产物 metadata spot-check；随后若要对外分发这些本地改进，再准备 post-`v2026.04.5` release。
