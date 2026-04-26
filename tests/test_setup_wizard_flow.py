@@ -9,6 +9,8 @@ def make_templates() -> list[ProviderTemplate]:
         ProviderTemplate("dashscope", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max", 10),
         ProviderTemplate("deepseek", "DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", 20),
         ProviderTemplate("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4.1-mini", 30),
+        ProviderTemplate("openai", "OpenAI", "https://api.openai.com/v1", "gpt-5.4", 40),
+        ProviderTemplate("anthropic", "Anthropic", "https://api.anthropic.com", "claude-sonnet-4-6", 50),
         ProviderTemplate("custom", "自定义", "", "", 99),
     ]
 
@@ -52,6 +54,17 @@ class SetupWizardSessionTests(unittest.TestCase):
 
         self.assertEqual(config.provider_id, "dashscope")
         self.assertEqual(sensitive.api_key, "")
+
+    def test_builds_openai_configuration_from_selected_template(self) -> None:
+        session = SetupWizardSession(make_templates())
+        session.selected_provider_id = "openai"
+        session.api_key = "sk-openai"
+
+        config, sensitive = session.build_configuration()
+
+        self.assertEqual(config.provider_id, "openai")
+        self.assertEqual(config.model, "gpt-5.4")
+        self.assertEqual(sensitive.api_key, "sk-openai")
 
 
 if __name__ == "__main__":
