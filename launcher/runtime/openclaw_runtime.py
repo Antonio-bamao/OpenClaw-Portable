@@ -434,33 +434,46 @@ def _is_removable_path(path: Path) -> bool:
 
 
 def _copy_runtime_tree(source_dir: Path, target_dir: Path) -> None:
-    robocopy = shutil.which("robocopy") if os.name == "nt" else None
-    if robocopy:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        completed = subprocess.run(
-            [
-                robocopy,
-                str(source_dir),
-                str(target_dir),
-                "/E",
-                "/R:1",
-                "/W:1",
-                "/MT:16",
-                "/NFL",
-                "/NDL",
-                "/NJH",
-                "/NJS",
-                "/NP",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if completed.returncode >= 8:
-            raise RuntimeError(f"Failed to stage OpenClaw runtime cache with robocopy: {completed.stderr.strip()}")
-        return
-    shutil.copytree(source_dir, target_dir)
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Runtime source directory not found: {source_dir}")
+    for source_path in _iter_tree_paths(source_dir):
+        relative_path = source_path.relative_to(source_dir)
+        target_path = target_dir / relative_path
+        if source_path.is_dir():
+            os.makedirs(_long_path(target_path), exist_ok=True)
+            continue
+        os.makedirs(_long_path(target_path.parent), exist_ok=True)
+        shutil.copy2(_long_path(source_path), _long_path(target_path))
+
+
+def _iter_tree_paths(root: Path) -> list[Path]:
+    if os.name != "nt":
+        return sorted(root.rglob("*"))
+
+    root = root.resolve()
+    paths: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(_long_path(root)):
+        stripped_dirpath = Path(_strip_long_path(dirpath))
+        paths.extend(stripped_dirpath / dirname for dirname in dirnames)
+        paths.extend(stripped_dirpath / filename for filename in filenames)
+    return sorted(paths)
+
+
+def _long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def _strip_long_path(path: str) -> str:
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path.removeprefix("\\\\?\\UNC\\")
+    if path.startswith("\\\\?\\"):
+        return path.removeprefix("\\\\?\\")
+    return path
 
 
 def _truthy_env(name: str) -> bool:

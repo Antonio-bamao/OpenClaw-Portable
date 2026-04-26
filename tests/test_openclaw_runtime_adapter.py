@@ -413,7 +413,9 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
             write_text_long(deep_file, "export {};\n")
 
             adapter = OpenClawRuntimeAdapter()
-            adapter.prepare(make_config(reserve_free_port()), paths)
+            with patch("launcher.runtime.openclaw_runtime.subprocess.run") as mock_subprocess_run:
+                mock_subprocess_run.side_effect = AssertionError("runtime startup must not shell out to robocopy")
+                adapter.prepare(make_config(reserve_free_port()), paths)
 
             bridged_file = (
                 source_runtime
