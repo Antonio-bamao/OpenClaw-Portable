@@ -16,6 +16,7 @@ from launcher.services.factory_reset import FactoryResetService
 from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 from launcher.services.online_update import OnlineUpdateService, UpdateCheckResult
+from launcher.services.provider_bridge import ProviderBridge
 from launcher.services.social_channels import (
     OpenClawChannelCommandRunner,
     QqChannelConfig,
@@ -54,11 +55,12 @@ class LauncherController:
         self.online_update_service = online_update_service or OnlineUpdateService(paths)
         self.feishu_channel_service = FeishuChannelService(paths)
         self.social_channel_service = SocialChannelService(paths, OpenClawChannelCommandRunner(paths, node_command=node_command))
+        self.provider_bridge = ProviderBridge(paths)
         self._prepared = False
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
         self.store.save(config, sensitive)
-        runtime_config_patch, runtime_env = self._channel_runtime_projection()
+        runtime_config_patch, runtime_env = self._runtime_projection(config, sensitive)
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
         self._refresh_feishu_runtime_status()
@@ -367,10 +369,20 @@ class LauncherController:
     def _prepare_if_needed(self) -> None:
         if self._prepared or self.store.is_first_run():
             return
-        config, _ = self.store.load()
-        runtime_config_patch, runtime_env = self._channel_runtime_projection()
+        config, sensitive = self.store.load()
+        runtime_config_patch, runtime_env = self._runtime_projection(config, sensitive)
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
+
+    def _runtime_projection(
+        self,
+        config: LauncherConfig,
+        sensitive: SensitiveConfig,
+    ) -> tuple[dict[str, object], dict[str, str]]:
+        provider_projection = self.provider_bridge.apply(config, sensitive)
+        channel_config_patch, runtime_env = self._channel_runtime_projection()
+        runtime_config_patch = self._deep_merge(provider_projection.runtime_config_patch, channel_config_patch)
+        return runtime_config_patch, runtime_env
 
     def _channel_runtime_projection(self) -> tuple[dict[str, object], dict[str, str]]:
         feishu_config_patch, feishu_env = self._feishu_runtime_projection()
@@ -446,8 +458,8 @@ class LauncherController:
     def _reproject_channels_if_configured(self) -> None:
         if self.store.is_first_run():
             return
-        config, _ = self.store.load()
-        runtime_config_patch, runtime_env = self._channel_runtime_projection()
+        config, sensitive = self.store.load()
+        runtime_config_patch, runtime_env = self._runtime_projection(config, sensitive)
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
 

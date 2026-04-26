@@ -1,3 +1,4 @@
+import json
 import shutil
 import socket
 import time
@@ -511,6 +512,76 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_configure_passes_provider_bridge_runtime_patch_into_prepare(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(paths, runtime_adapter=runtime_adapter, runtime_mode="openclaw")
+
+            controller.configure(
+                make_config(
+                    provider_id="dashscope",
+                    provider_name="通义千问",
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    model="qwen-max",
+                ),
+                SensitiveConfig(api_key="sk-qwen"),
+            )
+
+            self.assertEqual(
+                runtime_adapter.last_runtime_config_patch["agents"]["defaults"]["model"]["primary"],
+                "qwen/qwen-max",
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_configure_writes_main_agent_auth_profiles_for_selected_provider(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(paths, runtime_adapter=runtime_adapter, runtime_mode="openclaw")
+
+            controller.configure(
+                make_config(
+                    provider_id="openai",
+                    provider_name="OpenAI",
+                    base_url="https://api.openai.com/v1",
+                    model="gpt-5.4",
+                ),
+                SensitiveConfig(api_key="sk-openai"),
+            )
+
+            payload = json.loads(paths.main_agent_auth_profiles_file.read_text(encoding="utf-8"))
+            self.assertIn("openai:launcher", payload["profiles"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_channel_runtime_projection_and_provider_bridge_patch_are_merged(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(paths, runtime_adapter=runtime_adapter, runtime_mode="openclaw")
+            controller.feishu_channel_service.save_config(
+                FeishuChannelConfig(
+                    app_id="cli_xxx",
+                    app_secret="secret",
+                    enabled=True,
+                    bot_app_name="OpenClaw Bot",
+                    last_validated_at=None,
+                )
+            )
+
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-qwen"))
+
+            patch = runtime_adapter.last_runtime_config_patch
+            self.assertEqual(patch["agents"]["defaults"]["model"]["primary"], "qwen/qwen-max")
+            self.assertTrue(patch["channels"]["feishu"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_controller_passes_wechat_qq_and_wecom_projection_into_runtime_prepare(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -638,7 +709,11 @@ class LauncherControllerTests(unittest.TestCase):
 
             controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
 
-            self.assertEqual(runtime_adapter.last_runtime_config_patch, {})
+            self.assertEqual(
+                runtime_adapter.last_runtime_config_patch["agents"]["defaults"]["model"]["primary"],
+                "qwen/qwen-max",
+            )
+            self.assertNotIn("channels", runtime_adapter.last_runtime_config_patch)
             self.assertEqual(runtime_adapter.last_runtime_env, {})
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
