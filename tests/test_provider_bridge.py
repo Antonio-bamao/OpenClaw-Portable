@@ -71,6 +71,10 @@ class ProviderBridgeTests(unittest.TestCase):
                 projection.runtime_config_patch["models"]["providers"]["qwen"]["baseUrl"],
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
             )
+            self.assertEqual(
+                projection.runtime_config_patch["models"]["providers"]["qwen"]["models"],
+                [{"id": "qwen3.5-plus", "name": "qwen3.5-plus"}],
+            )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

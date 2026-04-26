@@ -25,6 +25,33 @@ from launcher.ui.window_branding import apply_app_icon, apply_windows_title_bar_
 from launcher.ui.wizard import SetupWizardWindow
 
 
+def message_box_stylesheet() -> str:
+    return """
+QMessageBox {
+    background-color: #ffffff;
+    color: #111827;
+}
+QMessageBox QLabel {
+    color: #111827;
+    background-color: transparent;
+}
+QMessageBox QPushButton {
+    background-color: #ffffff;
+    color: #111827;
+    border: 1px solid #9ca3af;
+    border-radius: 3px;
+    padding: 6px 14px;
+    min-width: 72px;
+}
+QMessageBox QPushButton:hover {
+    background-color: #f3f4f6;
+}
+QMessageBox QPushButton:pressed {
+    background-color: #e5e7eb;
+}
+""".strip()
+
+
 class BackgroundTaskSignals(QObject):
     completed = Signal(str, object, object, bool)
 
@@ -650,10 +677,26 @@ class OpenClawLauncherApplication:
         self._shutdown_background_executor()
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.critical(self.main_window or self.wizard_window, "OpenClaw Portable", message)
+        self._show_message_box(QMessageBox.Icon.Critical, message)
 
     def _show_info(self, message: str) -> None:
-        QMessageBox.information(self.main_window or self.wizard_window, "OpenClaw Portable", message)
+        self._show_message_box(QMessageBox.Icon.Information, message)
+
+    def _show_message_box(
+        self,
+        icon: QMessageBox.Icon,
+        message: str,
+        buttons: QMessageBox.StandardButton = QMessageBox.StandardButton.Ok,
+        default_button: QMessageBox.StandardButton = QMessageBox.StandardButton.Ok,
+    ) -> QMessageBox.StandardButton:
+        dialog = QMessageBox(self.main_window or self.wizard_window)
+        dialog.setWindowTitle("OpenClaw Portable")
+        dialog.setIcon(icon)
+        dialog.setText(message)
+        dialog.setStandardButtons(buttons)
+        dialog.setDefaultButton(default_button)
+        dialog.setStyleSheet(message_box_stylesheet())
+        return QMessageBox.StandardButton(dialog.exec())
 
     def _select_update_package_dir(self) -> str:
         return QFileDialog.getExistingDirectory(
@@ -670,9 +713,8 @@ class OpenClawLauncherApplication:
         )
 
     def _confirm_factory_reset(self) -> bool:
-        result = QMessageBox.question(
-            self.main_window or self.wizard_window,
-            "OpenClaw Portable",
+        result = self._show_message_box(
+            QMessageBox.Icon.Question,
             "这会清空当前启动器配置、临时日志和缓存，并返回首次向导。是否继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -680,9 +722,8 @@ class OpenClawLauncherApplication:
         return result == QMessageBox.StandardButton.Yes
 
     def _confirm_restore_update_backup(self) -> bool:
-        result = QMessageBox.question(
-            self.main_window or self.wizard_window,
-            "OpenClaw Portable",
+        result = self._show_message_box(
+            QMessageBox.Icon.Question,
             "这会用历史更新备份恢复当前程序分发内容，不会覆盖 state/，并会先自动备份当前版本。是否继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -691,9 +732,8 @@ class OpenClawLauncherApplication:
 
     def _confirm_online_update(self, metadata: UpdateCheckResult) -> bool:
         notes_text = "\n".join(f"- {note}" for note in metadata.notes) if metadata.notes else "- 暂无更新说明"
-        result = QMessageBox.question(
-            self.main_window or self.wizard_window,
-            "OpenClaw Portable",
+        result = self._show_message_box(
+            QMessageBox.Icon.Question,
             f"发现新版本：{metadata.latest_version}\n\n更新说明：\n{notes_text}\n\n是否现在下载并导入更新？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,

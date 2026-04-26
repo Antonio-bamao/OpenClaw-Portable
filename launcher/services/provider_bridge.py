@@ -140,6 +140,7 @@ class ProviderBridge:
                 "providers": {
                     provider_type: {
                         "baseUrl": config.base_url.strip(),
+                        "models": [self._provider_model_entry(provider_type, primary_model)],
                     },
                 },
             }
@@ -154,6 +155,14 @@ class ProviderBridge:
                 },
             }
         return patch
+
+    def _provider_model_entry(self, provider_type: str, primary_model: str) -> dict[str, str]:
+        prefix = f"{provider_type}/"
+        if primary_model.startswith(prefix):
+            model_id = primary_model.removeprefix(prefix)
+        else:
+            model_id = primary_model
+        return {"id": model_id, "name": model_id}
 
     def _build_auth_document(
         self,

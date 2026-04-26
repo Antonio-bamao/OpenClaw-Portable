@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from launcher.app import OpenClawLauncherApplication
+from launcher.app import OpenClawLauncherApplication, message_box_stylesheet
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 
@@ -244,6 +244,14 @@ class FakeQtApp:
 
 
 class LauncherAppTests(unittest.TestCase):
+    def test_message_box_stylesheet_keeps_dialog_text_readable_on_dark_system_theme(self) -> None:
+        stylesheet = message_box_stylesheet()
+
+        self.assertIn("background-color: #ffffff", stylesheet)
+        self.assertIn("color: #111827", stylesheet)
+        self.assertIn("QLabel", stylesheet)
+        self.assertIn("QPushButton", stylesheet)
+
     def test_default_project_root_uses_module_root_in_source_mode(self) -> None:
         project_root = OpenClawLauncherApplication._default_project_root()
 
