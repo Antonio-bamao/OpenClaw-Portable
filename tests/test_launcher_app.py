@@ -320,7 +320,7 @@ class LauncherAppTests(unittest.TestCase):
         )
 
     @patch("launcher.app.webbrowser.open_new_tab")
-    def test_auto_start_starts_runtime_and_opens_dashboard(self, mock_open_new_tab) -> None:
+    def test_auto_start_starts_runtime_without_opening_dashboard(self, mock_open_new_tab) -> None:
         calls: list[str] = []
         pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
         final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
@@ -344,10 +344,11 @@ class LauncherAppTests(unittest.TestCase):
                 "load_view_state",
                 "apply:运行中",
                 "console:Gateway 已就绪，飞书已连接",
-                "load_view_state",
             ],
         )
-        mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
+        self.assertTrue(application._auto_start_attempted)
+        self.assertFalse(application._auto_opened_webui)
+        mock_open_new_tab.assert_not_called()
 
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_auto_start_keeps_main_window_when_api_key_is_missing(self, mock_open_new_tab) -> None:
@@ -381,7 +382,6 @@ class LauncherAppTests(unittest.TestCase):
                 "load_view_state",
                 "apply:运行中",
                 "console:Gateway 已就绪，飞书已连接",
-                "load_view_state",
             ],
         )
         mock_open_new_tab.assert_not_called()

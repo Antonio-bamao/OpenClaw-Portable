@@ -16,6 +16,7 @@ from launcher.services.provider_registry import ProviderTemplateRegistry
 from launcher.services.runtime_errors import format_runtime_error
 from launcher.services.runtime_mode import resolve_runtime_mode
 from launcher.services.online_update import UpdateCheckResult
+from launcher.services.process_lock import SingleInstanceLock
 from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 from launcher.ui.close_dialog import CloseActionDialog
 from launcher.ui.main_window import OpenClawLauncherWindow
@@ -32,6 +33,8 @@ class OpenClawLauncherApplication:
     def __init__(self, project_root: Path | None = None, node_command: str = "node", runtime_mode: str | None = None) -> None:
         self.project_root = project_root or self._default_project_root()
         self.paths = PortablePaths.for_root(self.project_root)
+        self.instance_lock = SingleInstanceLock(self.paths.temp_root / "OpenClawLauncher.lock")
+        self._instance_lock_acquired = False
         selected_runtime_mode = resolve_runtime_mode(self.paths, requested_mode=runtime_mode)
         self.controller = LauncherController(self.paths, node_command=node_command, runtime_mode=selected_runtime_mode)
         self.registry = ProviderTemplateRegistry(self.paths.provider_templates_dir)
@@ -65,12 +68,19 @@ class OpenClawLauncherApplication:
         return Path(__file__).resolve().parent.parent
 
     def run(self) -> int:
+        if not self.instance_lock.acquire():
+            return 0
+        self._instance_lock_acquired = True
         route = LauncherBootstrap(self.paths).initial_route()
         if route == AppRoute.SETUP_WIZARD:
             self.show_setup_wizard()
         else:
             self.show_main_window()
-        return self.app.exec()
+        try:
+            return self.app.exec()
+        finally:
+            self.instance_lock.release()
+            self._instance_lock_acquired = False
 
     def show_main_window(self) -> None:
         view_state = self.controller.load_view_state()
@@ -282,13 +292,6 @@ class OpenClawLauncherApplication:
 
     def _after_auto_start_runtime(self) -> None:
         self._refresh_main_view()
-        self._route_after_auto_start()
-
-    def _route_after_auto_start(self) -> None:
-        view_state = self.controller.load_view_state()
-        if view_state.offline_mode:
-            return
-        self._open_webui_once_after_auto_start(view_state)
 
     def _open_webui_once_after_auto_start(self, view_state=None) -> None:
         if getattr(self, "_auto_opened_webui", False):
