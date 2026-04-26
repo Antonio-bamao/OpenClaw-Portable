@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import unittest
 import uuid
@@ -20,6 +21,21 @@ def make_workspace_temp_dir() -> Path:
     created = temp_root / f"release-assets-{uuid.uuid4().hex[:8]}"
     created.mkdir(parents=True, exist_ok=True)
     return created
+
+
+def long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def write_text_long(path: Path, content: str) -> None:
+    os.makedirs(long_path(path.parent), exist_ok=True)
+    with open(long_path(path), "w", encoding="utf-8") as handle:
+        handle.write(content)
 
 
 class ReleaseAssetsTests(unittest.TestCase):
@@ -99,6 +115,48 @@ class ReleaseAssetsTests(unittest.TestCase):
                     output_dir=output_dir,
                     repository="Antonio-bamao/OpenClaw-Portable",
                     notes=["note a"],
+                )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @unittest.skipUnless(os.name == "nt", "Windows long-path behavior")
+    def test_build_release_assets_zips_long_runtime_paths(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            output_dir = temp_dir / "release"
+            package_root.mkdir(parents=True, exist_ok=True)
+            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
+            (package_root / "update-manifest.json").write_text(json.dumps({"manifestVersion": 1}), encoding="utf-8")
+            private_key_b64, _ = generate_update_signing_keypair()
+            write_update_signature(package_root, private_key_b64=private_key_b64)
+            deep_runtime_file = (
+                package_root
+                / "runtime"
+                / "openclaw"
+                / "dist"
+                / "extensions"
+                / "amazon-bedrock"
+                / "node_modules"
+                / "@aws-sdk"
+                / "credential-provider-node"
+                / "dist-cjs"
+                / "remoteProvider"
+                / "httpRequest.js"
+            )
+            write_text_long(deep_runtime_file, "module.exports = {}\n")
+
+            archive_path, _ = build_release_assets(
+                package_root=package_root,
+                output_dir=output_dir,
+                repository="Antonio-bamao/OpenClaw-Portable",
+            )
+
+            with zipfile.ZipFile(archive_path, "r") as archive:
+                self.assertIn(
+                    "OpenClaw-Portable/runtime/openclaw/dist/extensions/amazon-bedrock/"
+                    "node_modules/@aws-sdk/credential-provider-node/dist-cjs/remoteProvider/httpRequest.js",
+                    archive.namelist(),
                 )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

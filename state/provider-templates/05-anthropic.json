@@ -1,0 +1,7 @@
+{
+  "id": "anthropic",
+  "displayName": "Anthropic",
+  "baseUrl": "https://api.anthropic.com",
+  "defaultModel": "claude-sonnet-4-6",
+  "order": 50
+}

@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import unittest
@@ -13,6 +14,21 @@ def make_workspace_temp_dir() -> Path:
     created = temp_root / f"runtime-pruning-{uuid.uuid4().hex[:8]}"
     created.mkdir(parents=True, exist_ok=True)
     return created
+
+
+def long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def write_text_long(path: Path, content: str) -> None:
+    os.makedirs(long_path(path.parent), exist_ok=True)
+    with open(long_path(path), "w", encoding="utf-8") as handle:
+        handle.write(content)
 
 
 class RuntimePruningTests(unittest.TestCase):
@@ -68,6 +84,35 @@ class RuntimePruningTests(unittest.TestCase):
 
             self.assertEqual(result.files_removed, 1)
             self.assertTrue(candidate.exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @unittest.skipUnless(os.name == "nt", "Windows long-path behavior")
+    def test_prunes_long_windows_paths(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runtime_root = temp_dir / "runtime" / "openclaw"
+            candidate = (
+                runtime_root
+                / "dist"
+                / "extensions"
+                / "amazon-bedrock"
+                / "node_modules"
+                / "@aws-crypto"
+                / "sha256-browser"
+                / "node_modules"
+                / "@smithy"
+                / "util-utf8"
+                / "dist-types"
+                / "ts3.4"
+                / "fromUtf8.browser.d.ts"
+            )
+            write_text_long(candidate, "export interface Demo {}\n")
+
+            result = prune_runtime_tree(runtime_root)
+
+            self.assertEqual(result.files_removed, 1)
+            self.assertFalse(os.path.exists(long_path(candidate)))
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

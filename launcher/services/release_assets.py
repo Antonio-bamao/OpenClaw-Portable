@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -60,10 +61,8 @@ def create_release_zip(package_root: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     root_name = package_root.name
     with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(package_root.rglob("*")):
-            if path.is_dir():
-                continue
-            archive.write(path, Path(root_name) / path.relative_to(package_root))
+        for path in _iter_files(package_root):
+            archive.write(_long_path(path), Path(root_name) / path.relative_to(package_root))
     return archive_path
 
 
@@ -91,3 +90,32 @@ def read_package_version(package_root: Path) -> str:
     if not version:
         raise ValueError("Portable package version.json is missing version.")
     return version
+
+
+def _iter_files(root: Path) -> list[Path]:
+    if os.name != "nt":
+        return sorted(item for item in root.rglob("*") if item.is_file())
+
+    root = root.resolve()
+    files: list[Path] = []
+    for dirpath, _, filenames in os.walk(_long_path(root)):
+        for filename in filenames:
+            files.append(Path(_strip_long_path(os.path.join(dirpath, filename))))
+    return sorted(files)
+
+
+def _long_path(path: Path) -> str:
+    text = str(path)
+    if os.name != "nt" or text.startswith("\\\\?\\"):
+        return text
+    if text.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + text.lstrip("\\")
+    return "\\\\?\\" + text
+
+
+def _strip_long_path(path: str) -> str:
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path.removeprefix("\\\\?\\UNC\\")
+    if path.startswith("\\\\?\\"):
+        return path.removeprefix("\\\\?\\")
+    return path
