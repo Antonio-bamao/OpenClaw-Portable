@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from launcher.core.config_store import LauncherConfig, SensitiveConfig
@@ -153,4 +154,34 @@ class ProviderBridge:
         }
 
     def _save_auth_profiles_document(self, launcher_document: dict[str, object]) -> None:
+        current = self._load_existing_auth_profiles()
+        current_profiles = current.setdefault("profiles", {})
+        if not isinstance(current_profiles, dict):
+            current_profiles = {}
+            current["profiles"] = current_profiles
+
+        launcher_profiles = launcher_document.get("profiles", {})
+        if isinstance(launcher_profiles, dict):
+            for profile_id, profile_value in launcher_profiles.items():
+                current_profiles[profile_id] = profile_value
+
         self.paths.main_agent_auth_profiles_file.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.main_agent_auth_profiles_file.write_text(
+            json.dumps(current, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _load_existing_auth_profiles(self) -> dict[str, object]:
+        path = self.paths.main_agent_auth_profiles_file
+        if not path.exists():
+            return {"profiles": {}}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"profiles": {}}
+        if not isinstance(payload, dict):
+            return {"profiles": {}}
+        profiles = payload.get("profiles")
+        if not isinstance(profiles, dict):
+            payload["profiles"] = {}
+        return payload

@@ -1,3 +1,4 @@
+import json
 import shutil
 import unittest
 import uuid
@@ -125,6 +126,87 @@ class ProviderBridgeTests(unittest.TestCase):
             self.assertEqual(projection.provider_type, "custom-compatible")
             self.assertEqual(projection.auth_profile_id, "custom-compatible:launcher")
             self.assertIn("models", projection.runtime_config_patch)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_apply_writes_launcher_owned_main_agent_auth_profile(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            bridge = ProviderBridge(paths)
+
+            bridge.apply(
+                make_config(
+                    provider_id="openai",
+                    provider_name="OpenAI",
+                    base_url="https://api.openai.com/v1",
+                    model="gpt-5.4",
+                ),
+                SensitiveConfig(api_key="sk-openai"),
+            )
+
+            payload = json.loads(paths.main_agent_auth_profiles_file.read_text(encoding="utf-8"))
+            self.assertIn("profiles", payload)
+            self.assertIn("openai:launcher", payload["profiles"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_apply_preserves_unrelated_auth_profiles(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            paths.ensure_directories()
+            paths.main_agent_auth_profiles_file.parent.mkdir(parents=True, exist_ok=True)
+            paths.main_agent_auth_profiles_file.write_text(
+                json.dumps(
+                    {
+                        "profiles": {
+                            "anthropic:manual": {
+                                "provider": "anthropic",
+                                "api_key": {"key": "sk-manual"},
+                            }
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            bridge = ProviderBridge(paths)
+
+            bridge.apply(
+                make_config(
+                    provider_id="openai",
+                    provider_name="OpenAI",
+                    base_url="https://api.openai.com/v1",
+                    model="gpt-5.4",
+                ),
+                SensitiveConfig(api_key="sk-openai"),
+            )
+
+            payload = json.loads(paths.main_agent_auth_profiles_file.read_text(encoding="utf-8"))
+            self.assertIn("anthropic:manual", payload["profiles"])
+            self.assertIn("openai:launcher", payload["profiles"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_apply_skips_auth_profile_write_when_api_key_is_empty(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            bridge = ProviderBridge(paths)
+
+            bridge.apply(
+                make_config(
+                    provider_id="dashscope",
+                    provider_name="通义千问",
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    model="qwen-max",
+                ),
+                SensitiveConfig(api_key=""),
+            )
+
+            self.assertFalse(paths.main_agent_auth_profiles_file.exists())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
