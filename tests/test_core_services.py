@@ -33,6 +33,11 @@ class PortablePathsTests(unittest.TestCase):
             self.assertEqual(paths.temp_root.name, "OpenClawPortable")
             self.assertEqual(paths.logs_dir, paths.temp_root / "logs")
             self.assertEqual(paths.cache_dir, paths.temp_root / "cache")
+            self.assertEqual(paths.main_agent_dir, paths.state_dir / "agents" / "main" / "agent")
+            self.assertEqual(
+                paths.main_agent_auth_profiles_file,
+                paths.state_dir / "agents" / "main" / "agent" / "auth-profiles.json",
+            )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -58,6 +63,11 @@ class PortablePathsTests(unittest.TestCase):
         self.assertEqual(paths.feishu_channel_dir, state_dir / "channels" / "feishu")
         self.assertEqual(paths.feishu_channel_config_file, state_dir / "channels" / "feishu" / "config.json")
         self.assertEqual(paths.feishu_channel_status_file, state_dir / "channels" / "feishu" / "status.json")
+        self.assertEqual(paths.main_agent_dir, state_dir / "agents" / "main" / "agent")
+        self.assertEqual(
+            paths.main_agent_auth_profiles_file,
+            state_dir / "agents" / "main" / "agent" / "auth-profiles.json",
+        )
 
 
 class LauncherConfigStoreTests(unittest.TestCase):

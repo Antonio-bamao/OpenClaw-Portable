@@ -24,16 +24,22 @@ class PortablePaths:
     feishu_channel_dir: Path | None = None
     feishu_channel_config_file: Path | None = None
     feishu_channel_status_file: Path | None = None
+    main_agent_dir: Path | None = None
+    main_agent_auth_profiles_file: Path | None = None
 
     def __post_init__(self) -> None:
         feishu_channel_dir = self.feishu_channel_dir or (self.state_dir / "channels" / "feishu")
         runtime_config_file = self.runtime_config_file or (self.state_dir / "runtime" / "openclaw.json")
         feishu_channel_config_file = self.feishu_channel_config_file or (feishu_channel_dir / "config.json")
         feishu_channel_status_file = self.feishu_channel_status_file or (feishu_channel_dir / "status.json")
+        main_agent_dir = self.main_agent_dir or (self.state_dir / "agents" / "main" / "agent")
+        main_agent_auth_profiles_file = self.main_agent_auth_profiles_file or (main_agent_dir / "auth-profiles.json")
         object.__setattr__(self, "runtime_config_file", runtime_config_file)
         object.__setattr__(self, "feishu_channel_dir", feishu_channel_dir)
         object.__setattr__(self, "feishu_channel_config_file", feishu_channel_config_file)
         object.__setattr__(self, "feishu_channel_status_file", feishu_channel_status_file)
+        object.__setattr__(self, "main_agent_dir", main_agent_dir)
+        object.__setattr__(self, "main_agent_auth_profiles_file", main_agent_auth_profiles_file)
 
     @classmethod
     def for_root(cls, project_root: Path, temp_base: Path | None = None) -> "PortablePaths":
@@ -79,6 +85,7 @@ class PortablePaths:
             self.runtime_config_file.parent,
             self.state_dir / "backups",
             self.feishu_channel_dir,
+            self.main_agent_dir,
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
