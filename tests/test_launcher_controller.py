@@ -531,7 +531,7 @@ class LauncherControllerTests(unittest.TestCase):
 
             self.assertEqual(
                 runtime_adapter.last_runtime_config_patch["agents"]["defaults"]["model"]["primary"],
-                "qwen/qwen-max",
+                "qwen/qwen3.5-plus",
             )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -577,7 +577,7 @@ class LauncherControllerTests(unittest.TestCase):
             controller.configure(make_config(), SensitiveConfig(api_key="sk-qwen"))
 
             patch = runtime_adapter.last_runtime_config_patch
-            self.assertEqual(patch["agents"]["defaults"]["model"]["primary"], "qwen/qwen-max")
+            self.assertEqual(patch["agents"]["defaults"]["model"]["primary"], "qwen/qwen3.5-plus")
             self.assertTrue(patch["channels"]["feishu"]["enabled"])
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -711,7 +711,7 @@ class LauncherControllerTests(unittest.TestCase):
 
             self.assertEqual(
                 runtime_adapter.last_runtime_config_patch["agents"]["defaults"]["model"]["primary"],
-                "qwen/qwen-max",
+                "qwen/qwen3.5-plus",
             )
             self.assertNotIn("channels", runtime_adapter.last_runtime_config_patch)
             self.assertEqual(runtime_adapter.last_runtime_env, {})

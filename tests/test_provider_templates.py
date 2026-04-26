@@ -14,6 +14,7 @@ class ProviderTemplateRegistryTests(unittest.TestCase):
             ["dashscope", "deepseek", "openrouter", "openai", "anthropic", "custom"],
         )
         self.assertEqual(templates[0].display_name, "通义千问")
+        self.assertEqual(templates[0].default_model, "qwen3.5-plus")
         self.assertEqual(templates[1].base_url, "https://api.deepseek.com/v1")
         self.assertEqual(templates[3].base_url, "https://api.openai.com/v1")
         self.assertEqual(templates[4].base_url, "https://api.anthropic.com")

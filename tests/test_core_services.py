@@ -167,6 +167,37 @@ class LauncherConfigStoreTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_load_migrates_removed_dashscope_qwen_max_default(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            root = temp_dir / "OpenClaw-Portable"
+            paths = PortablePaths.for_root(root, temp_base=temp_dir / "system-temp")
+            store = LauncherConfigStore(paths)
+            paths.ensure_directories()
+            paths.config_file.write_text(
+                json.dumps(
+                    {
+                        "admin_password": "demo-pass",
+                        "provider_id": "dashscope",
+                        "provider_name": "通义千问",
+                        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        "model": "qwen-max",
+                        "gateway_port": 18789,
+                        "bind_host": "127.0.0.1",
+                        "first_run_completed": True,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            loaded_config, _ = store.load()
+
+            self.assertEqual(loaded_config.model, "qwen3.5-plus")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 class PortResolverTests(unittest.TestCase):
     def test_returns_current_port_when_available(self) -> None:

@@ -57,12 +57,16 @@ class ProviderBridgeTests(unittest.TestCase):
             )
 
             self.assertEqual(projection.provider_type, "qwen")
-            self.assertEqual(projection.primary_model, "qwen/qwen-max")
+            self.assertEqual(projection.primary_model, "qwen/qwen3.5-plus")
             self.assertEqual(
                 projection.runtime_config_patch["agents"]["defaults"]["model"]["primary"],
-                "qwen/qwen-max",
+                "qwen/qwen3.5-plus",
             )
             self.assertEqual(projection.auth_profile_id, "qwen:launcher")
+            self.assertEqual(
+                projection.runtime_config_patch["plugins"]["entries"]["qwen"],
+                {"enabled": True},
+            )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -148,6 +152,14 @@ class ProviderBridgeTests(unittest.TestCase):
             payload = json.loads(paths.main_agent_auth_profiles_file.read_text(encoding="utf-8"))
             self.assertIn("profiles", payload)
             self.assertIn("openai:launcher", payload["profiles"])
+            self.assertEqual(
+                payload["profiles"]["openai:launcher"],
+                {
+                    "type": "api_key",
+                    "provider": "openai",
+                    "key": "sk-openai",
+                },
+            )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

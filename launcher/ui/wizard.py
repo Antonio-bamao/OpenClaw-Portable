@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from launcher.models import WizardStep
+from launcher.services.provider_connection_tester import ProviderConnectionTester
 from launcher.services.provider_registry import ProviderTemplate
 from launcher.services.setup_wizard import SetupWizardSession
 from launcher.ui.theme import app_stylesheet, preferred_font
@@ -33,16 +34,22 @@ DEFAULT_STEPS = [
 
 
 class SetupWizardWindow(QMainWindow):
-    def __init__(self, provider_templates: list[ProviderTemplate] | None = None) -> None:
+    def __init__(
+        self,
+        provider_templates: list[ProviderTemplate] | None = None,
+        *,
+        connection_tester: ProviderConnectionTester | None = None,
+    ) -> None:
         super().__init__()
         self._steps = DEFAULT_STEPS
         self._stack = QStackedWidget()
         self._provider_templates = provider_templates or [
-            ProviderTemplate("dashscope", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max", 10),
+            ProviderTemplate("dashscope", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3.5-plus", 10),
             ProviderTemplate("deepseek", "DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", 20),
             ProviderTemplate("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4.1-mini", 30),
             ProviderTemplate("custom", "自定义", "", "", 99),
         ]
+        self._connection_tester = connection_tester or ProviderConnectionTester()
         self.session = SetupWizardSession(self._provider_templates)
         self.on_complete = None
         self.on_cancel = None
@@ -243,12 +250,10 @@ class SetupWizardWindow(QMainWindow):
 
     def _simulate_connection_test(self) -> None:
         self._sync_session_from_inputs()
-        if self.session.api_key:
-            self.connection_output.setPlainText(
-                "已记录当前 Provider 与 API Key。本页不会直接连接远端，真实探测会在保存配置并启动本地运行时后执行。"
-            )
-        else:
-            self.connection_output.setPlainText("⚠ 未提供 API Key，将以离线模式继续。")
+        config, sensitive = self.session.build_configuration()
+        self.connection_output.setPlainText("正在连接 Provider 验证 API Key 与模型，请稍候...")
+        result = self._connection_tester.test(config, sensitive)
+        self.connection_output.setPlainText(("✅ " if result.ok else "⚠ ") + result.message)
 
     def _switch_to_offline_mode(self) -> None:
         self.api_key_input.clear()

@@ -101,9 +101,17 @@ class ProviderBridge:
 
     def _resolve_primary_model(self, provider_type: str, model: str) -> str:
         normalized_model = model.strip()
+        normalized_model = self._normalize_provider_model(provider_type, normalized_model)
         if "/" in normalized_model:
             return normalized_model
         return f"{provider_type}/{normalized_model}"
+
+    def _normalize_provider_model(self, provider_type: str, model: str) -> str:
+        if provider_type != "qwen":
+            return model
+        if model in {"qwen-max", "qwen/qwen-max"}:
+            return "qwen3.5-plus"
+        return model
 
     def _build_runtime_patch(
         self,
@@ -120,6 +128,14 @@ class ProviderBridge:
                 },
             },
         }
+        if provider_type in {"qwen"}:
+            patch["plugins"] = {
+                "entries": {
+                    provider_type: {
+                        "enabled": True,
+                    },
+                },
+            }
         if provider_type == "custom-compatible":
             patch["models"] = {
                 "providers": {
@@ -145,10 +161,9 @@ class ProviderBridge:
         return profile_id, {
             "profiles": {
                 profile_id: {
+                    "type": "api_key",
                     "provider": provider_type,
-                    "api_key": {
-                        "key": normalized_api_key,
-                    },
+                    "key": normalized_api_key,
                 },
             },
         }

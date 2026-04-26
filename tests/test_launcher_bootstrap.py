@@ -309,14 +309,24 @@ class LauncherUiSmokeTests(unittest.TestCase):
 
         self.assertEqual(window.step_titles(), ["设置密码", "选择 Provider", "填写 API Key", "测试连接", "完成配置"])
 
-    def test_wizard_connection_test_explains_that_real_probe_happens_after_launch(self) -> None:
-        window = SetupWizardWindow()
+    def test_wizard_connection_test_runs_real_probe_service(self) -> None:
+        class FakeTester:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def test(self, config, sensitive):
+                self.calls.append((config, sensitive))
+                return type("Result", (), {"ok": True, "message": "连接测试通过"})()
+
+        tester = FakeTester()
+        window = SetupWizardWindow(connection_tester=tester)
         window.api_key_input.setText("sk-demo")
 
         window._simulate_connection_test()
 
-        self.assertIn("不会直接连接远端", window.connection_output.toPlainText())
-        self.assertNotIn("已模拟通过连接测试", window.connection_output.toPlainText())
+        self.assertEqual(len(tester.calls), 1)
+        self.assertIn("连接测试通过", window.connection_output.toPlainText())
+        self.assertNotIn("不会直接连接远端", window.connection_output.toPlainText())
 
 
     def test_feishu_offline_help_page_is_packaged(self) -> None:

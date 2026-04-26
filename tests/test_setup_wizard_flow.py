@@ -6,7 +6,7 @@ from launcher.services.setup_wizard import SetupWizardSession
 
 def make_templates() -> list[ProviderTemplate]:
     return [
-        ProviderTemplate("dashscope", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max", 10),
+        ProviderTemplate("dashscope", "通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3.5-plus", 10),
         ProviderTemplate("deepseek", "DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", 20),
         ProviderTemplate("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4.1-mini", 30),
         ProviderTemplate("openai", "OpenAI", "https://api.openai.com/v1", "gpt-5.4", 40),

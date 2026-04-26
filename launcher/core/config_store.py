@@ -47,7 +47,16 @@ class LauncherConfigStore:
         sensitive = SensitiveConfig(api_key=self._read_env_value(self.paths.env_file, "OPENCLAW_API_KEY"))
         launcher_keys = {field.name for field in fields(LauncherConfig)}
         launcher_config = {key: raw_config[key] for key in launcher_keys}
+        launcher_config = self._migrate_launcher_config(launcher_config)
         return LauncherConfig(**launcher_config), sensitive
+
+    def _migrate_launcher_config(self, launcher_config: dict[str, object]) -> dict[str, object]:
+        migrated = dict(launcher_config)
+        provider_id = str(migrated.get("provider_id", "")).strip().lower()
+        model = str(migrated.get("model", "")).strip()
+        if provider_id in {"dashscope", "qwen"} and model in {"qwen-max", "qwen/qwen-max"}:
+            migrated["model"] = "qwen3.5-plus"
+        return migrated
 
     def _load_json_object(self, path: Path) -> dict[str, object]:
         if not path.exists():
