@@ -17,6 +17,14 @@ from launcher.core.port_resolver import PortResolution, PortResolver
 from launcher.runtime.base import RuntimeAdapter, RuntimeHealth, RuntimeStatus
 
 
+def _runtime_base_environment() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().endswith("_PROXY") and key.upper() != "NO_PROXY"
+    }
+
+
 class OpenClawRuntimeAdapter(RuntimeAdapter):
     def __init__(
         self,
@@ -176,7 +184,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         if not self._config or not self._paths or not self._port_resolution:
             raise RuntimeError("Runtime must be prepared before environment can be built")
         return {
-            **os.environ,
+            **_runtime_base_environment(),
             "OPENCLAW_BIND_HOST": self._config.bind_host,
             "OPENCLAW_GATEWAY_PORT": str(self._port_resolution.port),
             "OPENCLAW_HOME": str(self._paths.state_dir),

@@ -67,13 +67,18 @@ class ProviderBridgeTests(unittest.TestCase):
                 projection.runtime_config_patch["plugins"]["entries"]["qwen"],
                 {"enabled": True},
             )
+            self.assertEqual(projection.runtime_config_patch["models"]["mode"], "replace")
             self.assertEqual(
                 projection.runtime_config_patch["models"]["providers"]["qwen"]["baseUrl"],
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
             )
             self.assertEqual(
+                projection.runtime_config_patch["models"]["providers"]["qwen"]["api"],
+                "openai-completions",
+            )
+            self.assertEqual(
                 projection.runtime_config_patch["models"]["providers"]["qwen"]["models"],
-                [{"id": "qwen3.5-plus", "name": "qwen3.5-plus"}],
+                [{"id": "qwen3.5-plus", "name": "qwen3.5-plus", "api": "openai-completions"}],
             )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -168,6 +173,32 @@ class ProviderBridgeTests(unittest.TestCase):
                     "key": "sk-openai",
                 },
             )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_apply_clears_stale_agent_model_and_auth_failure_cache(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            paths.ensure_directories()
+            models_path = paths.main_agent_dir / "models.json"
+            auth_state_path = paths.main_agent_dir / "auth-state.json"
+            models_path.write_text('{"providers":{"qwen":{"api":"anthropic-messages"}}}', encoding="utf-8")
+            auth_state_path.write_text('{"failures":{"qwen":"model_not_found"}}', encoding="utf-8")
+            bridge = ProviderBridge(paths)
+
+            bridge.apply(
+                make_config(
+                    provider_id="dashscope",
+                    provider_name="通义千问",
+                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    model="qwen3.5-plus",
+                ),
+                SensitiveConfig(api_key="sk-qwen"),
+            )
+
+            self.assertFalse(models_path.exists())
+            self.assertFalse(auth_state_path.exists())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

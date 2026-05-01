@@ -144,6 +144,35 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_build_environment_does_not_inherit_shell_proxy_overrides(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            adapter = OpenClawRuntimeAdapter()
+            with patch.dict(
+                os.environ,
+                {
+                    "HTTP_PROXY": "http://127.0.0.1:9",
+                    "HTTPS_PROXY": "http://127.0.0.1:9",
+                    "ALL_PROXY": "http://127.0.0.1:9",
+                    "GIT_HTTP_PROXY": "http://127.0.0.1:9",
+                    "NO_PROXY": "localhost,127.0.0.1",
+                },
+                clear=False,
+            ):
+                adapter.prepare(make_config(reserve_free_port()), paths)
+
+                environment = adapter.build_environment()
+
+            self.assertNotIn("HTTP_PROXY", environment)
+            self.assertNotIn("HTTPS_PROXY", environment)
+            self.assertNotIn("ALL_PROXY", environment)
+            self.assertNotIn("GIT_HTTP_PROXY", environment)
+            self.assertNotIn("NO_PROXY", environment)
+            self.assertEqual(environment.get("PATH"), os.environ.get("PATH"))
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     @patch("launcher.runtime.openclaw_runtime.subprocess.Popen")
     def test_start_hides_windows_console_for_openclaw_gateway_process(self, mock_popen) -> None:
         temp_dir = make_workspace_temp_dir()

@@ -42,6 +42,7 @@ class ProviderBridge:
         self.paths.ensure_directories()
         if projection.auth_profiles_document is not None:
             self._save_auth_profiles_document(projection.auth_profiles_document)
+        self._clear_agent_runtime_cache(projection)
         return projection
 
     def _detect_provider_type(self, config: LauncherConfig) -> str:
@@ -137,9 +138,11 @@ class ProviderBridge:
                 },
             }
             patch["models"] = {
+                "mode": "replace",
                 "providers": {
                     provider_type: {
                         "baseUrl": config.base_url.strip(),
+                        "api": "openai-completions",
                         "models": [self._provider_model_entry(provider_type, primary_model)],
                     },
                 },
@@ -162,7 +165,7 @@ class ProviderBridge:
             model_id = primary_model.removeprefix(prefix)
         else:
             model_id = primary_model
-        return {"id": model_id, "name": model_id}
+        return {"id": model_id, "name": model_id, "api": "openai-completions"}
 
     def _build_auth_document(
         self,
@@ -216,3 +219,13 @@ class ProviderBridge:
         if not isinstance(profiles, dict):
             payload["profiles"] = {}
         return payload
+
+    def _clear_agent_runtime_cache(self, projection: ProviderBridgeProjection) -> None:
+        if "models" not in projection.runtime_config_patch:
+            return
+        for filename in ("models.json", "auth-state.json"):
+            cache_path = self.paths.main_agent_dir / filename
+            try:
+                cache_path.unlink()
+            except FileNotFoundError:
+                pass
