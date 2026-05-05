@@ -441,9 +441,15 @@ class OpenClawLauncherApplication:
         webbrowser.open_new_tab(help_path.as_uri())
 
     def _handle_install_wechat_channel(self) -> None:
+        if self._is_action_busy("install_wechat_channel"):
+            return
+        self._show_pending_wechat_channel_state("install")
         self._run_background_action("install_wechat_channel", self.controller.install_wechat_channel, self._apply_wechat_channel_state)
 
     def _handle_login_wechat_channel(self) -> None:
+        if self._is_action_busy("login_wechat_channel"):
+            return
+        self._show_pending_wechat_channel_state("login")
         self._run_background_action(
             "login_wechat_channel",
             self.controller.login_wechat_channel,
@@ -531,6 +537,13 @@ class OpenClawLauncherApplication:
     def _apply_wechat_channel_state(self, state) -> None:
         if self.main_window and hasattr(self.main_window, "apply_wechat_channel_state"):
             self.main_window.apply_wechat_channel_state(state)
+
+    def _show_pending_wechat_channel_state(self, action: str) -> None:
+        if not self.main_window or not hasattr(self.controller, "load_pending_wechat_channel_state"):
+            return
+        self._apply_wechat_channel_state(self.controller.load_pending_wechat_channel_state(action))
+        if hasattr(self, "app"):
+            self.app.processEvents()
 
     def _apply_qq_channel_state(self, state) -> None:
         if self.main_window and hasattr(self.main_window, "apply_qq_channel_state"):

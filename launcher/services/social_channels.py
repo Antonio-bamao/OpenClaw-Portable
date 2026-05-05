@@ -217,6 +217,12 @@ class SocialChannelService:
         return config.last_onboarded_token_fingerprint != fingerprint
 
     def install_wechat_plugin(self) -> ChannelCommandResult:
+        self.save_wechat_status(
+            SocialChannelStatus(
+                state="installing",
+                last_action_at=self._utc_now_iso(),
+            )
+        )
         result = self._run_commands(self.wechat_install_commands())
         if result.ok:
             config = self.load_wechat_config()
@@ -229,11 +235,17 @@ class SocialChannelService:
     def open_wechat_login_terminal(self) -> ChannelCommandResult:
         if not self.command_runner:
             return ChannelCommandResult(ok=False, error_message="OpenClaw command runner is not configured.")
+        self.save_wechat_status(
+            SocialChannelStatus(
+                state="login_starting",
+                last_action_at=self._utc_now_iso(),
+            )
+        )
         result = self.command_runner.open_interactive_terminal(self.wechat_login_command())
         if result.ok:
             config = self.load_wechat_config()
             self.save_wechat_config(replace(config, last_login_at=self._utc_now_iso()))
-            self.save_wechat_status(SocialChannelStatus(state="pending_enable", last_action_at=self._utc_now_iso()))
+            self.save_wechat_status(SocialChannelStatus(state="pending_login", last_action_at=self._utc_now_iso()))
         else:
             self.save_wechat_status(SocialChannelStatus(state="login_failed", last_error=result.error_message))
         return result
@@ -350,7 +362,9 @@ class SocialChannelService:
             status,
             {
                 "unconfigured": ("未安装", "先安装微信 ClawBot 通道插件，再打开扫码窗口完成登录。"),
-                "pending_login": ("待扫码", "插件已安装，点击扫码登录会打开二维码窗口。"),
+                "installing": ("安装中", "正在下载并安装微信 ClawBot 插件，首次可能需要几十秒，请勿关闭窗口。"),
+                "pending_login": ("待扫码", "插件已安装。点击扫码登录会打开终端二维码窗口，请等待二维码或错误日志出现。"),
+                "login_starting": ("启动扫码", "正在启动微信登录窗口；如果终端短暂黑屏，请等待二维码或错误日志出现。"),
                 "pending_enable": ("待启用", "扫码已完成，下一步请点击“启用微信”写入 OpenClaw 运行时配置。"),
                 "enabled": ("已启用", "微信 ClawBot 通道已启用，私聊消息会进入 OpenClaw。"),
                 "install_failed": ("安装失败", status.last_error or "微信插件安装失败，请检查网络或运行时。"),

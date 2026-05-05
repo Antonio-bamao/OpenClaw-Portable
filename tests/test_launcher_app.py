@@ -5,8 +5,11 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtWidgets import QApplication
+
 from launcher.app import OpenClawLauncherApplication, message_box_stylesheet
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
+from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 
 
@@ -107,6 +110,13 @@ class FakeController:
         self.calls.append("should_auto_start_runtime")
         return True
 
+    def load_pending_wechat_channel_state(self, action: str) -> WechatChannelState:
+        self.calls.append(f"pending_wechat:{action}")
+        if action == "install":
+            return WechatChannelState(False, False, "安装中", "正在下载并安装微信 ClawBot 插件。")
+        if action == "login":
+            return WechatChannelState(False, True, "启动扫码", "正在启动微信登录窗口。")
+        return WechatChannelState(False, True, "处理中", "正在处理微信通道。")
 
     def install_wechat_channel(self) -> WechatChannelState:
         self.calls.append("install_wechat_channel")
@@ -251,6 +261,24 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("color: #111827", stylesheet)
         self.assertIn("QLabel", stylesheet)
         self.assertIn("QPushButton", stylesheet)
+
+    def test_wechat_channel_busy_actions_have_visible_button_text(self) -> None:
+        QApplication.instance() or QApplication([])
+        window = OpenClawLauncherWindow(make_view_state("运行中", "running", "ready"))
+        try:
+            window.set_action_busy("install_wechat_channel", True)
+            self.assertEqual(window.install_wechat_button.text(), "正在安装...")
+            self.assertFalse(window.install_wechat_button.isEnabled())
+            window.set_action_busy("install_wechat_channel", False)
+            self.assertEqual(window.install_wechat_button.text(), "安装微信插件")
+
+            window.set_action_busy("login_wechat_channel", True)
+            self.assertEqual(window.login_wechat_button.text(), "正在打开...")
+            self.assertFalse(window.login_wechat_button.isEnabled())
+            window.set_action_busy("login_wechat_channel", False)
+            self.assertEqual(window.login_wechat_button.text(), "扫码登录")
+        finally:
+            window.close()
 
     def test_default_project_root_uses_module_root_in_source_mode(self) -> None:
         project_root = OpenClawLauncherApplication._default_project_root()
@@ -732,6 +760,30 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("login_wechat_channel", calls)
         self.assertIn("enable_wechat_channel", calls)
         self.assertEqual(application.main_window.wechat_states[-1].status_label, "已启用")
+
+    def test_handle_wechat_install_shows_pending_state_before_command_runs(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+
+        application._handle_install_wechat_channel()
+
+        self.assertLess(calls.index("apply_wechat:安装中"), calls.index("install_wechat_channel"))
+        self.assertIn("process_events", calls)
+
+    def test_handle_wechat_login_shows_pending_state_before_terminal_opens(self) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+
+        application._handle_login_wechat_channel()
+
+        self.assertLess(calls.index("apply_wechat:启动扫码"), calls.index("login_wechat_channel"))
+        self.assertIn("process_events", calls)
 
     def test_handle_confirm_wechat_channel_refreshes_state(self) -> None:
         calls: list[str] = []

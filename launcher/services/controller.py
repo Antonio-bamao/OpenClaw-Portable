@@ -7,7 +7,7 @@ from pathlib import Path
 
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
 from launcher.core.paths import PortablePaths
-from launcher.models import FeishuChannelState, LauncherViewState
+from launcher.models import FeishuChannelState, LauncherViewState, WechatChannelState
 from launcher.runtime.base import RuntimeAdapter, RuntimeStatus
 from launcher.runtime.mock_runtime import MockRuntimeAdapter
 from launcher.runtime.openclaw_runtime import OpenClawRuntimeAdapter
@@ -176,6 +176,26 @@ class LauncherController:
 
     def load_wechat_channel_state(self):
         return self.social_channel_service.build_wechat_view_state()
+
+    def load_pending_wechat_channel_state(self, action: str) -> WechatChannelState:
+        config = self.social_channel_service.load_wechat_config()
+        if action == "install":
+            return WechatChannelState(
+                enabled=config.enabled,
+                installed=config.installed,
+                status_label="安装中",
+                status_detail="正在下载并安装微信 ClawBot 插件，首次可能需要几十秒，请勿关闭窗口。",
+                last_login_at=config.last_login_at,
+            )
+        if action == "login":
+            return WechatChannelState(
+                enabled=config.enabled,
+                installed=config.installed,
+                status_label="启动扫码",
+                status_detail="正在启动微信登录窗口；如果终端短暂黑屏，请等待二维码或错误日志出现。",
+                last_login_at=config.last_login_at,
+            )
+        return self.load_wechat_channel_state()
 
     def install_wechat_channel(self):
         self.social_channel_service.install_wechat_plugin()

@@ -16,6 +16,21 @@ from launcher.services.social_channels import (
 )
 
 
+class FakeWechatCommandRunner:
+    def __init__(self, result: ChannelCommandResult | None = None) -> None:
+        self.result = result or ChannelCommandResult(ok=True)
+        self.run_calls: list[list[str]] = []
+        self.open_terminal_calls: list[list[str]] = []
+
+    def run(self, args: list[str], timeout_seconds: int = 180) -> ChannelCommandResult:
+        self.run_calls.append(args)
+        return self.result
+
+    def open_interactive_terminal(self, args: list[str]) -> ChannelCommandResult:
+        self.open_terminal_calls.append(args)
+        return self.result
+
+
 def make_workspace_temp_dir() -> Path:
     temp_root = Path.cwd() / "tmp"
     temp_root.mkdir(exist_ok=True)
@@ -59,6 +74,38 @@ class SocialChannelServiceTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(login_command, ["channels", "login", "--channel", "openclaw-weixin"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_login_terminal_open_keeps_state_waiting_for_scan(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runner = FakeWechatCommandRunner()
+            service = SocialChannelService(make_paths(temp_dir), command_runner=runner)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+
+            result = service.open_wechat_login_terminal()
+            state = service.build_wechat_view_state()
+
+            self.assertTrue(result.ok)
+            self.assertEqual(runner.open_terminal_calls, [["channels", "login", "--channel", "openclaw-weixin"]])
+            self.assertEqual(state.status_label, "待扫码")
+            self.assertIn("二维码", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_install_failure_surfaces_error_after_visible_installing_state(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runner = FakeWechatCommandRunner(ChannelCommandResult(ok=False, error_message="Cannot find module zod"))
+            service = SocialChannelService(make_paths(temp_dir), command_runner=runner)
+
+            result = service.install_wechat_plugin()
+            state = service.build_wechat_view_state()
+
+            self.assertFalse(result.ok)
+            self.assertEqual(state.status_label, "安装失败")
+            self.assertIn("Cannot find module zod", state.status_detail)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

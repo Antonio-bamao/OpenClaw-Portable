@@ -338,6 +338,24 @@ class OpenClawLauncherWindow(QMainWindow):
             button.setText("正在测试..." if busy else "测试连接")
         elif action == "enable_feishu_channel":
             button.setText("正在启用..." if busy else "启用飞书私聊")
+        elif action == "install_wechat_channel":
+            button.setText("正在安装..." if busy else self._default_button_texts[button])
+        elif action == "login_wechat_channel":
+            button.setText("正在打开..." if busy else self._default_button_texts[button])
+        elif action == "confirm_wechat_channel":
+            button.setText("正在确认..." if busy else self._default_button_texts[button])
+        elif action == "enable_wechat_channel":
+            button.setText("正在启用..." if busy else self._default_button_texts[button])
+        elif action == "install_wecom_channel":
+            button.setText("正在安装..." if busy else self._default_button_texts[button])
+        elif action == "test_wecom_channel":
+            button.setText("正在检查..." if busy else self._default_button_texts[button])
+        elif action == "enable_wecom_channel":
+            button.setText("正在启用..." if busy else self._default_button_texts[button])
+        elif action == "test_qq_channel":
+            button.setText("正在检查..." if busy else self._default_button_texts[button])
+        elif action == "enable_qq_channel":
+            button.setText("正在启用..." if busy else self._default_button_texts[button])
 
     def _build_ui(self) -> None:
         self.setWindowTitle("OpenClaw Portable")
