@@ -21,6 +21,7 @@ from launcher.services.window_preferences import CloseAction, WindowPreferenceSt
 from launcher.ui.close_dialog import CloseActionDialog
 from launcher.ui.main_window import OpenClawLauncherWindow
 from launcher.ui.theme import ACCENT, ACCENT_DEEP, BORDER, FIELD, METAL, PANEL, PRIMARY, SURFACE, TEXT, preferred_font
+from launcher.ui.unlock_dialog import UnlockDialog
 from launcher.ui.window_branding import apply_app_icon, apply_windows_title_bar_palette, load_app_icon
 from launcher.ui.wizard import SetupWizardWindow
 
@@ -120,6 +121,8 @@ class OpenClawLauncherApplication:
         if route == AppRoute.SETUP_WIZARD:
             self.show_setup_wizard()
         else:
+            if not self._ensure_security_unlocked():
+                return 0
             self.show_main_window()
         try:
             return self.app.exec()
@@ -128,6 +131,8 @@ class OpenClawLauncherApplication:
             self._instance_lock_acquired = False
 
     def show_main_window(self) -> None:
+        if not self._ensure_security_unlocked():
+            return
         view_state = self.controller.load_view_state()
         if not self.main_window:
             self.main_window = OpenClawLauncherWindow(view_state)
@@ -188,6 +193,69 @@ class OpenClawLauncherApplication:
         if self.wizard_window:
             self.wizard_window.hide()
         self._schedule_auto_start_runtime()
+
+    def _ensure_security_unlocked(self) -> bool:
+        if not hasattr(self.controller, "security_requires_password_unlock"):
+            return True
+        if getattr(self.controller, "security_needs_initial_setup", lambda: False)():
+            created = self._prompt_security_setup()
+            if created is None:
+                return False
+            password, _trust_device = created
+            if not password.strip():
+                self._show_error("管理密码不能为空。")
+                return False
+            if not self.controller.initialize_security_password(password):
+                self._show_error("本地保险箱初始化失败，请重试。")
+                return False
+            self._show_info("已启用本地保险箱，API Key 将迁移到加密存储。")
+            return True
+        if hasattr(self.controller, "unlock_security_with_trusted_device") and self.controller.unlock_security_with_trusted_device():
+            return True
+        if not self.controller.security_requires_password_unlock():
+            return True
+        unlock = self._prompt_security_unlock()
+        if unlock is None:
+            return False
+        password, trust_device = unlock
+        if not self.controller.unlock_security_with_password(password, trust_device=trust_device):
+            self._show_error("管理密码不正确，无法解锁本地保险箱。")
+            return False
+        if getattr(self.controller, "security_last_unlock_was_new_device", lambda: False)():
+            self.controller.mark_channels_for_new_device()
+            self._show_info("已解锁本地保险箱。检测到新的电脑环境，各渠道已进入重新连接/确认状态。")
+        return True
+
+    def _prompt_security_unlock(self) -> tuple[str, bool] | None:
+        dialog = UnlockDialog(self.main_window or self.wizard_window)
+        apply_app_icon(self.app, dialog, self.paths.assets_dir)
+        apply_windows_title_bar_palette(
+            dialog,
+            caption_color="#E8E5DC",
+            text_color="#1F2020",
+            border_color="#C9C5BA",
+        )
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return None
+        return dialog.password, dialog.trust_device
+
+    def _prompt_security_setup(self) -> tuple[str, bool] | None:
+        dialog = UnlockDialog(
+            self.main_window or self.wizard_window,
+            title="启用本地保险箱",
+            description="当前便携包已有配置，但还没有真正的管理密码保护。请设置管理密码，用于加密模型 Key 和各渠道凭据；换电脑时也会用它解锁。",
+            button_text="启用",
+        )
+        apply_app_icon(self.app, dialog, self.paths.assets_dir)
+        apply_windows_title_bar_palette(
+            dialog,
+            caption_color="#E8E5DC",
+            text_color="#1F2020",
+            border_color="#C9C5BA",
+        )
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return None
+        return dialog.password, True
 
     def _setup_tray_icon(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():

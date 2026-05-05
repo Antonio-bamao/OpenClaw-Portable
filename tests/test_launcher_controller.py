@@ -4,7 +4,7 @@ import socket
 import time
 import unittest
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -213,12 +213,14 @@ class LauncherControllerTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            paths.project_root.mkdir(parents=True, exist_ok=True)
+            (paths.project_root / "version.json").write_text('{"openclawVersion": "v2099.1.2"}', encoding="utf-8")
             controller = LauncherController(paths, runtime_mode="openclaw", node_command="node")
             controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
 
             state = controller.load_view_state()
 
-            self.assertEqual(state.runtime_detail, "OpenClaw gateway / v2026.4.8")
+            self.assertEqual(state.runtime_detail, "OpenClaw gateway / v2099.1.2")
             self.assertIn("真实 OpenClaw", state.message)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -693,6 +695,77 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_device_change_marks_configured_channels_for_reconnect_without_clearing_credentials(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw" / "dist" / "extensions" / "qqbot").mkdir(parents=True)
+            runtime_adapter = FakeRuntimeAdapter()
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.social_channel_service.command_runner = FakeChannelCommandRunner(ChannelCommandResult(ok=True, output="added"))
+            controller.save_feishu_channel("cli_demo", "feishu-secret", "OpenClaw Bot")
+            controller.enable_feishu_channel()
+            controller.social_channel_service.save_wechat_config(
+                WechatChannelConfig(enabled=True, installed=True, last_login_at="2026-05-05T00:00:00Z")
+            )
+            controller.save_qq_channel("qq-app", "qq-secret")
+            controller.enable_qq_channel()
+            controller.save_wecom_channel("wecom-bot", "wecom-secret")
+            controller.enable_wecom_channel()
+
+            controller.mark_channels_for_new_device()
+
+            self.assertEqual(controller.load_feishu_channel_state().status_label, "需重新连接")
+            self.assertEqual(controller.load_wechat_channel_state().status_label, "需确认登录")
+            self.assertEqual(controller.load_qq_channel_state().status_label, "需重新启用")
+            self.assertEqual(controller.load_wecom_channel_state().status_label, "需重新启用")
+            self.assertEqual(controller.feishu_channel_service.load_config().app_secret, "feishu-secret")
+            self.assertEqual(controller.social_channel_service.load_qq_config().app_secret, "qq-secret")
+            self.assertEqual(controller.social_channel_service.load_wecom_config().secret, "wecom-secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_initial_security_setup_migrates_model_and_channel_secrets_to_vault(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            paths.ensure_directories()
+            controller = LauncherController(paths, runtime_adapter=FakeRuntimeAdapter(), runtime_mode="openclaw")
+            controller.store.save(
+                replace(make_config(), admin_password=""),
+                SensitiveConfig(api_key="sk-demo"),
+            )
+            controller.feishu_channel_service.save_config(FeishuChannelConfig(app_id="cli_demo", app_secret="feishu-secret"))
+            controller.social_channel_service.save_qq_config(QqChannelConfig(app_id="qq-app", app_secret="qq-secret"))
+            controller.social_channel_service.save_wecom_config(WecomChannelConfig(bot_id="wecom-bot", secret="wecom-secret"))
+
+            self.assertTrue(controller.initialize_security_password("demo-pass"))
+
+            state_text = paths.state_dir.read_text(encoding="utf-8") if paths.state_dir.is_file() else ""
+            for path in (
+                paths.env_file,
+                paths.feishu_channel_config_file,
+                paths.state_dir / "channels" / "qq" / "config.json",
+                paths.state_dir / "channels" / "wecom" / "config.json",
+            ):
+                state_text += path.read_text(encoding="utf-8")
+            self.assertNotIn("sk-demo", state_text)
+            self.assertNotIn("feishu-secret", state_text)
+            self.assertNotIn("qq-secret", state_text)
+            self.assertNotIn("wecom-secret", state_text)
+            self.assertEqual(controller.store.load()[1].api_key, "sk-demo")
+            self.assertEqual(controller.feishu_channel_service.load_config().app_secret, "feishu-secret")
+            self.assertEqual(controller.social_channel_service.load_qq_config().app_secret, "qq-secret")
+            self.assertEqual(controller.social_channel_service.load_wecom_config().secret, "wecom-secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_controller_skips_feishu_projection_when_channel_config_is_invalid(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -714,7 +787,8 @@ class LauncherControllerTests(unittest.TestCase):
                 "qwen/qwen3.5-plus",
             )
             self.assertNotIn("channels", runtime_adapter.last_runtime_config_patch)
-            self.assertEqual(runtime_adapter.last_runtime_env, {})
+            self.assertNotIn("FEISHU_APP_ID", runtime_adapter.last_runtime_env)
+            self.assertNotIn("FEISHU_APP_SECRET", runtime_adapter.last_runtime_env)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

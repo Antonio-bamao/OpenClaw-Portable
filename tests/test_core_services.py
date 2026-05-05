@@ -104,12 +104,16 @@ class LauncherConfigStoreTests(unittest.TestCase):
             loaded_config, loaded_sensitive = store.load()
 
             raw_json = json.loads(paths.config_file.read_text(encoding="utf-8"))
+            raw_json_text = paths.config_file.read_text(encoding="utf-8")
             env_text = paths.env_file.read_text(encoding="utf-8")
 
             self.assertEqual(loaded_config.provider_id, "dashscope")
             self.assertEqual(loaded_sensitive.api_key, "sk-demo-key")
             self.assertNotIn("api_key", raw_json)
-            self.assertIn("OPENCLAW_API_KEY=sk-demo-key", env_text)
+            self.assertIn("OPENCLAW_API_KEY=", env_text)
+            self.assertNotIn("sk-demo-key", env_text)
+            self.assertNotIn("sk-demo-key", raw_json_text)
+            self.assertNotIn("demo-pass", raw_json_text)
             self.assertFalse(store.is_first_run())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

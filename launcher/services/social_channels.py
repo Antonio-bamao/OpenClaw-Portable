@@ -147,9 +147,18 @@ class OpenClawChannelCommandRunner:
 
 
 class SocialChannelService:
-    def __init__(self, paths: PortablePaths, command_runner: OpenClawChannelCommandRunner | None = None) -> None:
+    def __init__(
+        self,
+        paths: PortablePaths,
+        command_runner: OpenClawChannelCommandRunner | None = None,
+        *,
+        secret_loader=None,
+        secret_saver=None,
+    ) -> None:
         self.paths = paths
         self.command_runner = command_runner
+        self._secret_loader = secret_loader
+        self._secret_saver = secret_saver
 
     def load_wechat_config(self) -> WechatChannelConfig:
         return self._load_dataclass("wechat", "config", WechatChannelConfig)
@@ -158,15 +167,33 @@ class SocialChannelService:
         self._save_dataclass("wechat", "config", config)
 
     def load_qq_config(self) -> QqChannelConfig:
-        return self._load_dataclass("qq", "config", QqChannelConfig)
+        config = self._load_dataclass("qq", "config", QqChannelConfig)
+        if not config.app_secret and self._secret_loader:
+            secret = self._secret_loader("qq.appSecret")
+            if secret:
+                config = replace(config, app_secret=secret)
+        return config
 
     def save_qq_config(self, config: QqChannelConfig) -> None:
+        if config.app_secret and self._secret_saver:
+            saved = self._secret_saver("qq.appSecret", config.app_secret)
+            if saved is not False:
+                config = replace(config, app_secret="")
         self._save_dataclass("qq", "config", config)
 
     def load_wecom_config(self) -> WecomChannelConfig:
-        return self._load_dataclass("wecom", "config", WecomChannelConfig)
+        config = self._load_dataclass("wecom", "config", WecomChannelConfig)
+        if not config.secret and self._secret_loader:
+            secret = self._secret_loader("wecom.secret")
+            if secret:
+                config = replace(config, secret=secret)
+        return config
 
     def save_wecom_config(self, config: WecomChannelConfig) -> None:
+        if config.secret and self._secret_saver:
+            saved = self._secret_saver("wecom.secret", config.secret)
+            if saved is not False:
+                config = replace(config, secret="")
         self._save_dataclass("wecom", "config", config)
 
     def load_wechat_status(self) -> SocialChannelStatus:
@@ -392,6 +419,7 @@ class SocialChannelService:
                 "login_starting": ("启动扫码", "正在启动微信登录窗口；如果终端短暂黑屏，请等待二维码或错误日志出现。"),
                 "pending_enable": ("待启用", "扫码已完成，下一步请点击“启用微信”写入 OpenClaw 运行时配置。"),
                 "enabled": ("已启用", "微信 ClawBot 通道已启用，私聊消息会进入 OpenClaw。"),
+                "needs_login_check": ("需确认登录", status.last_error or "检测到新的电脑环境，请点击扫码登录确认微信登录态。"),
                 "install_failed": ("安装失败", status.last_error or "微信插件安装失败，请检查网络或运行时。"),
                 "login_failed": ("扫码失败", status.last_error or "扫码窗口启动失败，请重试。"),
             },
@@ -436,6 +464,7 @@ class SocialChannelService:
                 "missing_runtime_plugin": ("缺少扩展", status.last_error or "当前便携包缺少内置 QQ Bot 扩展，请重新安装或更新 OpenClaw Portable。"),
                 "pending_enable": ("待启用", "QQ Bot 凭据已保存，启用后会写入运行时配置。"),
                 "enabled": ("已启用", "QQ Bot 通道已启用，可接收私聊、群聊和富媒体消息。"),
+                "needs_reconnect": ("需重新启用", status.last_error or "检测到新的电脑环境，请重新启用 QQ Bot。"),
                 "enable_failed": ("启用失败", status.last_error or "QQ Bot 运行时接入失败，请重试。"),
             },
         )
@@ -452,6 +481,7 @@ class SocialChannelService:
                 "invalid_config": ("配置无效", status.last_error or "请检查企业微信 Bot ID 和 Secret。"),
                 "pending_enable": ("待启用", "企业微信凭据已保存，启用后会写入运行时配置。"),
                 "enabled": ("已启用", "企业微信通道已启用。"),
+                "needs_reconnect": ("需重新启用", status.last_error or "检测到新的电脑环境，请重新启用企业微信。"),
                 "install_failed": ("安装失败", status.last_error or "企业微信插件安装失败，请检查网络或运行时。"),
             },
         )

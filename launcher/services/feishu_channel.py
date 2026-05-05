@@ -42,19 +42,31 @@ class FeishuRuntimeProjection:
 
 
 class FeishuChannelService:
-    def __init__(self, paths: PortablePaths) -> None:
+    def __init__(self, paths: PortablePaths, secret_loader=None, secret_saver=None) -> None:
         self.paths = paths
+        self._secret_loader = secret_loader
+        self._secret_saver = secret_saver
 
     def load_config(self) -> FeishuChannelConfig:
         if not self.paths.feishu_channel_config_file.exists():
             return FeishuChannelConfig()
         raw = self._load_json_object(self.paths.feishu_channel_config_file)
-        return self._coerce_feishu_config(raw)
+        config = self._coerce_feishu_config(raw)
+        if not config.app_secret and self._secret_loader:
+            secret = self._secret_loader("feishu.appSecret")
+            if secret:
+                config = replace(config, app_secret=secret)
+        return config
 
     def save_config(self, config: FeishuChannelConfig) -> None:
         self.paths.ensure_directories()
+        payload_config = config
+        if config.app_secret and self._secret_saver:
+            saved = self._secret_saver("feishu.appSecret", config.app_secret)
+            if saved is not False:
+                payload_config = replace(config, app_secret="")
         self.paths.feishu_channel_config_file.write_text(
-            json.dumps(self._to_json_keys(asdict(config)), ensure_ascii=False, indent=2),
+            json.dumps(self._to_json_keys(asdict(payload_config)), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
@@ -142,6 +154,8 @@ class FeishuChannelService:
 
         if not has_credentials and not config.enabled:
             next_status = FeishuChannelStatus()
+        elif current.state == "needs_reconnect" and runtime_state != "running":
+            next_status = current
         elif not runtime_link_available and current.state == "invalid_config":
             next_status = current
         elif not runtime_link_available and has_credentials:
@@ -249,6 +263,7 @@ class FeishuChannelService:
             "connected": ("已连接", "飞书私聊链路已就绪，可接收私聊消息。"),
             "connection_failed": ("连接失败", status.last_error or "飞书连接失败，可查看诊断并重试。"),
             "needs_reconfigure": ("需重新配置", status.last_error or "当前飞书渠道需重新配置。"),
+            "needs_reconnect": ("需重新连接", status.last_error or "检测到新的电脑环境，启动服务后会重新建立飞书私聊链路。"),
         }
         label, detail = labels.get(status.state, ("未知状态", status.last_error or "飞书渠道状态暂不可用。"))
         return FeishuChannelState(

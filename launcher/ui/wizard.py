@@ -240,13 +240,29 @@ class SetupWizardWindow(QMainWindow):
 
     def _handle_primary_action(self) -> None:
         self._sync_session_from_inputs()
+        if self.session.current_step == 0 and not self._password_inputs_are_valid():
+            return
         self.session.next_step()
         self._sync_ui()
 
     def _handle_skip(self) -> None:
+        if self.session.current_step == 0:
+            self.caption_label.setText("管理密码必须设置，后续换电脑或环境变化时会用它解锁本地保险箱。")
+            return
         if self.session.current_step == 2:
             self.api_key_input.clear()
         self._handle_primary_action()
+
+    def _password_inputs_are_valid(self) -> bool:
+        password = self.password_input.text().strip()
+        confirmed = self.confirm_password_input.text().strip()
+        if not password:
+            self.caption_label.setText("请先设置管理密码。这个密码会用于加密 API Key 和渠道凭据。")
+            return False
+        if password != confirmed:
+            self.caption_label.setText("两次输入的管理密码不一致，请重新输入。")
+            return False
+        return True
 
     def _simulate_connection_test(self) -> None:
         self._sync_session_from_inputs()

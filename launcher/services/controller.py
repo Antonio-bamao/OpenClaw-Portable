@@ -17,6 +17,7 @@ from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelS
 from launcher.services.local_update import LocalUpdateImportService, RestoreUpdateBackupService
 from launcher.services.online_update import OnlineUpdateService, UpdateCheckResult
 from launcher.services.provider_bridge import ProviderBridge
+from launcher.services.security import SecurityService
 from launcher.services.social_channels import (
     OpenClawChannelCommandRunner,
     QqChannelConfig,
@@ -41,7 +42,8 @@ class LauncherController:
         node_command: str = "node",
     ) -> None:
         self.paths = paths
-        self.store = LauncherConfigStore(paths)
+        self.security_service = SecurityService(paths)
+        self.store = LauncherConfigStore(paths, security_service=self.security_service)
         self.runtime_mode = runtime_mode
         self.runtime_adapter = runtime_adapter or self._build_runtime_adapter(runtime_mode, node_command)
         self.diagnostics_exporter = diagnostics_exporter or DiagnosticsExporter(
@@ -53,10 +55,65 @@ class LauncherController:
         self.local_update_service = local_update_service or LocalUpdateImportService(paths)
         self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
         self.online_update_service = online_update_service or OnlineUpdateService(paths)
-        self.feishu_channel_service = FeishuChannelService(paths)
-        self.social_channel_service = SocialChannelService(paths, OpenClawChannelCommandRunner(paths, node_command=node_command))
+        self.feishu_channel_service = FeishuChannelService(paths, secret_loader=self._load_vault_secret, secret_saver=self._save_vault_secret)
+        self.social_channel_service = SocialChannelService(
+            paths,
+            OpenClawChannelCommandRunner(paths, node_command=node_command),
+            secret_loader=self._load_vault_secret,
+            secret_saver=self._save_vault_secret,
+        )
         self.provider_bridge = ProviderBridge(paths)
         self._prepared = False
+
+    def unlock_security_with_trusted_device(self) -> bool:
+        return self.security_service.unlock_with_trusted_device()
+
+    def security_requires_password_unlock(self) -> bool:
+        return self.security_service.requires_password_unlock()
+
+    def unlock_security_with_password(self, password: str, *, trust_device: bool = True) -> bool:
+        return self.security_service.unlock_with_password(password, trust_device=trust_device)
+
+    def security_last_unlock_was_new_device(self) -> bool:
+        return self.security_service.last_unlock_was_new_device
+
+    def security_needs_initial_setup(self) -> bool:
+        return not self.store.is_first_run() and not self.security_service.is_configured()
+
+    def initialize_security_password(self, password: str) -> bool:
+        if not self.security_needs_initial_setup():
+            return True
+        feishu_config = self.feishu_channel_service.load_config()
+        qq_config = self.social_channel_service.load_qq_config()
+        wecom_config = self.social_channel_service.load_wecom_config()
+        config, sensitive = self.store.load()
+        self.store.save(replace(config, admin_password=password), sensitive)
+        if self.security_service.is_configured():
+            self.feishu_channel_service.save_config(feishu_config)
+            self.social_channel_service.save_qq_config(qq_config)
+            self.social_channel_service.save_wecom_config(wecom_config)
+        return self.security_service.is_configured()
+
+    def _load_vault_secret(self, key: str) -> str:
+        if not self.security_service.is_configured():
+            return ""
+        if not self.security_service.is_unlocked():
+            self.security_service.unlock_with_trusted_device()
+        if not self.security_service.is_unlocked():
+            return ""
+        return self.security_service.load_secrets().get(key, "")
+
+    def _save_vault_secret(self, key: str, value: str) -> bool:
+        if not self.security_service.is_configured():
+            return False
+        if not self.security_service.is_unlocked():
+            self.security_service.unlock_with_trusted_device()
+        if not self.security_service.is_unlocked():
+            return False
+        secrets = self.security_service.load_secrets()
+        secrets[key] = value
+        self.security_service.save_secrets(secrets)
+        return True
 
     def configure(self, config: LauncherConfig, sensitive: SensitiveConfig) -> None:
         self.store.save(config, sensitive)
@@ -355,6 +412,43 @@ class LauncherController:
         self._reproject_channels_if_configured()
         return self.load_wecom_channel_state()
 
+    def mark_channels_for_new_device(self) -> None:
+        feishu_config = self.feishu_channel_service.load_config()
+        if feishu_config.enabled or feishu_config.app_id.strip() or feishu_config.app_secret.strip():
+            self.feishu_channel_service.save_status(
+                FeishuChannelStatus(
+                    state="needs_reconnect",
+                    last_error="检测到新的电脑环境，飞书凭据已解锁；启动服务后会重新建立私聊链路。",
+                )
+            )
+
+        wechat_config = self.social_channel_service.load_wechat_config()
+        if wechat_config.installed or wechat_config.enabled:
+            self.social_channel_service.save_wechat_status(
+                SocialChannelStatus(
+                    state="needs_login_check",
+                    last_error="检测到新的电脑环境，请点击扫码登录确认微信登录态；如果仍可用，确认后会恢复启用。",
+                )
+            )
+
+        qq_config = self.social_channel_service.load_qq_config()
+        if qq_config.enabled or qq_config.app_id.strip() or qq_config.app_secret.strip():
+            self.social_channel_service.save_qq_status(
+                SocialChannelStatus(
+                    state="needs_reconnect",
+                    last_error="检测到新的电脑环境，QQ Bot 凭据已解锁；请重新启用以写入当前运行时。",
+                )
+            )
+
+        wecom_config = self.social_channel_service.load_wecom_config()
+        if wecom_config.enabled or wecom_config.bot_id.strip() or wecom_config.secret.strip():
+            self.social_channel_service.save_wecom_status(
+                SocialChannelStatus(
+                    state="needs_reconnect",
+                    last_error="检测到新的电脑环境，企业微信凭据已解锁；请重新启用以写入当前运行时。",
+                )
+            )
+
     def load_view_state(self) -> LauncherViewState:
         if self.store.is_first_run():
             return LauncherViewState(
@@ -423,6 +517,8 @@ class LauncherController:
     ) -> tuple[dict[str, object], dict[str, str]]:
         provider_projection = self.provider_bridge.apply(config, sensitive)
         channel_config_patch, runtime_env = self._channel_runtime_projection()
+        if sensitive.api_key.strip():
+            runtime_env["OPENCLAW_API_KEY"] = sensitive.api_key.strip()
         runtime_config_patch = self._deep_merge(provider_projection.runtime_config_patch, channel_config_patch)
         return runtime_config_patch, runtime_env
 
@@ -524,7 +620,7 @@ class LauncherController:
 
     def _runtime_detail(self) -> str:
         if self.runtime_mode == "openclaw":
-            return "OpenClaw gateway / v2026.4.8"
+            return f"OpenClaw gateway / {self._current_openclaw_version()}"
         return "Node mock runtime / Phase 1 开发版"
 
     def _runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig) -> str:
@@ -618,3 +714,14 @@ class LauncherController:
         if not version:
             raise ValueError("当前便携包缺少有效版本号，无法检查更新。")
         return version
+
+    def _current_openclaw_version(self) -> str:
+        version_file = self.paths.project_root / "version.json"
+        if not version_file.exists():
+            return "unknown"
+        try:
+            version_info = json.loads(version_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return "unknown"
+        version = str(version_info.get("openclawVersion") or version_info.get("version") or "").strip()
+        return version or "unknown"

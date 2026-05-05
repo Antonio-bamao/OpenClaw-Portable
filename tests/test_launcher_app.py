@@ -304,6 +304,73 @@ class LauncherAppTests(unittest.TestCase):
 
         self.assertEqual(project_root, fake_executable.parent)
 
+    def test_security_unlock_marks_channels_when_password_unlock_is_new_device(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        controller = type(
+            "SecurityController",
+            (),
+            {
+                "unlock_security_with_trusted_device": lambda self: False,
+                "security_requires_password_unlock": lambda self: True,
+                "unlock_security_with_password": lambda self, password, trust_device=True: password == "demo-pass" and trust_device,
+                "security_last_unlock_was_new_device": lambda self: True,
+                "mark_channels_for_new_device": lambda self: calls.append("mark_channels_for_new_device"),
+            },
+        )()
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = controller
+        application.main_window = None
+        application.wizard_window = None
+        application._prompt_security_unlock = lambda: ("demo-pass", True)
+        application._show_info = info_messages.append
+        application._show_error = lambda message: calls.append(f"error:{message}")
+
+        unlocked = application._ensure_security_unlocked()
+
+        self.assertTrue(unlocked)
+        self.assertIn("mark_channels_for_new_device", calls)
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("新的电脑环境", info_messages[0])
+
+    def test_security_unlock_cancel_blocks_main_window(self) -> None:
+        controller = type(
+            "SecurityController",
+            (),
+            {
+                "unlock_security_with_trusted_device": lambda self: False,
+                "security_requires_password_unlock": lambda self: True,
+            },
+        )()
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = controller
+        application._prompt_security_unlock = lambda: None
+
+        self.assertFalse(application._ensure_security_unlocked())
+
+    def test_security_setup_migrates_existing_config_before_main_window(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        controller = type(
+            "SecurityController",
+            (),
+            {
+                "security_needs_initial_setup": lambda self: True,
+                "initialize_security_password": lambda self, password: calls.append(f"initialize_security_password:{password}") or True,
+                "security_requires_password_unlock": lambda self: False,
+            },
+        )()
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = controller
+        application._prompt_security_setup = lambda: ("demo-pass", True)
+        application._show_info = info_messages.append
+        application._show_error = lambda message: calls.append(f"error:{message}")
+
+        self.assertTrue(application._ensure_security_unlocked())
+        self.assertIn("initialize_security_password:demo-pass", calls)
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("本地保险箱", info_messages[0])
+
     def test_handle_start_applies_pending_state_before_runtime_starts(self) -> None:
         calls: list[str] = []
         pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")

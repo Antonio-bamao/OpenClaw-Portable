@@ -8,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from launcher.core.config_store import LauncherConfigStore
 from launcher.core.paths import PortablePaths
 from launcher.services.feishu_channel import FeishuChannelService
+from launcher.services.security import SecurityService
 from launcher.services.social_channels import SocialChannelService
 
 
@@ -76,7 +77,7 @@ class DiagnosticsExporter:
             "bindHost": config.bind_host,
             "firstRunCompleted": config.first_run_completed,
             "apiKeyConfigured": bool(sensitive.api_key),
-            "adminPasswordConfigured": bool(config.admin_password),
+            "adminPasswordConfigured": bool(config.admin_password) or SecurityService(self.paths).is_configured(),
         }
         summary["feishuChannel"] = self._feishu_channel_summary()
         summary["wechatChannel"] = self._wechat_channel_summary()
