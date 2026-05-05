@@ -177,6 +177,18 @@ class LauncherController:
     def load_wechat_channel_state(self):
         return self.social_channel_service.build_wechat_view_state()
 
+    def wechat_channel_installed(self) -> bool:
+        config = self.social_channel_service.load_wechat_config()
+        installed = config.installed or self.social_channel_service.wechat_runtime_plugin_available()
+        if installed:
+            self.social_channel_service.save_wechat_config(replace(config, installed=True))
+            status = self.social_channel_service.load_wechat_status()
+            if status.state in {"unconfigured", "installing", "install_failed"}:
+                self.social_channel_service.save_wechat_status(
+                    SocialChannelStatus(state="enabled" if config.enabled else "pending_login")
+                )
+        return installed
+
     def load_pending_wechat_channel_state(self, action: str) -> WechatChannelState:
         config = self.social_channel_service.load_wechat_config()
         if action == "install":
@@ -288,6 +300,14 @@ class LauncherController:
 
     def load_wecom_channel_state(self):
         return self.social_channel_service.build_wecom_view_state()
+
+    def wecom_channel_installed(self) -> bool:
+        installed = self.social_channel_service.wecom_runtime_plugin_available()
+        status = self.social_channel_service.load_wecom_status()
+        installed = installed or status.state in {"pending_config", "pending_enable", "enabled"}
+        if installed and status.state in {"unconfigured", "install_failed"}:
+            self.social_channel_service.save_wecom_status(SocialChannelStatus(state="pending_config"))
+        return installed
 
     def install_wecom_channel(self):
         self.social_channel_service.install_wecom_plugin()

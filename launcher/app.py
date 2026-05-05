@@ -20,36 +20,54 @@ from launcher.services.process_lock import SingleInstanceLock
 from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 from launcher.ui.close_dialog import CloseActionDialog
 from launcher.ui.main_window import OpenClawLauncherWindow
-from launcher.ui.theme import preferred_font
+from launcher.ui.theme import ACCENT, ACCENT_DEEP, BORDER, FIELD, METAL, PANEL, PRIMARY, SURFACE, TEXT, preferred_font
 from launcher.ui.window_branding import apply_app_icon, apply_windows_title_bar_palette, load_app_icon
 from launcher.ui.wizard import SetupWizardWindow
 
 
 def message_box_stylesheet() -> str:
-    return """
-QMessageBox {
-    background-color: #ffffff;
-    color: #111827;
-}
-QMessageBox QLabel {
-    color: #111827;
+    return f"""
+QMessageBox {{
+    background-color: {PANEL};
+    color: {TEXT};
+    border-top: 4px solid {ACCENT};
+}}
+QMessageBox QLabel {{
+    color: {TEXT};
     background-color: transparent;
-}
-QMessageBox QPushButton {
-    background-color: #ffffff;
-    color: #111827;
-    border: 1px solid #9ca3af;
+    font-size: 14px;
+}}
+QMessageBox QPushButton {{
+    background-color: {FIELD};
+    color: {PRIMARY};
+    border: 1px solid {BORDER};
     border-radius: 3px;
-    padding: 6px 14px;
-    min-width: 72px;
-}
-QMessageBox QPushButton:hover {
-    background-color: #f3f4f6;
-}
-QMessageBox QPushButton:pressed {
-    background-color: #e5e7eb;
-}
+    padding: 8px 18px;
+    min-width: 86px;
+    min-height: 34px;
+    font-weight: 700;
+}}
+QMessageBox QPushButton:hover {{
+    background-color: {SURFACE};
+    border-color: {PRIMARY};
+}}
+QMessageBox QPushButton:pressed {{
+    background-color: {METAL};
+}}
+QMessageBox QPushButton:default {{
+    background-color: {ACCENT};
+    color: #ffffff;
+    border: 1px solid {ACCENT_DEEP};
+}}
 """.strip()
+
+
+CODEBUDDY_GUIDE_URLS = {
+    "feishu": "https://www.codebuddy.cn/docs/workbuddy/Feishu-Guide",
+    "wechat": "https://www.codebuddy.cn/docs/workbuddy/WeixinBot-Guide",
+    "qq": "https://www.codebuddy.cn/docs/workbuddy/QQ-Guide",
+    "wecom": "https://www.codebuddy.cn/docs/workbuddy/Wecom-Guide",
+}
 
 
 class BackgroundTaskSignals(QObject):
@@ -146,6 +164,7 @@ class OpenClawLauncherApplication:
                 on_enable_qq=self._handle_enable_qq_channel,
                 on_disable_qq=self._handle_disable_qq_channel,
                 on_install_wecom=self._handle_install_wecom_channel,
+                on_open_wecom_help=self._handle_open_wecom_help,
                 on_save_wecom=self._handle_save_wecom_channel,
                 on_test_wecom=self._handle_test_wecom_channel,
                 on_enable_wecom=self._handle_enable_wecom_channel,
@@ -434,14 +453,14 @@ class OpenClawLauncherApplication:
             self._apply_feishu_channel_state(state)
 
     def _handle_open_feishu_help(self) -> None:
-        help_path = self.paths.assets_dir / "guide" / "setup-feishu.html"
-        if not help_path.exists():
-            self._show_error("飞书接入帮助页尚未打包。")
-            return
-        webbrowser.open_new_tab(help_path.as_uri())
+        self._open_codebuddy_guide("feishu")
 
     def _handle_install_wechat_channel(self) -> None:
         if self._is_action_busy("install_wechat_channel"):
+            return
+        if hasattr(self.controller, "wechat_channel_installed") and self.controller.wechat_channel_installed():
+            self._apply_wechat_channel_state(self.controller.load_wechat_channel_state())
+            self._show_info("微信 ClawBot 插件已安装，无需重复安装。可以直接扫码登录或启用微信。")
             return
         self._show_pending_wechat_channel_state("install")
         self._run_background_action("install_wechat_channel", self.controller.install_wechat_channel, self._apply_wechat_channel_state)
@@ -472,11 +491,7 @@ class OpenClawLauncherApplication:
             self._apply_wechat_channel_state(state)
 
     def _handle_open_wechat_help(self) -> None:
-        help_path = self.paths.assets_dir / "guide" / "setup-wechat.html"
-        if not help_path.exists():
-            self._show_error("微信接入帮助页尚未打包。")
-            return
-        webbrowser.open_new_tab(help_path.as_uri())
+        self._open_codebuddy_guide("wechat")
 
     def _handle_save_qq_channel(self) -> None:
         if not self.main_window:
@@ -500,14 +515,19 @@ class OpenClawLauncherApplication:
             self._apply_qq_channel_state(state)
 
     def _handle_open_qq_help(self) -> None:
-        help_path = self.paths.assets_dir / "guide" / "setup-qq.html"
-        if not help_path.exists():
-            self._show_error("QQ 接入帮助页尚未打包。")
-            return
-        webbrowser.open_new_tab(help_path.as_uri())
+        self._open_codebuddy_guide("qq")
 
     def _handle_install_wecom_channel(self) -> None:
+        if self._is_action_busy("install_wecom_channel"):
+            return
+        if hasattr(self.controller, "wecom_channel_installed") and self.controller.wecom_channel_installed():
+            self._apply_wecom_channel_state(self.controller.load_wecom_channel_state())
+            self._show_info("企业微信插件已安装，无需重复安装。请继续填写 Bot ID 和 Secret，或直接启用已有配置。")
+            return
         self._run_background_action("install_wecom_channel", self.controller.install_wecom_channel, self._apply_wecom_channel_state)
+
+    def _handle_open_wecom_help(self) -> None:
+        self._open_codebuddy_guide("wecom")
 
     def _handle_save_wecom_channel(self) -> None:
         if not self.main_window:
@@ -544,6 +564,9 @@ class OpenClawLauncherApplication:
         self._apply_wechat_channel_state(self.controller.load_pending_wechat_channel_state(action))
         if hasattr(self, "app"):
             self.app.processEvents()
+
+    def _open_codebuddy_guide(self, channel: str) -> None:
+        webbrowser.open_new_tab(CODEBUDDY_GUIDE_URLS[channel])
 
     def _apply_qq_channel_state(self, state) -> None:
         if self.main_window and hasattr(self.main_window, "apply_qq_channel_state"):

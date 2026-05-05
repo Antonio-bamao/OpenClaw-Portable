@@ -160,6 +160,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.wecom_status_label: QLabel | None = None
         self.wecom_status_detail_label: QLabel | None = None
         self.install_wecom_button: QPushButton | None = None
+        self.open_wecom_help_button: QPushButton | None = None
         self.save_wecom_button: QPushButton | None = None
         self.test_wecom_button: QPushButton | None = None
         self.enable_wecom_button: QPushButton | None = None
@@ -228,6 +229,7 @@ class OpenClawLauncherWindow(QMainWindow):
         on_enable_qq,
         on_disable_qq,
         on_install_wecom,
+        on_open_wecom_help,
         on_save_wecom,
         on_test_wecom,
         on_enable_wecom,
@@ -245,6 +247,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.enable_qq_button.clicked.connect(on_enable_qq)
         self.disable_qq_button.clicked.connect(on_disable_qq)
         self.install_wecom_button.clicked.connect(on_install_wecom)
+        self.open_wecom_help_button.clicked.connect(on_open_wecom_help)
         self.save_wecom_button.clicked.connect(on_save_wecom)
         self.test_wecom_button.clicked.connect(on_test_wecom)
         self.enable_wecom_button.clicked.connect(on_enable_wecom)
@@ -644,6 +647,7 @@ class OpenClawLauncherWindow(QMainWindow):
         wecom_layout.addWidget(self.wecom_status_label)
         wecom_layout.addWidget(self.wecom_status_detail_label)
         self.install_wecom_button = make_button("安装企业微信插件")
+        self.open_wecom_help_button = make_button("接入帮助", subtle=True)
         self.save_wecom_button = make_button("保存企业微信配置")
         self.test_wecom_button = make_button("检查企业微信配置")
         self.enable_wecom_button = make_button("启用企业微信", primary=True)
@@ -652,6 +656,7 @@ class OpenClawLauncherWindow(QMainWindow):
             _make_action_grid(
                 (
                     self.install_wecom_button,
+                    self.open_wecom_help_button,
                     self.save_wecom_button,
                     self.test_wecom_button,
                     self.enable_wecom_button,

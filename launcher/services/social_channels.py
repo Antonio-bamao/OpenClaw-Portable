@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 import hashlib
@@ -217,6 +218,17 @@ class SocialChannelService:
         return config.last_onboarded_token_fingerprint != fingerprint
 
     def install_wechat_plugin(self) -> ChannelCommandResult:
+        self._cleanup_wechat_install_staging_dirs()
+        if self.wechat_runtime_plugin_available():
+            config = self.load_wechat_config()
+            self.save_wechat_config(replace(config, installed=True))
+            self.save_wechat_status(
+                SocialChannelStatus(
+                    state="enabled" if config.enabled else "pending_login",
+                    last_action_at=self._utc_now_iso(),
+                )
+            )
+            return ChannelCommandResult(ok=True, output="微信 ClawBot 插件已安装。")
         self.save_wechat_status(
             SocialChannelStatus(
                 state="installing",
@@ -229,6 +241,16 @@ class SocialChannelService:
             self.save_wechat_config(replace(config, installed=True))
             self.save_wechat_status(SocialChannelStatus(state="pending_login", last_action_at=self._utc_now_iso()))
         else:
+            if self._wechat_install_error_means_already_installed(result):
+                config = self.load_wechat_config()
+                self.save_wechat_config(replace(config, installed=True))
+                self.save_wechat_status(
+                    SocialChannelStatus(
+                        state="enabled" if config.enabled else "pending_login",
+                        last_action_at=self._utc_now_iso(),
+                    )
+                )
+                return ChannelCommandResult(ok=True, output=result.output, error_message="")
             self.save_wechat_status(SocialChannelStatus(state="install_failed", last_error=result.error_message))
         return result
 
@@ -269,6 +291,9 @@ class SocialChannelService:
         return result
 
     def install_wecom_plugin(self) -> ChannelCommandResult:
+        if self.wecom_runtime_plugin_available():
+            self.save_wecom_status(SocialChannelStatus(state="pending_config", last_action_at=self._utc_now_iso()))
+            return ChannelCommandResult(ok=True, output="企业微信插件已安装。")
         result = self._run_commands(self.wecom_install_commands())
         if result.ok:
             self.save_wecom_status(SocialChannelStatus(state="pending_config", last_action_at=self._utc_now_iso()))
@@ -529,6 +554,45 @@ class SocialChannelService:
             openclaw_dir / "dist" / "extensions" / "qqbot",
         )
         return any(candidate.exists() for candidate in candidates)
+
+    def wechat_runtime_plugin_available(self) -> bool:
+        candidates = (
+            self.paths.state_dir / "extensions" / "openclaw-weixin" / "openclaw.plugin.json",
+            self.paths.state_dir / "extensions" / "openclaw-weixin" / "package.json",
+            self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.ts",
+            self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.js",
+        )
+        return any(candidate.exists() for candidate in candidates)
+
+    def wecom_runtime_plugin_available(self) -> bool:
+        extension_names = (
+            "wecom-openclaw-plugin",
+            "openclaw-wecom",
+            "wecom",
+        )
+        filenames = ("openclaw.plugin.json", "package.json", "index.ts", "index.js")
+        return any(
+            (self.paths.state_dir / "extensions" / extension_name / filename).exists()
+            for extension_name in extension_names
+            for filename in filenames
+        )
+
+    def _wechat_install_error_means_already_installed(self, result: ChannelCommandResult) -> bool:
+        text = "\n".join(part for part in (result.output, result.error_message) if part).lower()
+        return "plugin already exists" in text and "openclaw-weixin" in text
+
+    def _cleanup_wechat_install_staging_dirs(self) -> None:
+        extensions_dir = self.paths.state_dir / "extensions"
+        if not extensions_dir.exists():
+            return
+        for candidate in extensions_dir.glob(".openclaw-install-stage-*"):
+            if not candidate.is_dir():
+                continue
+            try:
+                if (candidate / "index.ts").exists() or (candidate / "index.js").exists() or (candidate / "package.json").exists():
+                    shutil.rmtree(candidate, ignore_errors=True)
+            except OSError:
+                continue
 
     def _load_wechat_runtime_status(self) -> dict[str, object]:
         candidates = (

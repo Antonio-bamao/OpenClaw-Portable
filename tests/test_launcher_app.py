@@ -31,6 +31,8 @@ class FakeController:
         self.pending_state = pending_state
         self.final_state = final_state
         self.calls = calls
+        self.wechat_installed = False
+        self.wecom_installed = False
         self.update_check_result = type(
             "UpdateCheckResult",
             (),
@@ -118,6 +120,10 @@ class FakeController:
             return WechatChannelState(False, True, "启动扫码", "正在启动微信登录窗口。")
         return WechatChannelState(False, True, "处理中", "正在处理微信通道。")
 
+    def wechat_channel_installed(self) -> bool:
+        self.calls.append("wechat_channel_installed")
+        return self.wechat_installed
+
     def install_wechat_channel(self) -> WechatChannelState:
         self.calls.append("install_wechat_channel")
         return WechatChannelState(False, True, "待扫码", "installed")
@@ -157,6 +163,10 @@ class FakeController:
     def install_wecom_channel(self) -> WecomChannelState:
         self.calls.append("install_wecom_channel")
         return WecomChannelState("", "", False, "websocket", "待配置", "installed")
+
+    def wecom_channel_installed(self) -> bool:
+        self.calls.append("wecom_channel_installed")
+        return self.wecom_installed
 
     def save_wecom_channel(self, bot_id: str, secret: str) -> WecomChannelState:
         self.calls.append(f"save_wecom_channel:{bot_id}:{secret}")
@@ -257,8 +267,9 @@ class LauncherAppTests(unittest.TestCase):
     def test_message_box_stylesheet_keeps_dialog_text_readable_on_dark_system_theme(self) -> None:
         stylesheet = message_box_stylesheet()
 
-        self.assertIn("background-color: #ffffff", stylesheet)
-        self.assertIn("color: #111827", stylesheet)
+        self.assertIn("background-color: #F7F5EF", stylesheet)
+        self.assertIn("color: #1F2020", stylesheet)
+        self.assertIn("border-top: 4px solid #D66A1F", stylesheet)
         self.assertIn("QLabel", stylesheet)
         self.assertIn("QPushButton", stylesheet)
 
@@ -773,6 +784,25 @@ class LauncherAppTests(unittest.TestCase):
         self.assertLess(calls.index("apply_wechat:安装中"), calls.index("install_wechat_channel"))
         self.assertIn("process_events", calls)
 
+    def test_handle_wechat_install_shows_message_when_plugin_is_already_installed(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        controller.wechat_installed = True
+        controller.load_wechat_channel_state = lambda: WechatChannelState(False, True, "待扫码", "installed")
+        application.controller = controller
+        application.main_window = FakeWindow(calls)
+        application._show_info = info_messages.append
+
+        application._handle_install_wechat_channel()
+
+        self.assertIn("wechat_channel_installed", calls)
+        self.assertNotIn("install_wechat_channel", calls)
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("微信", info_messages[0])
+        self.assertIn("已安装", info_messages[0])
+
     def test_handle_wechat_login_shows_pending_state_before_terminal_opens(self) -> None:
         calls: list[str] = []
         application = object.__new__(OpenClawLauncherApplication)
@@ -824,6 +854,25 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("enable_wecom_channel", calls)
         self.assertEqual(application.main_window.wecom_states[-1].status_label, "已启用")
 
+    def test_handle_wecom_install_shows_message_when_plugin_is_already_installed(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        controller.wecom_installed = True
+        controller.load_wecom_channel_state = lambda: WecomChannelState("", "", False, "websocket", "待配置", "installed")
+        application.controller = controller
+        application.main_window = FakeWindow(calls)
+        application._show_info = info_messages.append
+
+        application._handle_install_wecom_channel()
+
+        self.assertIn("wecom_channel_installed", calls)
+        self.assertNotIn("install_wecom_channel", calls)
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("企业微信", info_messages[0])
+        self.assertIn("已安装", info_messages[0])
+
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_handle_open_webui_opens_runtime_gateway_dashboard_url(self, mock_open_new_tab) -> None:
         calls: list[str] = []
@@ -842,7 +891,7 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(calls, ["load_view_state"])
 
     @patch("launcher.app.webbrowser.open_new_tab")
-    def test_handle_open_wechat_help_opens_packaged_help_page(self, mock_open_new_tab) -> None:
+    def test_handle_open_wechat_help_opens_codebuddy_guide(self, mock_open_new_tab) -> None:
         calls: list[str] = []
         application = object.__new__(OpenClawLauncherApplication)
         application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
@@ -852,11 +901,10 @@ class LauncherAppTests(unittest.TestCase):
 
         application._handle_open_wechat_help()
 
-        mock_open_new_tab.assert_called_once()
-        self.assertIn("setup-wechat.html", mock_open_new_tab.call_args.args[0])
+        mock_open_new_tab.assert_called_once_with("https://www.codebuddy.cn/docs/workbuddy/WeixinBot-Guide")
 
     @patch("launcher.app.webbrowser.open_new_tab")
-    def test_handle_open_qq_help_opens_packaged_help_page(self, mock_open_new_tab) -> None:
+    def test_handle_open_qq_help_opens_codebuddy_guide(self, mock_open_new_tab) -> None:
         calls: list[str] = []
         application = object.__new__(OpenClawLauncherApplication)
         application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
@@ -866,8 +914,33 @@ class LauncherAppTests(unittest.TestCase):
 
         application._handle_open_qq_help()
 
-        mock_open_new_tab.assert_called_once()
-        self.assertIn("setup-qq.html", mock_open_new_tab.call_args.args[0])
+        mock_open_new_tab.assert_called_once_with("https://www.codebuddy.cn/docs/workbuddy/QQ-Guide")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_feishu_help_opens_codebuddy_guide(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+        application.paths = type("Paths", (), {"assets_dir": Path.cwd() / "assets"})()
+
+        application._handle_open_feishu_help()
+
+        mock_open_new_tab.assert_called_once_with("https://www.codebuddy.cn/docs/workbuddy/Feishu-Guide")
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_wecom_help_opens_codebuddy_guide(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+        application.paths = type("Paths", (), {"assets_dir": Path.cwd() / "assets"})()
+
+        application._handle_open_wecom_help()
+
+        mock_open_new_tab.assert_called_once_with("https://www.codebuddy.cn/docs/workbuddy/Wecom-Guide")
 
 
 if __name__ == "__main__":

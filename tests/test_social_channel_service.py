@@ -109,6 +109,50 @@ class SocialChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_wechat_install_is_idempotent_when_extension_already_exists(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            installed_plugin = paths.state_dir / "extensions" / "openclaw-weixin" / "index.ts"
+            installed_plugin.parent.mkdir(parents=True, exist_ok=True)
+            installed_plugin.write_text("export default {}\n", encoding="utf-8")
+            stale_stage = paths.state_dir / "extensions" / ".openclaw-install-stage-old" / "index.ts"
+            stale_stage.parent.mkdir(parents=True, exist_ok=True)
+            stale_stage.write_text("export default {}\n", encoding="utf-8")
+            runner = FakeWechatCommandRunner(ChannelCommandResult(ok=False, error_message="plugin already exists"))
+            service = SocialChannelService(paths, command_runner=runner)
+
+            result = service.install_wechat_plugin()
+            state = service.build_wechat_view_state()
+
+            self.assertTrue(result.ok)
+            self.assertEqual(runner.run_calls, [])
+            self.assertTrue(service.load_wechat_config().installed)
+            self.assertEqual(state.status_label, "待扫码")
+            self.assertFalse(stale_stage.parent.exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wecom_install_is_idempotent_when_extension_already_exists(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            installed_plugin = paths.state_dir / "extensions" / "wecom-openclaw-plugin" / "package.json"
+            installed_plugin.parent.mkdir(parents=True, exist_ok=True)
+            installed_plugin.write_text('{"name":"@wecom/wecom-openclaw-plugin"}\n', encoding="utf-8")
+            runner = FakeWechatCommandRunner(ChannelCommandResult(ok=False, error_message="plugin already exists"))
+            service = SocialChannelService(paths, command_runner=runner)
+
+            result = service.install_wecom_plugin()
+            state = service.build_wecom_view_state()
+
+            self.assertTrue(result.ok)
+            self.assertEqual(runner.run_calls, [])
+            self.assertEqual(state.status_label, "待配置")
+            self.assertIn("已安装", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_qq_projection_uses_bundled_qqbot_app_credentials(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
