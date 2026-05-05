@@ -142,6 +142,8 @@ class LauncherController:
             self.feishu_channel_service.save_status(
                 FeishuChannelStatus(state="unconfigured", last_error="", last_connected_at=None, last_message_at=None)
             )
+        if config.enabled:
+            self._reproject_feishu_runtime_if_configured()
         return self.load_feishu_channel_state()
 
     def test_feishu_channel(self) -> FeishuChannelState:

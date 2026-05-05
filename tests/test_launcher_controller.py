@@ -829,6 +829,38 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_controller_reprojects_feishu_runtime_when_enabled_credentials_change(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            controller.save_feishu_channel("cli_old", "old-secret", "Support Bot")
+            controller.enable_feishu_channel()
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_ID"], "cli_old")
+
+            controller.save_feishu_channel("cli_new", "new-secret", "Support Bot")
+
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_ID"], "cli_new")
+            self.assertEqual(runtime_adapter.last_runtime_env["FEISHU_APP_SECRET"], "new-secret")
+            self.assertEqual(
+                runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["appId"],
+                "cli_new",
+            )
+            self.assertEqual(
+                runtime_adapter.last_runtime_config_patch["channels"]["feishu"]["appSecret"],
+                "new-secret",
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     @patch("launcher.services.feishu_channel.urlopen")
     def test_controller_keeps_feishu_pending_enable_in_mock_runtime(self, mock_urlopen) -> None:
         temp_dir = make_workspace_temp_dir()
