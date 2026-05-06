@@ -164,7 +164,7 @@ class SetupWizardWindow(QMainWindow):
         self.api_key_input = QLineEdit()
         self.api_key_input.setPlaceholderText("请输入 API Key，或留空进入离线模式")
         layout.addWidget(self.api_key_input)
-        layout.addWidget(make_label("后续真实运行时接入后，敏感值依旧只会落到 state/.env。", "MutedText"))
+        layout.addWidget(make_label("API Key 会写入本地保险箱；未启用保险箱的旧配置才会保留在 state/.env。", "MutedText"))
         layout.addStretch(1)
         return page
 
@@ -210,8 +210,8 @@ class SetupWizardWindow(QMainWindow):
         finish_row.setSpacing(12)
         self.finish_button = make_button("保存并启动", primary=True)
         self.save_button = make_button("仅保存配置")
-        self.finish_button.clicked.connect(self._emit_complete)
-        self.save_button.clicked.connect(self._emit_complete)
+        self.finish_button.clicked.connect(lambda: self._emit_complete(start_runtime=True))
+        self.save_button.clicked.connect(lambda: self._emit_complete(start_runtime=False))
         finish_row.addWidget(self.finish_button)
         finish_row.addWidget(self.save_button)
         finish_row.addStretch(1)
@@ -275,7 +275,7 @@ class SetupWizardWindow(QMainWindow):
         self.api_key_input.clear()
         self._simulate_connection_test()
 
-    def _emit_complete(self) -> None:
+    def _emit_complete(self, *, start_runtime: bool) -> None:
         self._sync_session_from_inputs()
         if self.on_complete:
-            self.on_complete(*self.session.build_configuration())
+            self.on_complete(*self.session.build_configuration(), start_runtime)

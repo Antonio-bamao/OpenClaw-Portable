@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
+    QHBoxLayout,
     QLineEdit,
     QMainWindow,
     QPlainTextEdit,
@@ -32,9 +33,9 @@ DEFAULT_VIEW_STATE = LauncherViewState(
     status_label="运行中",
     status_detail="当前正在使用本地 mock runtime 进行联调。",
     port_label="127.0.0.1:18789",
-    runtime_detail="Node mock runtime / Phase 1 开发版",
+    runtime_detail="本地 mock runtime / 联调模式",
     provider_label="通义千问 / qwen-max",
-    message="当前为开发版 MVP，已为真实 OpenClaw 适配层预留边界。",
+    message="当前正在使用本地 mock runtime，仅用于启动器联调。",
     webui_url="http://127.0.0.1:18789",
     offline_mode=False,
 )
@@ -124,6 +125,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.check_update_button: QPushButton | None = None
         self.import_update_button: QPushButton | None = None
         self.restore_update_backup_button: QPushButton | None = None
+        self.open_faq_button: QPushButton | None = None
         self.factory_reset_button: QPushButton | None = None
         self.reconfigure_button: QPushButton | None = None
         self.runtime_console_status_label: QLabel | None = None
@@ -195,7 +197,21 @@ class OpenClawLauncherWindow(QMainWindow):
             return
         event.ignore()
 
-    def bind_handlers(self, *, on_start, on_stop, on_restart, on_open_webui, on_export_diagnostics, on_check_update, on_import_update, on_restore_update_backup, on_factory_reset, on_reconfigure) -> None:
+    def bind_handlers(
+        self,
+        *,
+        on_start,
+        on_stop,
+        on_restart,
+        on_open_webui,
+        on_export_diagnostics,
+        on_check_update,
+        on_import_update,
+        on_restore_update_backup,
+        on_open_faq,
+        on_factory_reset,
+        on_reconfigure,
+    ) -> None:
         self.start_button.clicked.connect(on_start)
         self.stop_button.clicked.connect(on_stop)
         self.restart_button.clicked.connect(on_restart)
@@ -204,6 +220,7 @@ class OpenClawLauncherWindow(QMainWindow):
         self.check_update_button.clicked.connect(on_check_update)
         self.import_update_button.clicked.connect(on_import_update)
         self.restore_update_backup_button.clicked.connect(on_restore_update_backup)
+        self.open_faq_button.clicked.connect(on_open_faq)
         self.factory_reset_button.clicked.connect(on_factory_reset)
         self.reconfigure_button.clicked.connect(on_reconfigure)
 
@@ -398,7 +415,14 @@ class OpenClawLauncherWindow(QMainWindow):
         control_layout = QVBoxLayout(control_card)
         control_layout.setContentsMargins(24, 22, 24, 22)
         control_layout.setSpacing(16)
-        control_layout.addWidget(make_label("主控制台", "SectionTitle", size=18, weight=700))
+        control_header = QHBoxLayout()
+        control_header.setContentsMargins(0, 0, 0, 0)
+        control_header.setSpacing(12)
+        control_header.addWidget(make_label("主控制台", "SectionTitle", size=18, weight=700))
+        control_header.addStretch(1)
+        self.open_faq_button = make_button("常见问题", subtle=True)
+        control_header.addWidget(self.open_faq_button)
+        control_layout.addLayout(control_header)
         self.message_label = make_label(self.view_state.message, "MutedText")
         control_layout.addWidget(self.message_label)
         self.status_detail_label = make_label(self.view_state.status_detail, "MutedText")

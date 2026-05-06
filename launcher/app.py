@@ -130,7 +130,7 @@ class OpenClawLauncherApplication:
             self.instance_lock.release()
             self._instance_lock_acquired = False
 
-    def show_main_window(self) -> None:
+    def show_main_window(self, *, auto_start: bool = True) -> None:
         if not self._ensure_security_unlocked():
             return
         view_state = self.controller.load_view_state()
@@ -146,6 +146,7 @@ class OpenClawLauncherApplication:
                 on_check_update=self._handle_check_update,
                 on_import_update=self._handle_import_update,
                 on_restore_update_backup=self._handle_restore_update_backup,
+                on_open_faq=self._handle_open_faq,
                 on_factory_reset=self._handle_factory_reset,
                 on_reconfigure=self.show_setup_wizard,
             )
@@ -192,7 +193,8 @@ class OpenClawLauncherApplication:
         )
         if self.wizard_window:
             self.wizard_window.hide()
-        self._schedule_auto_start_runtime()
+        if auto_start:
+            self._schedule_auto_start_runtime()
 
     def _ensure_security_unlocked(self) -> bool:
         if not hasattr(self.controller, "security_requires_password_unlock"):
@@ -377,9 +379,9 @@ class OpenClawLauncherApplication:
             self.main_window.hide()
         self._runtime_poll_timer.stop()
 
-    def _complete_setup(self, config, sensitive) -> None:
+    def _complete_setup(self, config, sensitive, start_runtime: bool = True) -> None:
         self.controller.configure(config, sensitive)
-        self.show_main_window()
+        self.show_main_window(auto_start=start_runtime)
 
     def _handle_start(self) -> None:
         if self._is_action_busy("start_runtime"):
@@ -489,6 +491,13 @@ class OpenClawLauncherApplication:
             self._show_error("当前还没有可打开的 WebUI 地址。")
             return
         webbrowser.open_new_tab(view_state.webui_url)
+
+    def _handle_open_faq(self) -> None:
+        faq_page = self.paths.assets_dir / "guide" / "faq.html"
+        if faq_page.exists():
+            webbrowser.open_new_tab(faq_page.resolve().as_uri())
+            return
+        self._show_error("常见问题页面缺失，请重新解压或更新 OpenClaw Portable。")
 
     def _handle_save_feishu_channel(self) -> None:
         if not self.main_window:

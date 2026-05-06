@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenClaw Portable 常见问题</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #e8e5dc;
+      --panel: #f7f5ef;
+      --ink: #1f2020;
+      --muted: #63625d;
+      --line: #c9c5ba;
+      --accent: #d66a1f;
+      --field: #fcfbf7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI Variable Text", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.72;
+    }
+    main {
+      width: min(980px, calc(100% - 36px));
+      margin: 42px auto 64px;
+    }
+    header {
+      border-top: 4px solid #2f3233;
+      background: var(--panel);
+      border-radius: 4px;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 28px 30px;
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      display: inline-block;
+      color: #2f3233;
+      background: #ece8dd;
+      border: 1px solid var(--line);
+      border-bottom: 2px solid var(--accent);
+      border-radius: 3px;
+      padding: 4px 10px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 8px; font-size: 34px; line-height: 1.25; }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    h3 { margin: 18px 0 8px; font-size: 17px; }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 24px 28px;
+      margin: 18px 0;
+    }
+    .quick {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 16px;
+    }
+    .quick a {
+      display: block;
+      color: var(--ink);
+      background: var(--field);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      padding: 10px 12px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .quick a:hover { border-color: #2f3233; }
+    .answer {
+      background: var(--field);
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      margin: 12px 0;
+    }
+    ol, ul { margin-top: 8px; padding-left: 24px; }
+    li { margin: 5px 0; }
+    code {
+      background: #ece8dd;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">OpenClaw Portable</div>
+    <h1>常见问题</h1>
+    <p class="muted">这页写给第一次使用的人。先看自己遇到的现象，再按步骤处理；不要先去改文件或手动删目录。</p>
+    <nav class="quick">
+      <a href="#windows-block">Windows 拦截程序</a>
+      <a href="#password">密码和换电脑</a>
+      <a href="#startup">服务启动不了</a>
+      <a href="#model">模型没有回复</a>
+      <a href="#feishu">飞书配对码失败</a>
+      <a href="#wechat">微信扫码和换电脑</a>
+      <a href="#channels">QQ / 企业微信</a>
+      <a href="#update">更新、恢复、U 盘迁移</a>
+    </nav>
+  </header>
+
+  <section id="windows-block">
+    <h2>Windows 提示“智能应用控制已阻止可能不安全的应用”</h2>
+    <p><strong>看到什么：</strong>双击启动器时，Windows 弹窗说无法确认应用编写人。</p>
+    <p><strong>为什么：</strong>这是 Windows 对未签名程序的保护，不代表你的密码错了，也不是 OpenClaw 已损坏。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>先确认这个程序来自你信任的 OpenClaw Portable 包，不要为了运行未知来源程序而关闭系统防护。</li>
+        <li>核对发布页、版本号和压缩包来源；如果发布方提供校验值或签名，先完成校验。</li>
+        <li>如果公司电脑由管理员管控，请联系管理员放行。</li>
+        <li>确认来源可信后，再按 Windows 弹窗里的“更多信息 / 仍要运行”路径放行当前程序。</li>
+        <li>如果系统策略完全阻止运行，请优先使用已代码签名的新版本或请管理员处理。</li>
+      </ol>
+    </div>
+    <p class="muted">长期解决办法是发布方给程序做代码签名。反复重新打包不一定能彻底消除这个提示。</p>
+  </section>
+
+  <section id="password">
+    <h2>管理密码、保险箱、换电脑</h2>
+    <p><strong>看到什么：</strong>首次向导要求设置密码，或者启动时弹出“启用/解锁本地保险箱”。</p>
+    <p><strong>为什么：</strong>这个密码用于保护 API Key 和飞书、QQ、企业微信等渠道凭据。换电脑时，原电脑保存的免密钥不可用，所以需要输入密码。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>第一次使用：在首次向导里设置管理密码。</li>
+        <li>旧配置升级：如果弹出“启用本地保险箱”，设置一次密码即可，程序会迁移已有配置。</li>
+        <li>换电脑：输入同一个管理密码；如果是自己的电脑，可以勾选信任此电脑。</li>
+        <li>忘记密码：无法找回已加密的 Key，只能恢复出厂后重新配置。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="startup">
+    <h2>服务启动不了、一直启动中、端口变了</h2>
+    <p><strong>看到什么：</strong>启动按钮点了很久没好，或监听地址从 <code>18789</code> 变成了别的端口。</p>
+    <p><strong>为什么：</strong>首次启动可能需要几十秒；如果原端口被占用，程序会自动换到可用端口。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>先看“启动日志”，看到 <code>[gateway] ready</code> 表示服务已经起来。</li>
+        <li>如果端口变了，直接用界面上显示的新地址，不需要手动改。</li>
+        <li>如果日志出现明显错误，点击“导出诊断”，把诊断包发给维护者。</li>
+        <li>如果刚更新过程序，先完全退出再重新打开。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="model">
+    <h2>WebUI 能打开，但模型不回复或提示 Key 有问题</h2>
+    <p><strong>看到什么：</strong>聊天页面能打开，但发送消息后没有正常回复。</p>
+    <p><strong>为什么：</strong>常见原因是 API Key 为空、模型名填错、接口地址填错，或当前网络访问不了模型服务。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>点击“重新配置”，确认 Provider、接口地址、模型名和 API Key。</li>
+        <li>保存后重新启动服务。</li>
+        <li>如果换了电脑，先解锁本地保险箱，再启动服务。</li>
+        <li>仍失败时，导出诊断给维护者，不要把 API Key 直接发给别人。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="feishu">
+    <h2>飞书发消息后回复“access not configured”或配对码审批失败</h2>
+    <p><strong>看到什么：</strong>飞书机器人给出用户 ID 和 pairing code，或者命令行显示 <code>No pending pairing request found</code>。</p>
+    <p><strong>为什么：</strong>OpenClaw 需要确认谁可以使用机器人。配对码会过期，重启程序或重新发消息后旧码也可能失效。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>在飞书里重新给机器人发一句话，拿最新的 pairing code。</li>
+        <li>只使用最新一次机器人回复里的审批命令。</li>
+        <li>确认命令是在当前这个 OpenClaw Portable 目录里执行的。</li>
+        <li>审批成功后，再在飞书里发一条普通消息测试。</li>
+      </ol>
+    </div>
+    <p class="muted">如果只是想确认飞书通道是否连上，看启动日志里是否出现飞书 WebSocket 已连接的信息。</p>
+  </section>
+
+  <section id="wechat">
+    <h2>微信扫码窗口黑屏、扫码后没反应、换电脑后要重新扫码</h2>
+    <p><strong>看到什么：</strong>点击“扫码登录”后先出现黑窗口，或者换电脑后微信通道显示需要确认登录。</p>
+    <p><strong>为什么：</strong>微信登录依赖当前电脑环境。新电脑上原来的登录态通常不能直接搬过去。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>点击“扫码登录”后先等一会儿，二维码或错误日志可能需要几十秒。</li>
+        <li>手机扫码后，回到 OpenClaw 点击“确认已扫码”。</li>
+        <li>如果换电脑，重新扫码是正常现象。</li>
+        <li>如果窗口一直黑屏没有任何输出，关闭黑窗口，再重新点“扫码登录”。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="channels">
+    <h2>QQ 或企业微信配置好了，但还是不能用</h2>
+    <p><strong>看到什么：</strong>状态停在“待启用”“需重新启用”或“配置无效”。</p>
+    <p><strong>为什么：</strong>保存凭据只代表 OpenClaw 记住了配置，启用才会写入当前运行时。换电脑后也需要重新启用一次。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>先点击对应渠道的“接入帮助”，按平台要求创建机器人或应用。</li>
+        <li>填入 AppID、AppSecret、Bot ID 或 Secret 后，先检查配置。</li>
+        <li>检查通过后点击“启用”。</li>
+        <li>换电脑后如果显示“需重新启用”，直接重新启用，不要重新创建机器人。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="update">
+    <h2>更新、恢复出厂、U 盘插到另一台电脑</h2>
+    <p><strong>看到什么：</strong>更新后要重新打开；恢复出厂后进入首次向导；U 盘换电脑后要求密码或重新扫码。</p>
+    <p><strong>为什么：</strong>程序文件和用户状态是分开的。更新主要替换程序文件；状态保存在 <code>state</code> 里。</p>
+    <div class="answer">
+      <strong>怎么做：</strong>
+      <ol>
+        <li>更新后完全退出 OpenClaw，再重新打开。</li>
+        <li>恢复出厂会清空启动器配置，请确认真的要重来再点。</li>
+        <li>U 盘换电脑后，先输入管理密码解锁保险箱。</li>
+        <li>微信通常需要重新扫码；飞书、QQ、企业微信按界面提示重新连接或启用。</li>
+      </ol>
+    </div>
+  </section>
+</main>
+</body>
+</html>

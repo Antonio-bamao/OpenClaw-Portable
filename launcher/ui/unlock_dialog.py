@@ -2,8 +2,69 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QCheckBox, QDialog, QHBoxLayout, QLineEdit, QVBoxLayout
 
-from launcher.ui.theme import app_stylesheet, preferred_font
+from launcher.ui.theme import ACCENT, ACCENT_DEEP, BORDER, FIELD, MUTED, PANEL, PRIMARY, TEXT, app_stylesheet, preferred_font
 from launcher.ui.widgets import make_button, make_label
+
+
+def unlock_dialog_stylesheet() -> str:
+    return (
+        app_stylesheet()
+        + f"""
+        QDialog#UnlockDialog {{
+            background: {PANEL};
+            color: {TEXT};
+        }}
+        QDialog#UnlockDialog QLabel {{
+            background: transparent;
+            color: {TEXT};
+        }}
+        QDialog#UnlockDialog QLabel#SectionTitle {{
+            color: {PRIMARY};
+        }}
+        QDialog#UnlockDialog QLabel#MutedText {{
+            color: {MUTED};
+        }}
+        QDialog#UnlockDialog QLineEdit {{
+            color: {TEXT};
+            background: {FIELD};
+            border: 1px solid #B8B3A8;
+            border-radius: 3px;
+            selection-background-color: {ACCENT};
+            selection-color: #FFFFFF;
+        }}
+        QDialog#UnlockDialog QLineEdit:focus {{
+            color: {TEXT};
+            background: #FFFFFF;
+            border: 2px solid {PRIMARY};
+        }}
+        QDialog#UnlockDialog QCheckBox {{
+            color: {TEXT};
+            background: transparent;
+            spacing: 8px;
+        }}
+        QDialog#UnlockDialog QCheckBox::indicator {{
+            width: 16px;
+            height: 16px;
+            border: 1px solid {BORDER};
+            background: #FDFBF6;
+            border-radius: 2px;
+        }}
+        QDialog#UnlockDialog QCheckBox::indicator:checked {{
+            background: {ACCENT};
+            border: 1px solid {ACCENT_DEEP};
+        }}
+        QDialog#UnlockDialog QPushButton {{
+            color: {PRIMARY};
+            background: #F9F7F1;
+            border: 1px solid #B8B3A8;
+        }}
+        QDialog#UnlockDialog QPushButton#PrimaryButton {{
+            color: #FFFFFF;
+            background: {ACCENT};
+            border: 1px solid {ACCENT_DEEP};
+        }}
+        """
+    )
 
 
 class UnlockDialog(QDialog):
@@ -16,10 +77,11 @@ class UnlockDialog(QDialog):
         button_text: str = "解锁",
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("UnlockDialog")
         self.setWindowTitle("OpenClaw Portable")
         self.setModal(True)
         self.setMinimumWidth(520)
-        self.setStyleSheet(app_stylesheet())
+        self.setStyleSheet(unlock_dialog_stylesheet())
         self.setFont(preferred_font())
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)

@@ -621,7 +621,7 @@ class LauncherController:
     def _runtime_detail(self) -> str:
         if self.runtime_mode == "openclaw":
             return f"OpenClaw gateway / {self._current_openclaw_version()}"
-        return "Node mock runtime / Phase 1 开发版"
+        return "本地 mock runtime / 联调模式"
 
     def _runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig) -> str:
         provider_issue = self._provider_configuration_issue(config)
@@ -631,7 +631,7 @@ class LauncherController:
             return f"{config.provider_name} 的 API Key 尚未配置。可以先预览本地控制台；需要真实对话时请点击“重新配置”补充 Key。"
         if self.runtime_mode == "openclaw":
             return "当前正在使用真实 OpenClaw gateway，本地控制台由便携运行时提供。"
-        return "当前为开发版 MVP，真实 OpenClaw 运行时将在后续适配层中接入。"
+        return "当前正在使用本地 mock runtime，仅用于启动器联调；真实对话请使用包含 OpenClaw gateway 的便携包。"
 
     def _pending_runtime_message(self, config: LauncherConfig, sensitive: SensitiveConfig, action: str) -> str:
         provider_issue = self._provider_configuration_issue(config)

@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QApplication
-from PySide6.QtWidgets import QScrollArea
+from PySide6.QtWidgets import QLabel, QScrollArea
 
 from launcher.bootstrap import AppRoute, LauncherBootstrap
 from launcher.core.config_store import LauncherConfig, LauncherConfigStore, SensitiveConfig
@@ -79,6 +79,7 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertEqual(window.windowTitle(), "OpenClaw Portable")
         self.assertEqual(window.primary_action_texts(), ["启动服务", "停止服务", "重新启动"])
         self.assertEqual(window.secondary_action_texts(), ["打开 WebUI", "导出诊断", "检查更新", "导入更新包", "恢复更新备份", "恢复出厂", "重新配置"])
+        self.assertEqual(window.open_faq_button.text(), "常见问题")
         self.assertIn("mock runtime", window.status_detail_label.text())
 
     def test_main_window_updates_status_detail_text(self) -> None:
@@ -134,7 +135,7 @@ class LauncherUiSmokeTests(unittest.TestCase):
         ]
 
         self.assertIn("当前状态", neutral_status_labels)
-        self.assertIn("健康检查与本地 WebUI 已预留。", neutral_status_labels)
+        self.assertIn("健康检查与本地 WebUI 可用。", neutral_status_labels)
 
     def test_metric_values_wrap_instead_of_clipping(self) -> None:
         window = OpenClawLauncherWindow()
@@ -328,6 +329,25 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertIn("连接测试通过", window.connection_output.toPlainText())
         self.assertNotIn("不会直接连接远端", window.connection_output.toPlainText())
 
+    def test_wizard_copy_does_not_refer_to_real_runtime_as_future_work(self) -> None:
+        window = SetupWizardWindow()
+        visible_copy = "\n".join(label.text() for label in window.findChildren(QLabel))
+
+        self.assertNotIn("后续真实运行时接入后", visible_copy)
+        self.assertIn("API Key 会写入本地保险箱", visible_copy)
+
+    def test_wizard_finish_and_save_buttons_report_distinct_start_intent(self) -> None:
+        window = SetupWizardWindow()
+        completions: list[bool] = []
+        window.bind_handlers(on_complete=lambda _config, _sensitive, start_runtime: completions.append(start_runtime), on_cancel=lambda: None)
+        window.password_input.setText("demo-pass")
+        window.confirm_password_input.setText("demo-pass")
+
+        window.finish_button.click()
+        window.save_button.click()
+
+        self.assertEqual(completions, [True, False])
+
 
     def test_feishu_offline_help_page_is_packaged(self) -> None:
         help_page = Path.cwd() / "assets" / "guide" / "setup-feishu.html"
@@ -343,6 +363,29 @@ class LauncherUiSmokeTests(unittest.TestCase):
         self.assertTrue(qq_help.exists())
         self.assertIn("微信", wechat_help.read_text(encoding="utf-8"))
         self.assertIn("QQ Bot", qq_help.read_text(encoding="utf-8"))
+
+    def test_faq_page_is_packaged_for_non_developer_users(self) -> None:
+        faq_page = Path.cwd() / "assets" / "guide" / "faq.html"
+        faq_text = faq_page.read_text(encoding="utf-8")
+
+        self.assertTrue(faq_page.exists())
+        self.assertIn("常见问题", faq_text)
+        self.assertIn("Windows 拦截程序", faq_text)
+        self.assertIn("不要为了运行未知来源程序而关闭系统防护", faq_text)
+        self.assertNotIn("关闭智能应用控制后再运行", faq_text)
+        self.assertIn("飞书配对码失败", faq_text)
+        self.assertIn("微信扫码和换电脑", faq_text)
+
+    def test_packaged_readme_and_model_help_do_not_show_dev_mvp_copy(self) -> None:
+        readme_text = (Path.cwd() / "README.txt").read_text(encoding="utf-8")
+        model_help_text = (Path.cwd() / "assets" / "guide" / "setup-model.html").read_text(encoding="utf-8")
+        combined_text = readme_text + "\n" + model_help_text
+
+        self.assertIn("OpenClaw Portable 使用说明", readme_text)
+        self.assertIn("真实 OpenClaw gateway", readme_text)
+        self.assertNotIn("Phase 1 Development MVP", combined_text)
+        self.assertNotIn("开发版 MVP", combined_text)
+        self.assertNotIn("占位页", combined_text)
 
     def test_preferred_font_includes_chinese_fallback_families(self) -> None:
         families = preferred_font().families()

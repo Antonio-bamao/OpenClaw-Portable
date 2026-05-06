@@ -93,7 +93,7 @@ class HeroPanel(QFrame):
         status_layout.setSpacing(10)
         status_layout.addWidget(make_label("当前状态", "MutedText", size=10, weight=QFont.DemiBold))
         status_layout.addWidget(make_label("本地控制台", "HeroStatusTitle", size=18, weight=QFont.Bold))
-        status_layout.addWidget(make_label("健康检查与本地 WebUI 已预留。", "MutedText"))
+        status_layout.addWidget(make_label("健康检查与本地 WebUI 可用。", "MutedText"))
         status_badge = make_label("服务自检已接入", "StatusBadge", size=10, weight=QFont.DemiBold)
         status_badge.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         status_layout.addWidget(status_badge)

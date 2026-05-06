@@ -18,6 +18,7 @@ class FactoryResetService:
         self._clear_directory(self.paths.cache_dir)
         self._clear_directory(self.paths.state_dir / "sessions")
         self._clear_directory(self.paths.state_dir / "channels")
+        self._remove_directory(self.paths.state_dir / "security")
         self.paths.ensure_directories()
 
     def _remove_file(self, target) -> None:
@@ -28,3 +29,7 @@ class FactoryResetService:
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)
         target.mkdir(parents=True, exist_ok=True)
+
+    def _remove_directory(self, target) -> None:
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)

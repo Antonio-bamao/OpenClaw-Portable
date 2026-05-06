@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 from launcher.app import OpenClawLauncherApplication, message_box_stylesheet
 from launcher.models import FeishuChannelState, LauncherViewState, QqChannelState, WechatChannelState, WecomChannelState
 from launcher.ui.main_window import OpenClawLauncherWindow
+from launcher.ui.unlock_dialog import unlock_dialog_stylesheet
 from launcher.services.window_preferences import CloseAction, WindowPreferenceStore
 
 
@@ -273,6 +274,15 @@ class LauncherAppTests(unittest.TestCase):
         self.assertIn("QLabel", stylesheet)
         self.assertIn("QPushButton", stylesheet)
 
+    def test_unlock_dialog_stylesheet_keeps_text_readable_on_dark_system_theme(self) -> None:
+        stylesheet = unlock_dialog_stylesheet()
+
+        self.assertIn("QDialog#UnlockDialog", stylesheet)
+        self.assertIn("background: #F7F5EF", stylesheet)
+        self.assertIn("color: #1F2020", stylesheet)
+        self.assertIn("QDialog#UnlockDialog QLineEdit", stylesheet)
+        self.assertIn("QDialog#UnlockDialog QCheckBox", stylesheet)
+
     def test_wechat_channel_busy_actions_have_visible_button_text(self) -> None:
         QApplication.instance() or QApplication([])
         window = OpenClawLauncherWindow(make_view_state("运行中", "running", "ready"))
@@ -432,6 +442,21 @@ class LauncherAppTests(unittest.TestCase):
                 "console:Gateway 已就绪，飞书已连接",
             ],
         )
+
+    def test_complete_setup_can_save_without_auto_starting_runtime(self) -> None:
+        calls: list[str] = []
+
+        class SetupController:
+            def configure(self, config, sensitive) -> None:
+                calls.append(f"configure:{config}:{sensitive}")
+
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = SetupController()
+        application.show_main_window = lambda *, auto_start=True: calls.append(f"show_main_window:{auto_start}")
+
+        application._complete_setup("config", "sensitive", False)
+
+        self.assertEqual(calls, ["configure:config:sensitive", "show_main_window:False"])
 
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_auto_start_starts_runtime_without_opening_dashboard(self, mock_open_new_tab) -> None:
@@ -956,6 +981,23 @@ class LauncherAppTests(unittest.TestCase):
 
         mock_open_new_tab.assert_called_once_with("http://127.0.0.1:18789/#token=uclaw")
         self.assertEqual(calls, ["load_view_state"])
+
+    @patch("launcher.app.webbrowser.open_new_tab")
+    def test_handle_open_faq_opens_packaged_user_faq(self, mock_open_new_tab) -> None:
+        calls: list[str] = []
+        application = object.__new__(OpenClawLauncherApplication)
+        application.controller = FakeController(make_view_state("pending", "pending", ""), make_view_state("running", "running", ""), calls)
+        application.main_window = FakeWindow(calls)
+        application.wizard_window = None
+        application.paths = type("Paths", (), {"assets_dir": Path.cwd() / "assets"})()
+        application._show_error = lambda message: calls.append(f"error:{message}")
+
+        application._handle_open_faq()
+
+        opened_url = mock_open_new_tab.call_args.args[0]
+        self.assertTrue(opened_url.startswith("file:///"))
+        self.assertIn("faq.html", opened_url)
+        self.assertFalse(any(call.startswith("error:") for call in calls))
 
     @patch("launcher.app.webbrowser.open_new_tab")
     def test_handle_open_wechat_help_opens_codebuddy_guide(self, mock_open_new_tab) -> None:

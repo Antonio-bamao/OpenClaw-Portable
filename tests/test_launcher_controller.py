@@ -225,6 +225,22 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_mock_runtime_message_describes_current_mode_without_stale_future_copy(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            controller = LauncherController(paths, runtime_adapter=FakeRuntimeAdapter(), runtime_mode="mock", node_command="node")
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+
+            state = controller.load_view_state()
+
+            self.assertEqual(state.runtime_detail, "本地 mock runtime / 联调模式")
+            self.assertIn("本地 mock runtime", state.message)
+            self.assertNotIn("后续适配层", state.message)
+            self.assertNotIn("开发版 MVP", state.message)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_view_state_warns_when_real_openclaw_api_key_is_missing(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
