@@ -1,5 +1,5 @@
 param(
-  [string]$OpenClawVersion = "2026.4.8",
+  [string]$OpenClawVersion = "2026.5.6",
   [string]$NpmExe = "npm.cmd",
   [string]$NodeExe = "node",
   [switch]$SkipInstall,
