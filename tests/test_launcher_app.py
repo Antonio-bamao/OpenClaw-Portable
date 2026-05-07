@@ -641,6 +641,40 @@ class LauncherAppTests(unittest.TestCase):
         self.assertEqual(len(info_messages), 1)
         self.assertIn("最新版本", info_messages[0])
 
+    def test_handle_check_update_only_shows_current_version_when_public_feed_is_behind_local_package(self) -> None:
+        calls: list[str] = []
+        info_messages: list[str] = []
+        pending_state = make_view_state("启动中", "正在等待本地 gateway 就绪，首次启动可能需要 20-90 秒。", "请勿关闭窗口。")
+        final_state = make_view_state("运行中", "本地运行时正在响应请求，已运行 00:01。", "当前正在使用真实 OpenClaw gateway。")
+        application = object.__new__(OpenClawLauncherApplication)
+        controller = FakeController(pending_state, final_state, calls)
+        controller.update_check_result = type(
+            "UpdateCheckResult",
+            (),
+            {
+                "update_available": False,
+                "latest_version": "v2026.04.5",
+                "current_version": "v2026.05.1",
+                "remote_is_older": True,
+                "notes": [],
+                "package_url": "",
+            },
+        )()
+        application.controller = controller
+        application.main_window = FakeWindow(calls)
+        application.app = FakeQtApp(calls)
+        application._show_info = info_messages.append
+
+        application._handle_check_update()
+
+        self.assertEqual(calls, ["check_for_updates"])
+        self.assertEqual(len(info_messages), 1)
+        self.assertIn("当前版本", info_messages[0])
+        self.assertIn("v2026.05.1", info_messages[0])
+        self.assertNotIn("v2026.04.5", info_messages[0])
+        self.assertNotIn("更新源", info_messages[0])
+        self.assertNotIn("GitHub Release", info_messages[0])
+
     def test_handle_check_update_downloads_and_imports_after_confirmation(self) -> None:
         calls: list[str] = []
         info_messages: list[str] = []

@@ -134,6 +134,24 @@ class OnlineUpdateServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_check_update_marks_feed_version_older_than_current_package(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            service = OnlineUpdateService(
+                make_paths(temp_dir),
+                update_feed_url="https://example.com/update.json",
+                fetch_text=lambda _: make_update_json(version="v2026.04.5"),
+            )
+
+            result = service.check_for_updates("v2026.05.1")
+
+            self.assertFalse(result.update_available)
+            self.assertTrue(result.remote_is_older)
+            self.assertEqual(result.current_version, "v2026.05.1")
+            self.assertEqual(result.latest_version, "v2026.04.5")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_check_update_rejects_invalid_update_json(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:

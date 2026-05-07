@@ -28,6 +28,12 @@
 - Verified: `python -m unittest discover -s tests` passed `283` tests; package audit passed at `451.76MB / 18626` files with no warnings; `verify-delivery-flow.py` returned `status=pending` with package audit, release assets, and runtime stability passed. Runtime cold start was `4.61s`, restart was `3.33s`, max was `4.61s`, average was `3.97s`.
 - Current release note: local `v2026.05.1` assets are ready for GitHub Release publication; remaining pending items are still external Feishu E2E, removable-media evidence, and multi-engine AV / SmartScreen evidence.
 
+### 2026-05-07 v2026.05.2 Release-Candidate Prep
+
+- Completed: prepared `v2026.05.2` because `v2026.05.1` was already tagged before the update-check wording fix. This version keeps OpenClaw runtime `v2026.5.6` and changes the no-update dialog so local builds ahead of the public latest feed only show the current package version.
+- Completed: rebuilt release assets; generated `dist/release/OpenClaw-Portable-v2026.05.2.zip` (`168083936` bytes) and refreshed `dist/release/update.json`.
+- Verified: `python -m unittest discover -s tests` passed `285` tests; package audit passed at `451.76MB / 18626` files with no warnings; `verify-delivery-flow.py` returned `status=pending` with package audit, release assets, and runtime stability passed. Runtime cold start was `4.38s`, restart was `3.25s`, max was `4.38s`, average was `3.81s`.
+
 ## 2026-04-11 Update
 
 - Completed: update package signature verification now supports a trusted public key map keyed by `keyId`; `docs/release-maintenance-playbook.md` documents release maintenance; `v2026.04.2` has been published as a GitHub latest release and its anonymous update feed / zip asset links have been verified.

@@ -449,7 +449,12 @@ class OpenClawLauncherApplication:
         if metadata is None:
             return
         if not metadata.update_available:
-            self._show_info(f"当前已经是最新版本：{metadata.latest_version}")
+            if getattr(metadata, "remote_is_older", False):
+                current_version = getattr(metadata, "current_version", "")
+                self._show_info(f"当前版本：{current_version}")
+                return
+            current_version = getattr(metadata, "current_version", metadata.latest_version)
+            self._show_info(f"当前已经是最新版本：{current_version}")
             return
         if not self._confirm_online_update(metadata):
             return

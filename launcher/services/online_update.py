@@ -23,6 +23,8 @@ class UpdateCheckResult:
     latest_version: str
     notes: list[str]
     package_url: str
+    current_version: str
+    remote_is_older: bool
 
 
 class OnlineUpdateService:
@@ -58,12 +60,15 @@ class OnlineUpdateService:
         self._version_key(version)
         self._version_key(current_version)
         notes = [str(item).strip() for item in notes_raw if str(item).strip()]
-        update_available = self._compare_versions(version, current_version) > 0
+        comparison = self._compare_versions(version, current_version)
+        update_available = comparison > 0
         return UpdateCheckResult(
             update_available=update_available,
             latest_version=version,
             notes=notes,
             package_url=package_url,
+            current_version=current_version,
+            remote_is_older=comparison < 0,
         )
 
     def download_update_package(self, metadata: UpdateCheckResult) -> Path:
