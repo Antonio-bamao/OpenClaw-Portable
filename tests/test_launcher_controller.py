@@ -30,6 +30,12 @@ def make_paths(temp_dir: Path) -> PortablePaths:
     return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
 
 
+def mark_wechat_plugin_available(paths: PortablePaths) -> None:
+    plugin_manifest = paths.state_dir / "extensions" / "openclaw-weixin" / "package.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+
+
 def make_config(
     port: int = 18789,
     *,
@@ -727,6 +733,7 @@ class LauncherControllerTests(unittest.TestCase):
             controller.social_channel_service.command_runner = FakeChannelCommandRunner(ChannelCommandResult(ok=True, output="added"))
             controller.save_feishu_channel("cli_demo", "feishu-secret", "OpenClaw Bot")
             controller.enable_feishu_channel()
+            mark_wechat_plugin_available(paths)
             controller.social_channel_service.save_wechat_config(
                 WechatChannelConfig(enabled=True, installed=True, last_login_at="2026-05-05T00:00:00Z")
             )

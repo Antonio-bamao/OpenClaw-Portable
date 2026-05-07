@@ -94,6 +94,13 @@ class OpenClawChannelCommandRunner:
 
     def open_interactive_terminal(self, args: list[str]) -> ChannelCommandResult:
         command = self._openclaw_command(args)
+        return self._open_command_terminal(command)
+
+    def open_node_script_terminal(self, script_path: Path) -> ChannelCommandResult:
+        command = [self._resolved_node_command(), str(script_path)]
+        return self._open_command_terminal(command)
+
+    def _open_command_terminal(self, command: list[str]) -> ChannelCommandResult:
         try:
             if os.name == "nt":
                 subprocess.Popen(
@@ -284,16 +291,22 @@ class SocialChannelService:
     def open_wechat_login_terminal(self) -> ChannelCommandResult:
         if not self.command_runner:
             return ChannelCommandResult(ok=False, error_message="OpenClaw command runner is not configured.")
+        if not self.wechat_runtime_plugin_available():
+            self._clear_stale_wechat_install_state("未找到微信插件文件，请重新安装微信 ClawBot 通道插件。")
+            return ChannelCommandResult(
+                ok=False,
+                error_message="微信 ClawBot 插件未安装，请先重新安装插件。",
+            )
         self.save_wechat_status(
             SocialChannelStatus(
                 state="login_starting",
                 last_action_at=self._utc_now_iso(),
             )
         )
-        result = self.command_runner.open_interactive_terminal(self.wechat_login_command())
+        result = self.command_runner.open_node_script_terminal(self._write_wechat_login_script())
         if result.ok:
             config = self.load_wechat_config()
-            self.save_wechat_config(replace(config, last_login_at=self._utc_now_iso()))
+            self.save_wechat_config(replace(config, installed=True))
             self.save_wechat_status(SocialChannelStatus(state="pending_login", last_action_at=self._utc_now_iso()))
         else:
             self.save_wechat_status(SocialChannelStatus(state="login_failed", last_error=result.error_message))
@@ -409,6 +422,9 @@ class SocialChannelService:
     def build_wechat_view_state(self) -> WechatChannelState:
         self.refresh_wechat_runtime_status()
         config = self.load_wechat_config()
+        if config.installed and not self.wechat_runtime_plugin_available():
+            self._clear_stale_wechat_install_state("未找到微信插件文件，请重新安装微信 ClawBot 通道插件。")
+        config = self.load_wechat_config()
         status = self.load_wechat_status()
         label, detail = self._status_text(
             status,
@@ -420,6 +436,7 @@ class SocialChannelService:
                 "pending_enable": ("待启用", "扫码已完成，下一步请点击“启用微信”写入 OpenClaw 运行时配置。"),
                 "enabled": ("已启用", "微信 ClawBot 通道已启用，私聊消息会进入 OpenClaw。"),
                 "needs_login_check": ("需确认登录", status.last_error or "检测到新的电脑环境，请点击扫码登录确认微信登录态。"),
+                "missing_runtime_plugin": ("未安装", status.last_error or "未找到微信插件文件，请重新安装微信 ClawBot 通道插件。"),
                 "install_failed": ("安装失败", status.last_error or "微信插件安装失败，请检查网络或运行时。"),
                 "login_failed": ("扫码失败", status.last_error or "扫码窗口启动失败，请重试。"),
             },
@@ -435,7 +452,17 @@ class SocialChannelService:
 
     def refresh_wechat_runtime_status(self) -> None:
         runtime_status = self._load_wechat_runtime_status()
-        if not runtime_status or not self._runtime_status_is_logged_in(runtime_status):
+        if not runtime_status:
+            return
+        if not self._runtime_status_is_logged_in(runtime_status):
+            if self._runtime_status_is_login_failed(runtime_status):
+                self.save_wechat_status(
+                    SocialChannelStatus(
+                        state="login_failed",
+                        last_error=self._runtime_status_error_message(runtime_status) or "微信扫码未完成，请重新扫码。",
+                        last_action_at=self._utc_now_iso(),
+                    )
+                )
             return
         config = self.load_wechat_config()
         last_login_at = str(
@@ -591,6 +618,8 @@ class SocialChannelService:
             self.paths.state_dir / "extensions" / "openclaw-weixin" / "package.json",
             self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.ts",
             self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.js",
+            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@tencent-weixin" / "openclaw-weixin" / "package.json",
+            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@tencent-weixin" / "openclaw-weixin" / "dist" / "index.js",
         )
         return any(candidate.exists() for candidate in candidates)
 
@@ -611,6 +640,17 @@ class SocialChannelService:
         text = "\n".join(part for part in (result.output, result.error_message) if part).lower()
         return "plugin already exists" in text and "openclaw-weixin" in text
 
+    def _clear_stale_wechat_install_state(self, message: str) -> None:
+        config = self.load_wechat_config()
+        self.save_wechat_config(replace(config, installed=False, enabled=False))
+        self.save_wechat_status(
+            SocialChannelStatus(
+                state="missing_runtime_plugin",
+                last_error=message,
+                last_action_at=self._utc_now_iso(),
+            )
+        )
+
     def _cleanup_wechat_install_staging_dirs(self) -> None:
         extensions_dir = self.paths.state_dir / "extensions"
         if not extensions_dir.exists():
@@ -623,6 +663,103 @@ class SocialChannelService:
                     shutil.rmtree(candidate, ignore_errors=True)
             except OSError:
                 continue
+
+    def _write_wechat_login_script(self) -> Path:
+        self.paths.ensure_directories()
+        script_dir = self.paths.temp_root / "wechat-login"
+        script_dir.mkdir(parents=True, exist_ok=True)
+        script_path = script_dir / "openclaw-weixin-login.mjs"
+        script_path.write_text(self._wechat_login_script_source(), encoding="utf-8")
+        return script_path
+
+    def _wechat_login_script_source(self) -> str:
+        status_path = self.paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+        return f"""
+import fs from "node:fs";
+import path from "node:path";
+import {{ pathToFileURL }} from "node:url";
+
+const stateDir = process.env.OPENCLAW_STATE_DIR || process.env.OPENCLAW_HOME;
+if (!stateDir) {{
+  throw new Error("OPENCLAW_STATE_DIR is not set.");
+}}
+
+const pluginRoots = [
+  path.join(stateDir, ".openclaw", "npm", "node_modules", "@tencent-weixin", "openclaw-weixin"),
+  path.join(stateDir, "extensions", "openclaw-weixin"),
+];
+const pluginRoot = pluginRoots.find((candidate) => fs.existsSync(path.join(candidate, "dist", "src", "auth", "login-qr.js")));
+if (!pluginRoot) {{
+  throw new Error("微信 ClawBot 插件未安装，请先在启动器里重新安装插件。");
+}}
+
+const importFile = (filePath) => import(pathToFileURL(filePath).href);
+const loginModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "login-qr.js"));
+const accountsModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "accounts.js"));
+const sdkModule = await importFile(path.join(process.cwd(), "dist", "plugin-sdk", "account-id.js"));
+
+const statusPath = {json.dumps(str(status_path))};
+const writeStatus = (payload) => {{
+  fs.mkdirSync(path.dirname(statusPath), {{ recursive: true }});
+  fs.writeFileSync(statusPath, `${{JSON.stringify(payload, null, 2)}}\\n`, "utf-8");
+}};
+
+console.log("正在生成微信扫码二维码...");
+const start = await loginModule.startWeixinLoginWithQr({{
+  botType: loginModule.DEFAULT_ILINK_BOT_TYPE,
+  force: true,
+  verbose: true,
+}});
+if (!start.qrcodeUrl) {{
+  writeStatus({{ connected: false, state: "login_failed", lastError: start.message || "二维码生成失败。" }});
+  throw new Error(start.message || "二维码生成失败。");
+}}
+
+console.log(start.message || "用手机微信扫描以下二维码，以继续连接：");
+await loginModule.displayQRCode(start.qrcodeUrl);
+writeStatus({{
+  connected: false,
+  state: "pending_login",
+  message: start.message || "等待扫码确认。",
+  lastQrAt: new Date().toISOString(),
+}});
+
+const wait = await loginModule.waitForWeixinLogin({{
+  sessionKey: start.sessionKey,
+  timeoutMs: 480000,
+  verbose: true,
+}});
+if (!wait.connected || !wait.botToken || !wait.accountId) {{
+  writeStatus({{
+    connected: false,
+    state: "login_failed",
+    lastError: wait.message || "扫码未完成。",
+    updatedAt: new Date().toISOString(),
+  }});
+  throw new Error(wait.message || "扫码未完成。");
+}}
+
+const normalizedId = sdkModule.normalizeAccountId(wait.accountId);
+accountsModule.saveWeixinAccount(normalizedId, {{
+  token: wait.botToken,
+  baseUrl: wait.baseUrl,
+  userId: wait.userId,
+}});
+accountsModule.registerWeixinAccountId(normalizedId);
+if (wait.userId) {{
+  accountsModule.clearStaleAccountsForUserId(normalizedId, wait.userId);
+}}
+
+writeStatus({{
+  connected: true,
+  loggedIn: true,
+  ready: true,
+  accountId: normalizedId,
+  lastLoginAt: new Date().toISOString(),
+  message: wait.message || "已将此 OpenClaw 连接到微信。",
+}});
+console.log("\\n微信已连接成功，可以回到 OpenClaw Portable 点击“确认已扫码”。");
+"""
 
     def _load_wechat_runtime_status(self) -> dict[str, object]:
         candidates = (
@@ -644,3 +781,15 @@ class SocialChannelService:
         raw_state = str(payload.get("state") or payload.get("status") or payload.get("connectionState") or "").strip()
         normalized = raw_state.lower().replace("-", "_")
         return normalized in {"logged_in", "connected", "ready", "online", "authenticated"}
+
+    def _runtime_status_is_login_failed(self, payload: dict[str, object]) -> bool:
+        raw_state = str(payload.get("state") or payload.get("status") or payload.get("connectionState") or "").strip()
+        normalized = raw_state.lower().replace("-", "_")
+        return normalized in {"login_failed", "failed", "error"} or bool(self._runtime_status_error_message(payload))
+
+    def _runtime_status_error_message(self, payload: dict[str, object]) -> str:
+        for key in ("lastError", "last_error", "error", "message"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""

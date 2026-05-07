@@ -11,6 +11,7 @@ from launcher.services.social_channels import (
     ChannelCommandResult,
     QqChannelConfig,
     SocialChannelService,
+    SocialChannelStatus,
     WechatChannelConfig,
     WecomChannelConfig,
 )
@@ -21,6 +22,7 @@ class FakeWechatCommandRunner:
         self.result = result or ChannelCommandResult(ok=True)
         self.run_calls: list[list[str]] = []
         self.open_terminal_calls: list[list[str]] = []
+        self.open_node_script_calls: list[Path] = []
 
     def run(self, args: list[str], timeout_seconds: int = 180) -> ChannelCommandResult:
         self.run_calls.append(args)
@@ -28,6 +30,10 @@ class FakeWechatCommandRunner:
 
     def open_interactive_terminal(self, args: list[str]) -> ChannelCommandResult:
         self.open_terminal_calls.append(args)
+        return self.result
+
+    def open_node_script_terminal(self, script_path: Path) -> ChannelCommandResult:
+        self.open_node_script_calls.append(script_path)
         return self.result
 
 
@@ -41,6 +47,12 @@ def make_workspace_temp_dir() -> Path:
 
 def make_paths(temp_dir: Path) -> PortablePaths:
     return PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+
+
+def mark_wechat_plugin_available(paths: PortablePaths) -> None:
+    plugin_manifest = paths.state_dir / "extensions" / "openclaw-weixin" / "package.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
 
 
 class SocialChannelServiceTests(unittest.TestCase):
@@ -77,20 +89,68 @@ class SocialChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_wechat_login_terminal_open_keeps_state_waiting_for_scan(self) -> None:
+    def test_wechat_login_terminal_opens_plugin_qr_script(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
             runner = FakeWechatCommandRunner()
-            service = SocialChannelService(make_paths(temp_dir), command_runner=runner)
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            service = SocialChannelService(paths, command_runner=runner)
             service.save_wechat_config(WechatChannelConfig(installed=True))
 
             result = service.open_wechat_login_terminal()
             state = service.build_wechat_view_state()
 
             self.assertTrue(result.ok)
-            self.assertEqual(runner.open_terminal_calls, [["channels", "login", "--channel", "openclaw-weixin"]])
+            self.assertEqual(runner.open_terminal_calls, [])
+            self.assertEqual(len(runner.open_node_script_calls), 1)
+            self.assertTrue(runner.open_node_script_calls[0].exists())
+            script_source = runner.open_node_script_calls[0].read_text(encoding="utf-8")
+            self.assertIn("startWeixinLoginWithQr", script_source)
+            self.assertIn("waitForWeixinLogin", script_source)
             self.assertEqual(state.status_label, "待扫码")
             self.assertIn("二维码", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_login_refuses_stale_installed_state_when_plugin_is_missing(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            runner = FakeWechatCommandRunner()
+            service = SocialChannelService(make_paths(temp_dir), command_runner=runner)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+            service.save_wechat_status(SocialChannelStatus(state="pending_login"))
+
+            result = service.open_wechat_login_terminal()
+            state = service.build_wechat_view_state()
+
+            self.assertFalse(result.ok)
+            self.assertEqual(runner.open_terminal_calls, [])
+            self.assertEqual(runner.open_node_script_calls, [])
+            self.assertFalse(service.load_wechat_config().installed)
+            self.assertEqual(state.status_label, "未安装")
+            self.assertIn("重新安装", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_runtime_plugin_available_detects_openclaw_npm_install(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            package_file = (
+                paths.state_dir
+                / ".openclaw"
+                / "npm"
+                / "node_modules"
+                / "@tencent-weixin"
+                / "openclaw-weixin"
+                / "package.json"
+            )
+            package_file.parent.mkdir(parents=True, exist_ok=True)
+            package_file.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+            service = SocialChannelService(paths)
+
+            self.assertTrue(service.wechat_runtime_plugin_available())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -204,6 +264,7 @@ class SocialChannelServiceTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
             service = SocialChannelService(paths)
             service.save_wechat_config(WechatChannelConfig(installed=True))
             status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
@@ -222,6 +283,7 @@ class SocialChannelServiceTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
             service = SocialChannelService(paths)
             service.save_wechat_config(WechatChannelConfig(installed=True))
             status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
@@ -233,6 +295,28 @@ class SocialChannelServiceTests(unittest.TestCase):
 
             self.assertEqual(state.last_login_at, "2026-04-18T08:00:00Z")
             self.assertIn("启用", state.status_detail)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_confirm_wechat_runtime_login_surfaces_runtime_login_failure(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            service = SocialChannelService(paths)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(
+                json.dumps({"connected": False, "state": "login_failed", "lastError": "二维码已过期"}),
+                encoding="utf-8",
+            )
+
+            service.confirm_wechat_runtime_login()
+            state = service.build_wechat_view_state()
+
+            self.assertEqual(state.status_label, "扫码失败")
+            self.assertIn("二维码已过期", state.status_detail)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
