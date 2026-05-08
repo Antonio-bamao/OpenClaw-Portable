@@ -28,3 +28,20 @@
 - 最终解决方法：根因不是微信扫码、账号、网络，也不是单纯的 `openclaw/plugin-sdk/*` import；根因是 packaged `runtime/openclaw/package.json` 被裁成 plugin-sdk shim，缺少 `name: openclaw` 等完整宿主 manifest 信息，导致 OpenClaw loader 无法定位 runtime root 与 `dist/plugins/runtime/index.js`。修法是在构建脚本中 prune 后复制源码侧完整 `runtime/openclaw/package.json`，并用 `Assert-OpenClawRuntimeManifest` 阻止坏包继续生成。
 - 必跑防线：以后只要发包或验证微信外部 npm 插件，必须先重打包，再跑 `python scripts\verify-wechat-plugin-runtime.py --package-root dist\OpenClaw-Portable`；不能只跑 clean dist 的 delivery gate，也不能拿旧 release zip 宣称已经修好。
 - 状态：已解决并经用户真实复测确认；下一步如果要交付新包，执行新版 release 资产重建和 smoke。
+
+## 2026-05-08｜修复 Feishu 未安装插件却写入 runtime config 的启动失败
+
+- 目标：处理用户新反馈的 gateway 启动失败：`channels.feishu: unknown channel id: feishu`，同时保护刚刚修好的微信通道不被回退。
+- 动作：按 TDD 先新增三条回归：真实 runtime 缺少 Feishu 插件时投影应删除 `channels.feishu`；runtime config merge 遇到 `None` 应删除旧 key；控制器启用 Feishu 时应在缺插件场景下拦截并显示“缺少扩展”。随后实现 Feishu 插件探测、缺插件投影删除语义、控制器启用拦截和 `OpenClawRuntimeAdapter._deep_merge()` 删除 key 行为。
+- 现场处理：当前 `dist/OpenClaw-Portable/state/runtime/openclaw.json` 已移除 `channels.feishu`；`state/channels/feishu/config.json` 已备份为 `config.disabled-*.json` 后置空，防止旧打包 EXE 再次根据保存过的飞书凭据写回 unknown channel。微信 `channels.openclaw-weixin` 配置和账号投影保持不动。
+- 结果：当前 dist 的 gateway 短启动 smoke 通过，不再出现 `unknown channel id: feishu`；源码侧以后会在没有 `@openclaw/feishu` 或 bundled Feishu 扩展时主动跳过 Feishu 写入。
+- 验证：先看到新增三条测试按预期失败，再修复到通过；随后 `python -m unittest tests.test_feishu_channel_service tests.test_openclaw_runtime_adapter tests.test_launcher_controller -v` 通过 `75` 项；`python -m unittest discover -s tests` 通过 `311` 项；当前 dist 临时端口 gateway smoke 返回 `gateway_smoke_ok`。
+- 下一步：如要交付给用户一个不会再写回 Feishu 坏配置的 EXE，需要在保留/迁移当前 state 后重新打包；不能直接粗暴重建覆盖当前已验证的微信状态。
+
+## 2026-05-08｜重新打包 v2026.05.3 并恢复本机验证状态
+
+- 目标：把 Feishu 缺插件防线和微信 package manifest 修复打进新的便携包，避免用户继续运行旧 EXE。
+- 动作：先将当前 `dist/OpenClaw-Portable/state` 备份到 `tmp/state-backups/before-repack-20260508-205051`，再运行 `scripts/build-release-assets.ps1` 重建 `dist/OpenClaw-Portable` 与 `dist/release/OpenClaw-Portable-v2026.05.3.zip`。release zip 生成后，把备份的本机 state 恢复回新构建的本地 `dist`，方便继续沿用已经跑通的微信登录/插件状态。
+- 结果：新的 `OpenClaw-Portable-v2026.05.3.zip` 已生成，`dist/release/update.json` 指向该版本；本地 `dist` 已恢复用户验证 state，release zip 保持干净，不包含恢复后的 `state/npm`、`state/runtime` 或 `state/channels`。
+- 验证：`scripts/build-release-assets.ps1` 成功；新包 runtime manifest 为 `name=openclaw`、`version=2026.5.6` 且包含 `dist/plugins/runtime/index.js`；release zip state 检查返回 `release_state_clean`；恢复 state 后运行 `python scripts\verify-wechat-plugin-runtime.py --package-root dist\OpenClaw-Portable --timeout-seconds 45 --post-ready-wait-seconds 3 --output tmp\wechat-plugin-runtime-smoke-repack.json` 返回 `ok=true`。
+- 注意：恢复 state 后的本地 `dist` 会因真实用户状态而被审计报告标记为含 mutable state；这是为本机继续测试保留的状态，不代表 release zip 被污染。正式交付以 `dist/release/OpenClaw-Portable-v2026.05.3.zip` 为准。

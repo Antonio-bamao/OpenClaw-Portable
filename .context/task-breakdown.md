@@ -2,12 +2,14 @@
 
 ## 当前优先级
 
-0. 微信真实 E2E 已确认，准备交付固化
+0. 微信真实 E2E 已确认，Feishu unknown channel 启动失败已本地修复
    - 已完成：复现并修复 `openclaw-weixin failed during register ... Unable to resolve plugin runtime module`；根因是 packaged `runtime/openclaw/package.json` 被裁成 shim，导致 OpenClaw loader 不能定位宿主 runtime root。
    - 已完成：新增 `scripts/verify-wechat-plugin-runtime.py`，可在保留 `state/npm/node_modules/@tencent-weixin/openclaw-weixin` 的便携目录上验证 gateway register 不再失败。
    - 已完成：用户在 `2026-05-08` 真实复测确认这次可用，微信 register / 连接问题闭环。
-   - 下一步：如果要交付给用户，必须用新版构建脚本重新生成 release zip，并在重打包后跑 `verify-wechat-plugin-runtime.py`；不能复用旧 zip 或只复制源码改动。
-   - 发布前要求：下一版 release 资产必须由新版 `scripts/build-launcher.ps1` 生成，确保完整 `runtime/openclaw/package.json` 被复制进包；如包里已安装外部微信插件，必须跑 `verify-wechat-plugin-runtime.py`。
+   - 已完成：修复 Feishu 未安装 runtime 插件却写入 `channels.feishu` 的启动失败；源码现在会探测 Feishu 插件，缺插件时删除旧 runtime config key 并拦截启用；当前 dist 已清理 `channels.feishu` 并备份置空飞书配置以避免旧 EXE 写回。
+   - 已完成：按新版源码重新生成 `dist/release/OpenClaw-Portable-v2026.05.3.zip` 与 `update.json`，并在恢复本机 state 后跑通 `verify-wechat-plugin-runtime.py`。
+   - 下一步：如需对外发版，提交源码修复与上下文记录，推送 tag / release 资产；不要再复用本轮之前生成的旧 zip。
+   - 发布前要求：下一版 release 资产必须由新版 `scripts/build-launcher.ps1` 生成，确保完整 `runtime/openclaw/package.json` 被复制进包；如包里已安装外部微信插件，必须跑 `verify-wechat-plugin-runtime.py`；同时确认没有未安装插件对应的 unknown channel key 残留在 `state/runtime/openclaw.json`。
 1. 维护项目上下文系统与摘要一致性
    - 保持 `.context/current-status.md`、`.context/task-breakdown.md`、`.context/work-log.md` 与实际交付状态同步
    - 明确区分“已公开发布的 `v2026.04.5`”与“本地已准备好的 `v2026.04.6` release candidate，以及其中包含的 2026-04-17 至 2026-04-23 微信 / QQ、UI 与启动体验改进”

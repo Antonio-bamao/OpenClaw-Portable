@@ -370,6 +370,9 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
     def _deep_merge(self, base: dict[str, object], patch: dict[str, object]) -> dict[str, object]:
         merged: dict[str, object] = dict(base)
         for key, value in patch.items():
+            if value is None:
+                merged.pop(key, None)
+                continue
             existing_value = merged.get(key)
             if isinstance(value, dict) and isinstance(existing_value, dict):
                 merged[key] = self._deep_merge(existing_value, value)

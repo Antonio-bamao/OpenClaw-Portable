@@ -18,6 +18,12 @@ def make_workspace_temp_dir() -> Path:
     return created
 
 
+def mark_feishu_bundled_plugin_available(paths: PortablePaths) -> None:
+    plugin_manifest = paths.runtime_dir / "openclaw" / "dist" / "extensions" / "feishu" / "openclaw.plugin.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"id":"feishu"}\n', encoding="utf-8")
+
+
 class FeishuChannelServiceTests(unittest.TestCase):
     def test_exposes_feishu_paths_from_portable_paths(self) -> None:
         paths = PortablePaths.for_root(Path("C:/tmp/OpenClaw-Portable"))
@@ -208,6 +214,7 @@ class FeishuChannelServiceTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            mark_feishu_bundled_plugin_available(paths)
             service = FeishuChannelService(paths)
             config = FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True)
 
@@ -218,6 +225,21 @@ class FeishuChannelServiceTests(unittest.TestCase):
             self.assertTrue(projected.runtime_config_patch["channels"]["feishu"]["enabled"])
             self.assertNotIn("botAppName", projected.runtime_config_patch["channels"]["feishu"])
             self.assertEqual(projected.runtime_config_patch["channels"]["feishu"]["accounts"]["default"]["connectionMode"], "websocket")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_build_runtime_projection_removes_feishu_channel_when_real_runtime_lacks_plugin(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            (paths.runtime_dir / "openclaw").mkdir(parents=True, exist_ok=True)
+            service = FeishuChannelService(paths)
+            config = FeishuChannelConfig(app_id="cli_xxx", app_secret="secret", enabled=True)
+
+            projected = service.build_runtime_projection(config)
+
+            self.assertEqual(projected.runtime_env, {})
+            self.assertEqual(projected.runtime_config_patch, {"channels": {"feishu": None}})
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

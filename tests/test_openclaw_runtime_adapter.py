@@ -285,6 +285,36 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_prepare_removes_runtime_config_keys_set_to_none(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            paths.ensure_directories()
+            paths.runtime_config_file.write_text(
+                json.dumps(
+                    {
+                        "channels": {
+                            "feishu": {"enabled": True},
+                            "openclaw-weixin": {"enabled": True},
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            adapter = OpenClawRuntimeAdapter()
+
+            adapter.prepare(
+                make_config(reserve_free_port()),
+                paths,
+                runtime_config_patch={"channels": {"feishu": None}},
+            )
+
+            merged = json.loads(paths.runtime_config_file.read_text(encoding="utf-8"))
+            self.assertNotIn("feishu", merged["channels"])
+            self.assertTrue(merged["channels"]["openclaw-weixin"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_webui_url_uses_gateway_port_and_default_token_after_prepare(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:

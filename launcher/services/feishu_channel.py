@@ -116,6 +116,11 @@ class FeishuChannelService:
         )
 
     def build_runtime_projection(self, config: FeishuChannelConfig) -> FeishuRuntimeProjection:
+        if not self.feishu_runtime_plugin_available():
+            return FeishuRuntimeProjection(
+                runtime_env={},
+                runtime_config_patch={"channels": {"feishu": None}},
+            )
         return FeishuRuntimeProjection(
             runtime_env={
                 "FEISHU_APP_ID": config.app_id,
@@ -139,6 +144,24 @@ class FeishuChannelService:
             },
         )
 
+    def feishu_runtime_plugin_available(self) -> bool:
+        openclaw_dir = self.paths.runtime_dir / "openclaw"
+        candidates = (
+            openclaw_dir / "dist" / "extensions" / "feishu" / "openclaw.plugin.json",
+            openclaw_dir / "dist" / "extensions" / "feishu" / "package.json",
+            openclaw_dir / "dist" / "extensions" / "feishu" / "index.js",
+            self.paths.state_dir / "extensions" / "feishu" / "openclaw.plugin.json",
+            self.paths.state_dir / "extensions" / "feishu" / "package.json",
+            self.paths.state_dir / "extensions" / "feishu" / "index.js",
+            self.paths.state_dir / "npm" / "node_modules" / "@openclaw" / "feishu" / "package.json",
+            self.paths.state_dir / "npm" / "node_modules" / "@openclaw" / "feishu" / "dist" / "index.js",
+            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@openclaw" / "feishu" / "package.json",
+            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@openclaw" / "feishu" / "dist" / "index.js",
+        )
+        if not openclaw_dir.exists():
+            return True
+        return any(candidate.exists() for candidate in candidates)
+
     def refresh_runtime_status(
         self,
         runtime_state: str,
@@ -154,6 +177,15 @@ class FeishuChannelService:
 
         if not has_credentials and not config.enabled:
             next_status = FeishuChannelStatus()
+        elif has_credentials and not self.feishu_runtime_plugin_available():
+            next_status = replace(
+                current,
+                state="missing_runtime_plugin",
+                last_error=(
+                    current.last_error
+                    or "当前 OpenClaw 运行时未安装 Feishu 扩展，已跳过写入 channels.feishu 以避免 gateway 启动失败。"
+                ),
+            )
         elif current.state == "needs_reconnect" and runtime_state != "running":
             next_status = current
         elif not runtime_link_available and current.state == "invalid_config":
@@ -262,6 +294,11 @@ class FeishuChannelService:
             "connecting": ("连接中", "OpenClaw 正在准备飞书私聊链路。"),
             "connected": ("已连接", "飞书私聊链路已就绪，可接收私聊消息。"),
             "connection_failed": ("连接失败", status.last_error or "飞书连接失败，可查看诊断并重试。"),
+            "missing_runtime_plugin": (
+                "缺少扩展",
+                status.last_error
+                or "当前 OpenClaw 运行时未安装 Feishu 扩展，已跳过写入 channels.feishu 以避免 gateway 启动失败。",
+            ),
             "needs_reconfigure": ("需重新配置", status.last_error or "当前飞书渠道需重新配置。"),
             "needs_reconnect": ("需重新连接", status.last_error or "检测到新的电脑环境，启动服务后会重新建立飞书私聊链路。"),
         }

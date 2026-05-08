@@ -279,3 +279,14 @@
 - 根因：参考桌面项目使用的 `--force` 启动模式在当前打包的 OpenClaw `v2026.4.8` Windows runtime 中会走 fuser/强制释放端口路径，而该路径在当前权限下不可用。OpenClaw Portable 已有端口自动避让，不需要默认强制释放端口。
 - 修复：`OpenClawRuntimeAdapter.build_command()` 默认不再添加 `--force`；如确实需要复现实验，可通过 `OPENCLAW_GATEWAY_FORCE=1` 显式开启。
 - 预防措施：以后从外部参考实现迁移启动参数时，必须先跑真实 packaged runtime smoke。参考实现参数不能直接视为当前 OpenClaw 版本和 Windows 权限模型下的安全默认值。
+
+## 2026-05-08｜Feishu 配置写入未安装渠道导致 gateway 启动失败
+
+- 现象：用户在微信修复后再次启动打包版，gateway 启动阶段退出；stderr 显示 `Invalid config ... channels.feishu: unknown channel id: feishu`，窗口提示检查 `openclaw-runtime.err.log`。
+- 触发条件：OpenClaw `2026.5.6` 打包 runtime 中没有内置 `dist/extensions/feishu`，但 launcher 仍按旧假设把保存过的飞书凭据投影到 `state/runtime/openclaw.json` 的 `channels.feishu`。
+- 影响：即使微信 `openclaw-weixin` 已经修好，只要运行时配置里残留 `channels.feishu`，OpenClaw 配置校验会在 gateway 启动前失败，导致整个便携包无法启动。
+- 根因：飞书渠道最初实现时假设 Feishu 是内置扩展；升级到 OpenClaw `2026.5.6` 后 Feishu 已变成外部插件（`@openclaw/feishu`），当前包既没有 bundled Feishu 扩展，也没有外部 Feishu 插件安装态。launcher 没有先探测插件是否存在，运行时配置 merge 也没有删除旧渠道 key 的语义。
+- 解决方案：`FeishuChannelService` 新增 Feishu 插件可用性探测；真实 runtime 缺少 Feishu 插件时，Feishu 投影改为 `{"channels": {"feishu": None}}`，不再输出 `FEISHU_APP_ID/FEISHU_APP_SECRET`；`LauncherController.enable_feishu_channel()` 在缺插件时拦截启用并显示“缺少扩展”；`OpenClawRuntimeAdapter._deep_merge()` 支持 `None` 删除旧配置 key。
+- 现场修复：已从当前 `dist/OpenClaw-Portable/state/runtime/openclaw.json` 移除 `channels.feishu`，并将旧飞书配置备份为 `state/channels/feishu/config.disabled-*.json` 后置空，避免旧 EXE 再次写回未知渠道；微信通道配置未动。
+- 预防措施：任何渠道投影前必须先确认对应 runtime 插件存在；外部插件渠道缺失时必须删除旧 runtime config，而不是保留 disabled unknown channel；配置 merge 的删除语义要保持回归测试覆盖。
+- 状态：Resolved locally；源码防线已通过单测，当前 dist 已做状态级清理并通过短启动 smoke。若要让打包 EXE 以后自动防复发，仍需重新打包。

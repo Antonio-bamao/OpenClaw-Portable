@@ -227,6 +227,23 @@ class LauncherController:
                 FeishuChannelStatus(state="invalid_config", last_error="配置无效，请检查 App ID / App Secret。")
             )
             return self.load_feishu_channel_state()
+        if not self.feishu_channel_service.feishu_runtime_plugin_available():
+            self._apply_channel_runtime_mutation(
+                lambda: (
+                    self.feishu_channel_service.save_config(replace(config, enabled=False)),
+                    self.feishu_channel_service.save_status(
+                        FeishuChannelStatus(
+                            state="missing_runtime_plugin",
+                            last_error=(
+                                "当前 OpenClaw 运行时未安装 Feishu 扩展，已跳过写入 channels.feishu "
+                                "以避免 gateway 启动失败。"
+                            ),
+                        )
+                    ),
+                    self._reproject_feishu_runtime_if_configured(),
+                )
+            )
+            return self.load_feishu_channel_state()
         self._apply_channel_runtime_mutation(
             lambda: (
                 self.feishu_channel_service.save_config(replace(config, enabled=True)),

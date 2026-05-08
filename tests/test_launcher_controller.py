@@ -39,6 +39,12 @@ def mark_wechat_plugin_available(paths: PortablePaths) -> None:
     login_entry.write_text("export {};\n", encoding="utf-8")
 
 
+def mark_feishu_bundled_plugin_available(paths: PortablePaths) -> None:
+    plugin_manifest = paths.runtime_dir / "openclaw" / "dist" / "extensions" / "feishu" / "openclaw.plugin.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"id":"feishu"}\n', encoding="utf-8")
+
+
 def make_config(
     port: int = 18789,
     *,
@@ -871,6 +877,7 @@ class LauncherControllerTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            mark_feishu_bundled_plugin_available(paths)
             (paths.runtime_dir / "openclaw" / "dist" / "extensions" / "qqbot").mkdir(parents=True)
             runtime_adapter = FakeRuntimeAdapter()
             controller = LauncherController(
@@ -1050,6 +1057,7 @@ class LauncherControllerTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            mark_feishu_bundled_plugin_available(paths)
             runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
             controller = LauncherController(
                 paths,
@@ -1076,10 +1084,36 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_controller_refuses_feishu_enable_when_real_runtime_lacks_plugin(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            (paths.runtime_dir / "openclaw").mkdir(parents=True, exist_ok=True)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.save_feishu_channel("cli_xxx", "secret", "Support Bot")
+
+            state = controller.enable_feishu_channel()
+
+            self.assertFalse(state.enabled)
+            self.assertEqual(state.status_label, "缺少扩展")
+            self.assertIn("Feishu", state.status_detail)
+            self.assertEqual(runtime_adapter.last_runtime_env.get("FEISHU_APP_ID"), None)
+            self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["feishu"], None)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_controller_reprojects_feishu_runtime_when_enabled_credentials_change(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
+            mark_feishu_bundled_plugin_available(paths)
             runtime_adapter = FakeRuntimeAdapter(runtime_state="ready", runtime_message="ready")
             controller = LauncherController(
                 paths,
