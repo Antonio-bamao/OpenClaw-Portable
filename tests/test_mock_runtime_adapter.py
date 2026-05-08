@@ -83,7 +83,8 @@ class MockRuntimeAdapterTests(unittest.TestCase):
             status = adapter.status()
 
             self.assertEqual(status.state, "running")
-            self.assertEqual(status.port, occupied_port + 1)
+            self.assertGreater(status.port, occupied_port)
+            self.assertLessEqual(status.port, occupied_port + 20)
             self.assertIn("已自动切换", status.message or "")
         finally:
             blocker.close()

@@ -132,8 +132,15 @@ class LauncherController:
         self._refresh_feishu_runtime_status()
 
     def restart_runtime(self) -> None:
+        stopped_for_deferred_prepare = False
+        if not self._prepared and self.runtime_adapter.status().state == "running":
+            self.runtime_adapter.stop()
+            stopped_for_deferred_prepare = True
         self._prepare_if_needed()
-        self.runtime_adapter.restart()
+        if stopped_for_deferred_prepare:
+            self.runtime_adapter.start()
+        else:
+            self.runtime_adapter.restart()
         self._refresh_feishu_runtime_status()
 
     def should_auto_start_runtime(self) -> bool:
@@ -220,15 +227,23 @@ class LauncherController:
                 FeishuChannelStatus(state="invalid_config", last_error="配置无效，请检查 App ID / App Secret。")
             )
             return self.load_feishu_channel_state()
-        self.feishu_channel_service.save_config(replace(config, enabled=True))
-        self._reproject_feishu_runtime_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.feishu_channel_service.save_config(replace(config, enabled=True)),
+                self._reproject_feishu_runtime_if_configured(),
+            )
+        )
         return self.load_feishu_channel_state()
 
     def disable_feishu_channel(self) -> FeishuChannelState:
         config = self.feishu_channel_service.load_config()
-        self.feishu_channel_service.save_config(replace(config, enabled=False))
-        self.feishu_channel_service.save_status(FeishuChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured"))
-        self._reproject_feishu_runtime_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.feishu_channel_service.save_config(replace(config, enabled=False)),
+                self.feishu_channel_service.save_status(FeishuChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured")),
+                self._reproject_feishu_runtime_if_configured(),
+            )
+        )
         return self.load_feishu_channel_state()
 
     def load_wechat_channel_state(self):
@@ -267,8 +282,12 @@ class LauncherController:
         return self.load_wechat_channel_state()
 
     def install_wechat_channel(self):
-        self.social_channel_service.install_wechat_plugin()
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.install_wechat_plugin(),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_wechat_channel_state()
 
     def login_wechat_channel(self):
@@ -277,20 +296,29 @@ class LauncherController:
 
     def confirm_wechat_channel_login(self):
         self.social_channel_service.confirm_wechat_runtime_login()
+        self._apply_channel_runtime_mutation(lambda: self._reproject_channels_if_configured())
         return self.load_wechat_channel_state()
 
     def enable_wechat_channel(self):
         config = self.social_channel_service.load_wechat_config()
-        self.social_channel_service.save_wechat_config(replace(config, enabled=True))
-        self.social_channel_service.save_wechat_status(SocialChannelStatus(state="enabled"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_wechat_config(replace(config, enabled=True)),
+                self.social_channel_service.save_wechat_status(SocialChannelStatus(state="enabled")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_wechat_channel_state()
 
     def disable_wechat_channel(self):
         config = self.social_channel_service.load_wechat_config()
-        self.social_channel_service.save_wechat_config(replace(config, enabled=False))
-        self.social_channel_service.save_wechat_status(SocialChannelStatus(state="pending_enable" if config.installed else "unconfigured"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_wechat_config(replace(config, enabled=False)),
+                self.social_channel_service.save_wechat_status(SocialChannelStatus(state="pending_enable" if config.installed else "unconfigured")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_wechat_channel_state()
 
     def load_qq_channel_state(self):
@@ -343,16 +371,24 @@ class LauncherController:
             )
             return self.load_qq_channel_state()
         config = self.social_channel_service.load_qq_config()
-        self.social_channel_service.save_qq_config(replace(config, enabled=True, last_validated_at=result.validated_at))
-        self.social_channel_service.save_qq_status(SocialChannelStatus(state="enabled"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_qq_config(replace(config, enabled=True, last_validated_at=result.validated_at)),
+                self.social_channel_service.save_qq_status(SocialChannelStatus(state="enabled")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_qq_channel_state()
 
     def disable_qq_channel(self):
         config = self.social_channel_service.load_qq_config()
-        self.social_channel_service.save_qq_config(replace(config, enabled=False))
-        self.social_channel_service.save_qq_status(SocialChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_qq_config(replace(config, enabled=False)),
+                self.social_channel_service.save_qq_status(SocialChannelStatus(state="pending_enable" if config.app_id and config.app_secret else "unconfigured")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_qq_channel_state()
 
     def load_wecom_channel_state(self):
@@ -400,16 +436,24 @@ class LauncherController:
         if not result.ok:
             self.social_channel_service.save_wecom_status(SocialChannelStatus(state=result.state, last_error=result.error_message))
             return self.load_wecom_channel_state()
-        self.social_channel_service.save_wecom_config(replace(config, enabled=True, last_validated_at=result.validated_at))
-        self.social_channel_service.save_wecom_status(SocialChannelStatus(state="enabled"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_wecom_config(replace(config, enabled=True, last_validated_at=result.validated_at)),
+                self.social_channel_service.save_wecom_status(SocialChannelStatus(state="enabled")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_wecom_channel_state()
 
     def disable_wecom_channel(self):
         config = self.social_channel_service.load_wecom_config()
-        self.social_channel_service.save_wecom_config(replace(config, enabled=False))
-        self.social_channel_service.save_wecom_status(SocialChannelStatus(state="pending_enable" if config.bot_id and config.secret else "unconfigured"))
-        self._reproject_channels_if_configured()
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.social_channel_service.save_wecom_config(replace(config, enabled=False)),
+                self.social_channel_service.save_wecom_status(SocialChannelStatus(state="pending_enable" if config.bot_id and config.secret else "unconfigured")),
+                self._reproject_channels_if_configured(),
+            )
+        )
         return self.load_wecom_channel_state()
 
     def mark_channels_for_new_device(self) -> None:
@@ -505,6 +549,8 @@ class LauncherController:
     def _prepare_if_needed(self) -> None:
         if self._prepared or self.store.is_first_run():
             return
+        if self.runtime_adapter.status().state == "running":
+            return
         config, sensitive = self.store.load()
         runtime_config_patch, runtime_env = self._runtime_projection(config, sensitive)
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
@@ -596,10 +642,27 @@ class LauncherController:
     def _reproject_channels_if_configured(self) -> None:
         if self.store.is_first_run():
             return
+        if self.runtime_adapter.status().state == "running":
+            self._prepared = False
+            return
         config, sensitive = self.store.load()
         runtime_config_patch, runtime_env = self._runtime_projection(config, sensitive)
         self._prepare_runtime_adapter(config, runtime_config_patch, runtime_env)
         self._prepared = True
+
+    def _apply_channel_runtime_mutation(self, mutate) -> None:
+        was_running = self.runtime_adapter.status().state == "running"
+        if was_running:
+            self.runtime_adapter.stop()
+            self._prepared = False
+        try:
+            mutate()
+        finally:
+            if was_running and not self.store.is_first_run():
+                if not self._prepared:
+                    self._prepare_if_needed()
+                self.runtime_adapter.start()
+                self._refresh_feishu_runtime_status()
 
     def _deep_merge(self, base: dict[str, object], patch: dict[str, object]) -> dict[str, object]:
         merged: dict[str, object] = dict(base)

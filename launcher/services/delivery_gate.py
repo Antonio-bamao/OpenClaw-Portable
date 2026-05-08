@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import zipfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from launcher.services.portable_audit import audit_portable_package
-from launcher.services.release_assets import build_release_asset_name, read_package_version
+from launcher.services.release_assets import DEFAULT_RELEASE_REPOSITORY, build_release_asset_name, build_release_package_url, read_package_version
 from launcher.services.runtime_stability import RuntimeStabilityVerifier, build_runtime_stability_verifier
+from launcher.services.update_manifest import DEFAULT_UPDATE_ENTRY_NAMES, validate_update_manifest
+from launcher.services.update_signature import verify_update_signature
 
 
 PASSED = "passed"
@@ -60,12 +63,19 @@ def verify_delivery_flow(
     feishu_e2e_evidence: Path | None = None,
     removable_media_path: Path | None = None,
     av_evidence: Path | None = None,
+    release_repository: str = DEFAULT_RELEASE_REPOSITORY,
+    signature_public_keys: Mapping[str, str] | None = None,
 ) -> DeliveryGateResult:
     package_root = package_root.resolve()
     release_dir = release_dir.resolve()
     checks = [
         _check_portable_audit(package_root),
-        _check_release_assets(package_root=package_root, release_dir=release_dir),
+        _check_release_assets(
+            package_root=package_root,
+            release_dir=release_dir,
+            repository=release_repository,
+            signature_public_keys=signature_public_keys,
+        ),
         _check_runtime_stability(
             package_root=package_root,
             stability_verifier=stability_verifier,
@@ -132,7 +142,13 @@ def _check_portable_audit(package_root: Path) -> DeliveryGateCheck:
     )
 
 
-def _check_release_assets(*, package_root: Path, release_dir: Path) -> DeliveryGateCheck:
+def _check_release_assets(
+    *,
+    package_root: Path,
+    release_dir: Path,
+    repository: str,
+    signature_public_keys: Mapping[str, str] | None,
+) -> DeliveryGateCheck:
     try:
         version = read_package_version(package_root)
     except Exception as exc:  # noqa: BLE001
@@ -144,6 +160,12 @@ def _check_release_assets(*, package_root: Path, release_dir: Path) -> DeliveryG
     missing = [str(path) for path in [expected_archive, expected_update_json, *expected_package_files] if not path.exists()]
     if missing:
         return DeliveryGateCheck("release-assets", FAILED, f"Missing release assets: {', '.join(missing)}", {"version": version})
+
+    try:
+        validate_update_manifest(package_root, expected_version=version, required_entries=DEFAULT_UPDATE_ENTRY_NAMES)
+        verify_update_signature(package_root, trusted_public_keys=signature_public_keys)
+    except Exception as exc:  # noqa: BLE001
+        return DeliveryGateCheck("release-assets", FAILED, str(exc), {"version": version})
 
     archive_missing = _find_missing_archive_entries(expected_archive, package_root.name)
     if archive_missing:
@@ -164,6 +186,14 @@ def _check_release_assets(*, package_root: Path, release_dir: Path) -> DeliveryG
             FAILED,
             f"update.json version does not match package version {version}.",
             {"version": version, "updateJsonVersion": document.get("version")},
+        )
+    expected_package_url = build_release_package_url(repository, version)
+    if str(document.get("packageUrl") or "").strip() != expected_package_url:
+        return DeliveryGateCheck(
+            "release-assets",
+            FAILED,
+            "update.json packageUrl does not match the expected release asset URL.",
+            {"version": version, "packageUrl": document.get("packageUrl"), "expectedPackageUrl": expected_package_url},
         )
 
     return DeliveryGateCheck(

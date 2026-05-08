@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 
-from launcher.services.portable_audit import assert_release_state_clean
+from launcher.services.portable_audit import assert_release_state_clean, audit_portable_package
+from launcher.services.update_manifest import DEFAULT_UPDATE_ENTRY_NAMES, validate_update_manifest
+from launcher.services.update_signature import verify_update_signature
 
 
 DEFAULT_RELEASE_REPOSITORY = "Antonio-bamao/OpenClaw-Portable"
@@ -52,11 +55,21 @@ def write_release_update_json(*, version: str, repository: str, notes: list[str]
     return output_path
 
 
-def create_release_zip(package_root: Path, output_dir: Path) -> Path:
+def create_release_zip(
+    package_root: Path,
+    output_dir: Path,
+    *,
+    signature_public_keys: Mapping[str, str] | None = None,
+) -> Path:
     version = read_package_version(package_root)
     if not (package_root / "update-signature.json").exists():
         raise FileNotFoundError("Portable package is missing update-signature.json.")
+    audit = audit_portable_package(package_root)
+    if audit.required_paths_missing:
+        raise ValueError(f"Portable package is missing required paths: {', '.join(audit.required_paths_missing)}")
     assert_release_state_clean(package_root)
+    validate_update_manifest(package_root, expected_version=version, required_entries=DEFAULT_UPDATE_ENTRY_NAMES)
+    verify_update_signature(package_root, trusted_public_keys=signature_public_keys)
     archive_path = output_dir / build_release_asset_name(version)
     output_dir.mkdir(parents=True, exist_ok=True)
     root_name = package_root.name
@@ -66,9 +79,16 @@ def create_release_zip(package_root: Path, output_dir: Path) -> Path:
     return archive_path
 
 
-def build_release_assets(*, package_root: Path, output_dir: Path, repository: str, notes: list[str] | None = None) -> tuple[Path, Path]:
+def build_release_assets(
+    *,
+    package_root: Path,
+    output_dir: Path,
+    repository: str,
+    notes: list[str] | None = None,
+    signature_public_keys: Mapping[str, str] | None = None,
+) -> tuple[Path, Path]:
     version = read_package_version(package_root)
-    archive_path = create_release_zip(package_root, output_dir)
+    archive_path = create_release_zip(package_root, output_dir, signature_public_keys=signature_public_keys)
     update_json_path = write_release_update_json(
         version=version,
         repository=repository,

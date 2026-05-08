@@ -2,6 +2,12 @@
 
 ## 当前优先级
 
+0. 微信真实 E2E 已确认，准备交付固化
+   - 已完成：复现并修复 `openclaw-weixin failed during register ... Unable to resolve plugin runtime module`；根因是 packaged `runtime/openclaw/package.json` 被裁成 shim，导致 OpenClaw loader 不能定位宿主 runtime root。
+   - 已完成：新增 `scripts/verify-wechat-plugin-runtime.py`，可在保留 `state/npm/node_modules/@tencent-weixin/openclaw-weixin` 的便携目录上验证 gateway register 不再失败。
+   - 已完成：用户在 `2026-05-08` 真实复测确认这次可用，微信 register / 连接问题闭环。
+   - 下一步：如果要交付给用户，必须用新版构建脚本重新生成 release zip，并在重打包后跑 `verify-wechat-plugin-runtime.py`；不能复用旧 zip 或只复制源码改动。
+   - 发布前要求：下一版 release 资产必须由新版 `scripts/build-launcher.ps1` 生成，确保完整 `runtime/openclaw/package.json` 被复制进包；如包里已安装外部微信插件，必须跑 `verify-wechat-plugin-runtime.py`。
 1. 维护项目上下文系统与摘要一致性
    - 保持 `.context/current-status.md`、`.context/task-breakdown.md`、`.context/work-log.md` 与实际交付状态同步
    - 明确区分“已公开发布的 `v2026.04.5`”与“本地已准备好的 `v2026.04.6` release candidate，以及其中包含的 2026-04-17 至 2026-04-23 微信 / QQ、UI 与启动体验改进”

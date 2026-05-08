@@ -13,10 +13,23 @@ if (-not $SigningPrivateKeyPath) {
   $SigningPrivateKeyPath = Join-Path $root ".local\\update-signing-private-key.txt"
 }
 
+function Invoke-Native {
+  param(
+    [string]$Command,
+    [string[]]$Arguments
+  )
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Command failed with exit code $LASTEXITCODE"
+  }
+}
+
 & (Join-Path $root "scripts\\build-launcher.ps1") -PythonExe $PythonExe
-& $PythonExe (Join-Path $root "scripts\\sign-update-manifest.py") `
-  --package-root $packageRoot `
-  --private-key-path $SigningPrivateKeyPath
+Invoke-Native $PythonExe @(
+  (Join-Path $root "scripts\\sign-update-manifest.py"),
+  "--package-root", $packageRoot,
+  "--private-key-path", $SigningPrivateKeyPath
+)
 
 $command = @(
   (Join-Path $root "scripts\\build-release-assets.py"),
@@ -28,4 +41,4 @@ foreach ($item in $Note) {
   $command += @("--note", $item)
 }
 
-& $PythonExe @command
+Invoke-Native $PythonExe $command

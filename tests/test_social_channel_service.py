@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 import unittest
 import uuid
 from pathlib import Path
@@ -53,6 +55,49 @@ def mark_wechat_plugin_available(paths: PortablePaths) -> None:
     plugin_manifest = paths.state_dir / "extensions" / "openclaw-weixin" / "package.json"
     plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
     plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+    login_entry = plugin_manifest.parent / "dist" / "src" / "auth" / "login-qr.js"
+    login_entry.parent.mkdir(parents=True, exist_ok=True)
+    login_entry.write_text("export {};\n", encoding="utf-8")
+
+
+def mark_wechat_npm_plugin_available(paths: PortablePaths) -> None:
+    plugin_root = (
+        paths.state_dir
+        / "npm"
+        / "node_modules"
+        / "@tencent-weixin"
+        / "openclaw-weixin"
+    )
+    plugin_manifest = plugin_root / "package.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+    login_entry = plugin_root / "dist" / "src" / "auth" / "login-qr.js"
+    login_entry.parent.mkdir(parents=True, exist_ok=True)
+    login_entry.write_text("export {};\n", encoding="utf-8")
+
+
+def mark_wechat_openclaw_npm_plugin_available(paths: PortablePaths) -> None:
+    plugin_root = (
+        paths.state_dir
+        / ".openclaw"
+        / "npm"
+        / "node_modules"
+        / "@tencent-weixin"
+        / "openclaw-weixin"
+    )
+    plugin_manifest = plugin_root / "package.json"
+    plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
+    plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+    login_entry = plugin_root / "dist" / "src" / "auth" / "login-qr.js"
+    login_entry.parent.mkdir(parents=True, exist_ok=True)
+    login_entry.write_text("export {};\n", encoding="utf-8")
+
+
+def resolve_node_command() -> str | None:
+    embedded_node = Path.cwd() / "runtime" / "node" / "node.exe"
+    if embedded_node.exists():
+        return str(embedded_node)
+    return shutil.which("node")
 
 
 class SocialChannelServiceTests(unittest.TestCase):
@@ -67,6 +112,30 @@ class SocialChannelServiceTests(unittest.TestCase):
             self.assertTrue(projection.runtime_config_patch["plugins"]["entries"]["openclaw-weixin"]["enabled"])
             self.assertTrue(projection.runtime_config_patch["channels"]["openclaw-weixin"]["enabled"])
             self.assertEqual(projection.runtime_env, {})
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_projection_uses_qr_logged_in_account(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            account_id = "fa9e424d403c-im-bot"
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(
+                json.dumps({"connected": True, "loggedIn": True, "accountId": account_id}),
+                encoding="utf-8",
+            )
+            account_index = paths.state_dir / "openclaw-weixin" / "accounts.json"
+            account_index.parent.mkdir(parents=True, exist_ok=True)
+            account_index.write_text(json.dumps([account_id]), encoding="utf-8")
+            service = SocialChannelService(paths)
+
+            projection = service.build_wechat_runtime_projection(WechatChannelConfig(enabled=True, installed=True))
+            channel = projection.runtime_config_patch["channels"]["openclaw-weixin"]
+
+            self.assertEqual(channel["defaultAccount"], account_id)
+            self.assertTrue(channel["accounts"][account_id]["enabled"])
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -113,6 +182,98 @@ class SocialChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_wechat_login_script_supports_extension_imports_that_reference_openclaw_sdk(self) -> None:
+        node_command = resolve_node_command()
+        if not node_command:
+            self.skipTest("Node.js is required to execute the generated WeChat login script.")
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            openclaw_dir = paths.runtime_dir / "openclaw"
+            sdk_dir = openclaw_dir / "dist" / "plugin-sdk"
+            sdk_dir.mkdir(parents=True, exist_ok=True)
+            (sdk_dir / "account-id.js").write_text(
+                'export function normalizeAccountId(value) { return String(value).replace("@", "-"); }\n',
+                encoding="utf-8",
+            )
+            (sdk_dir / "infra-runtime.js").write_text(
+                "export async function withFileLock(_path, _options, run) { return await run(); }\n",
+                encoding="utf-8",
+            )
+            (sdk_dir / "config-runtime.js").write_text(
+                "export async function loadConfig() { return {}; }\n"
+                "export async function writeConfigFile() { return undefined; }\n",
+                encoding="utf-8",
+            )
+            plugin_root = paths.state_dir / "extensions" / "openclaw-weixin"
+            auth_dir = plugin_root / "dist" / "src" / "auth"
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            (plugin_root / "package.json").write_text('{"type":"module"}\n', encoding="utf-8")
+            (auth_dir / "login-qr.js").write_text(
+                """
+export const DEFAULT_ILINK_BOT_TYPE = "3";
+export async function startWeixinLoginWithQr() {
+  return { qrcodeUrl: "https://example.test/qr", sessionKey: "session", message: "qr" };
+}
+export async function displayQRCode() {}
+export async function waitForWeixinLogin() {
+  return { connected: true, botToken: "token", accountId: "abc@im.bot", baseUrl: "https://api.example.test", userId: "user" };
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            (auth_dir / "accounts.js").write_text(
+                """
+import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
+import { registerUserInFrameworkStore } from "./pairing.js";
+export function saveWeixinAccount(accountId) {
+  if (normalizeAccountId(accountId) !== accountId) throw new Error("account was not normalized");
+}
+export async function registerWeixinAccountId(accountId) { await registerUserInFrameworkStore({ accountId, userId: "user" }); }
+export function clearStaleAccountsForUserId() {}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            (auth_dir / "pairing.js").write_text(
+                """
+import fs from "node:fs";
+import { withFileLock } from "openclaw/plugin-sdk/infra-runtime";
+export async function registerUserInFrameworkStore(params) {
+  return await withFileLock("demo.lock", {}, async () => {
+    fs.writeFileSync("allow-from-called.txt", JSON.stringify(params), "utf-8");
+    return { changed: Boolean(params.accountId && params.userId) };
+  });
+}
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            service = SocialChannelService(paths)
+            script_path = service._write_wechat_login_script()
+
+            completed = subprocess.run(
+                [node_command, str(script_path)],
+                cwd=str(openclaw_dir),
+                env={**os.environ, "OPENCLAW_STATE_DIR": str(paths.state_dir), "OPENCLAW_HOME": str(paths.state_dir)},
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            status = json.loads((paths.state_dir / "channels" / "openclaw-weixin" / "status.json").read_text(encoding="utf-8"))
+            self.assertTrue(status["connected"])
+            self.assertEqual(status["accountId"], "abc-im.bot")
+            allow_from_call = json.loads((openclaw_dir / "allow-from-called.txt").read_text(encoding="utf-8"))
+            self.assertEqual(allow_from_call["accountId"], "abc-im.bot")
+            self.assertEqual(allow_from_call["userId"], "user")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_wechat_login_refuses_stale_installed_state_when_plugin_is_missing(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -133,24 +294,71 @@ class SocialChannelServiceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_wechat_pending_login_status_message_does_not_mark_login_failed(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            service = SocialChannelService(paths)
+            service.save_wechat_config(WechatChannelConfig(installed=True))
+            service.save_wechat_status(SocialChannelStatus(state="pending_login"))
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(
+                json.dumps({"connected": False, "state": "pending_login", "message": "等待扫码确认。"}),
+                encoding="utf-8",
+            )
+
+            service.confirm_wechat_runtime_login()
+            state = service.build_wechat_view_state()
+
+            self.assertEqual(state.status_label, "待扫码")
+            self.assertNotEqual(service.load_wechat_status().state, "login_failed")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_wechat_runtime_plugin_available_detects_openclaw_npm_install(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
-            package_file = (
-                paths.state_dir
-                / ".openclaw"
-                / "npm"
-                / "node_modules"
-                / "@tencent-weixin"
-                / "openclaw-weixin"
-                / "package.json"
-            )
-            package_file.parent.mkdir(parents=True, exist_ok=True)
-            package_file.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+            mark_wechat_openclaw_npm_plugin_available(paths)
             service = SocialChannelService(paths)
 
             self.assertTrue(service.wechat_runtime_plugin_available())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_runtime_plugin_available_detects_state_npm_install(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_npm_plugin_available(paths)
+            service = SocialChannelService(paths)
+
+            self.assertTrue(service.wechat_runtime_plugin_available())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_view_state_recovers_stale_missing_status_when_plugin_exists(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_npm_plugin_available(paths)
+            service = SocialChannelService(paths)
+            service.save_wechat_config(WechatChannelConfig(installed=False, enabled=False))
+            service.save_wechat_status(
+                SocialChannelStatus(
+                    state="missing_runtime_plugin",
+                    last_error="未找到微信插件文件，请重新安装微信 ClawBot 通道插件。",
+                )
+            )
+
+            state = service.build_wechat_view_state()
+
+            self.assertTrue(state.installed)
+            self.assertEqual(state.status_label, "待扫码")
+            self.assertTrue(service.load_wechat_config().installed)
+            self.assertEqual(service.load_wechat_status().state, "pending_login")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -173,9 +381,7 @@ class SocialChannelServiceTests(unittest.TestCase):
         temp_dir = make_workspace_temp_dir()
         try:
             paths = make_paths(temp_dir)
-            installed_plugin = paths.state_dir / "extensions" / "openclaw-weixin" / "index.ts"
-            installed_plugin.parent.mkdir(parents=True, exist_ok=True)
-            installed_plugin.write_text("export default {}\n", encoding="utf-8")
+            mark_wechat_plugin_available(paths)
             stale_stage = paths.state_dir / "extensions" / ".openclaw-install-stage-old" / "index.ts"
             stale_stage.parent.mkdir(parents=True, exist_ok=True)
             stale_stage.write_text("export default {}\n", encoding="utf-8")

@@ -62,6 +62,7 @@ class ProviderBridgeTests(unittest.TestCase):
                 projection.runtime_config_patch["agents"]["defaults"]["model"]["primary"],
                 "qwen/qwen3.5-plus",
             )
+            self.assertEqual(projection.runtime_config_patch["gateway"], {"mode": "local"})
             self.assertEqual(projection.auth_profile_id, "qwen:launcher")
             self.assertEqual(
                 projection.runtime_config_patch["plugins"]["entries"]["qwen"],

@@ -34,6 +34,9 @@ def mark_wechat_plugin_available(paths: PortablePaths) -> None:
     plugin_manifest = paths.state_dir / "extensions" / "openclaw-weixin" / "package.json"
     plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
     plugin_manifest.write_text('{"name":"@tencent-weixin/openclaw-weixin"}\n', encoding="utf-8")
+    login_entry = plugin_manifest.parent / "dist" / "src" / "auth" / "login-qr.js"
+    login_entry.parent.mkdir(parents=True, exist_ok=True)
+    login_entry.write_text("export {};\n", encoding="utf-8")
 
 
 def make_config(
@@ -90,6 +93,9 @@ class FakeRuntimeAdapter:
         self.uptime_seconds = uptime_seconds
         self.last_runtime_config_patch: dict[str, object] = {}
         self.last_runtime_env: dict[str, str] = {}
+        self.prepare_calls = 0
+        self.start_calls = 0
+        self.restart_calls = 0
 
     def prepare(
         self,
@@ -98,16 +104,22 @@ class FakeRuntimeAdapter:
         runtime_config_patch: dict[str, object] | None = None,
         runtime_env: dict[str, str] | None = None,
     ) -> None:
+        self.prepare_calls += 1
         self.last_runtime_config_patch = runtime_config_patch or {}
         self.last_runtime_env = runtime_env or {}
 
     def start(self) -> None:
+        self.start_calls += 1
+        self.runtime_state = "running"
         return None
 
     def stop(self) -> None:
         self.stop_calls += 1
+        self.runtime_state = "stopped"
 
     def restart(self) -> None:
+        self.restart_calls += 1
+        self.runtime_state = "running"
         return None
 
     def status(self) -> RuntimeStatus:
@@ -633,6 +645,107 @@ class LauncherControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_channel_reprojection_restarts_runtime_before_writing_config(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            prepare_calls_before_enable = runtime_adapter.prepare_calls
+
+            controller.social_channel_service.save_wechat_config(WechatChannelConfig(enabled=False, installed=True))
+            state = controller.enable_wechat_channel()
+
+            self.assertTrue(state.enabled)
+            self.assertTrue(controller._prepared)
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(runtime_adapter.start_calls, 1)
+            self.assertEqual(runtime_adapter.prepare_calls, prepare_calls_before_enable + 1)
+            self.assertTrue(runtime_adapter.last_runtime_config_patch["channels"]["openclaw-weixin"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_wechat_install_stops_running_runtime_before_plugin_command(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            runner = FakeChannelCommandRunner(ChannelCommandResult(ok=True, output="installed"))
+            controller.social_channel_service.command_runner = runner
+
+            controller.install_wechat_channel()
+
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(runtime_adapter.start_calls, 1)
+            self.assertEqual(runner.calls[0], ["plugins", "install", "@tencent-weixin/openclaw-weixin@latest"])
+            self.assertIn("openclaw-weixin", runtime_adapter.last_runtime_config_patch["plugins"]["entries"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_restart_runtime_stops_before_applying_deferred_projection(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.social_channel_service.save_wechat_config(WechatChannelConfig(enabled=True, installed=True))
+            controller._prepared = False
+
+            controller.restart_runtime()
+
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(runtime_adapter.restart_calls, 0)
+            self.assertEqual(runtime_adapter.start_calls, 1)
+            self.assertTrue(runtime_adapter.last_runtime_config_patch["channels"]["openclaw-weixin"]["enabled"])
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_auto_start_check_does_not_apply_deferred_projection_while_running(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running", runtime_message="ready")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.social_channel_service.save_wechat_config(WechatChannelConfig(enabled=True, installed=True))
+            controller._prepared = False
+            prepare_calls_before_auto_start_check = runtime_adapter.prepare_calls
+
+            should_start = controller.should_auto_start_runtime()
+
+            self.assertFalse(should_start)
+            self.assertFalse(controller._prepared)
+            self.assertEqual(runtime_adapter.prepare_calls, prepare_calls_before_auto_start_check)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_enable_qq_channel_runs_documented_onboarding_command_once_per_credentials(self) -> None:
         temp_dir = make_workspace_temp_dir()
         try:
@@ -714,6 +827,43 @@ class LauncherControllerTests(unittest.TestCase):
             self.assertTrue(enabled_wecom.enabled)
             self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["qqbot"]["clientSecret"], "qq-secret")
             self.assertEqual(runtime_adapter.last_runtime_config_patch["channels"]["wecom"]["secret"], "wecom-secret")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_confirm_wechat_login_reprojects_and_restarts_running_gateway(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = make_paths(temp_dir)
+            mark_wechat_plugin_available(paths)
+            runtime_adapter = FakeRuntimeAdapter(runtime_state="running")
+            controller = LauncherController(
+                paths,
+                runtime_adapter=runtime_adapter,
+                runtime_mode="openclaw",
+                node_command="node",
+            )
+            controller.configure(make_config(), SensitiveConfig(api_key="sk-demo"))
+            controller.social_channel_service.save_wechat_config(
+                WechatChannelConfig(enabled=True, installed=True, last_login_at="2026-05-07T00:00:00Z")
+            )
+            account_id = "fa9e424d403c-im-bot"
+            status_file = paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
+            status_file.parent.mkdir(parents=True, exist_ok=True)
+            status_file.write_text(
+                json.dumps({"connected": True, "loggedIn": True, "accountId": account_id}),
+                encoding="utf-8",
+            )
+
+            state = controller.confirm_wechat_channel_login()
+
+            self.assertTrue(state.enabled)
+            self.assertEqual(runtime_adapter.stop_calls, 1)
+            self.assertEqual(runtime_adapter.start_calls, 1)
+            wechat_patch = runtime_adapter.last_runtime_config_patch["channels"]["openclaw-weixin"]
+            self.assertTrue(wechat_patch["enabled"])
+            self.assertEqual(wechat_patch["defaultAccount"], account_id)
+            self.assertTrue(wechat_patch["accounts"][account_id]["enabled"])
+            self.assertEqual(runtime_adapter.last_runtime_config_patch["gateway"], {"mode": "local"})
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

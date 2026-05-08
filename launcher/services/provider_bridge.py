@@ -128,6 +128,9 @@ class ProviderBridge:
                     },
                 },
             },
+            "gateway": {
+                "mode": "local",
+            },
         }
         if provider_type in {"qwen"}:
             patch["plugins"] = {

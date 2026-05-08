@@ -51,6 +51,49 @@ function Copy-DirectoryRobust {
   }
 }
 
+function Invoke-Native {
+  param(
+    [string]$Command,
+    [string[]]$Arguments
+  )
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Command failed with exit code $LASTEXITCODE"
+  }
+}
+
+function Assert-OpenClawRuntimeManifest {
+  param([string]$RuntimePath)
+  $manifestPath = Join-Path $RuntimePath "package.json"
+  $pluginRuntime = Join-Path $RuntimePath "dist\\plugins\\runtime\\index.js"
+  if (-not (Test-Path $manifestPath)) {
+    throw "Packaged OpenClaw runtime is missing package.json: $manifestPath"
+  }
+  if (-not (Test-Path $pluginRuntime)) {
+    throw "Packaged OpenClaw runtime is missing plugin runtime module: $pluginRuntime"
+  }
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  $exports = $manifest.exports
+  $hasPluginSdkEntry = $false
+  $hasCliEntry = $false
+  if ($exports) {
+    $exportNames = $exports.PSObject.Properties.Name
+    $hasPluginSdkEntry = $exportNames -contains "./plugin-sdk"
+    $hasCliEntry = $exportNames -contains "./cli-entry"
+  }
+  $hasOpenClawBin = $false
+  if ($manifest.bin) {
+    if ($manifest.bin -is [string]) {
+      $hasOpenClawBin = $manifest.bin -like "*openclaw*"
+    } else {
+      $hasOpenClawBin = ($manifest.bin.PSObject.Properties.Name -contains "openclaw")
+    }
+  }
+  if (-not ($hasPluginSdkEntry -and ($hasCliEntry -or $hasOpenClawBin))) {
+    throw "Packaged OpenClaw runtime package.json is incomplete; plugin runtime discovery would fail."
+  }
+}
+
 Remove-DirectoryRobust $pyiDist
 Remove-DirectoryRobust $portableDist
 Remove-DirectoryRobust $buildDir
@@ -78,7 +121,7 @@ if (Test-Path $iconIco) {
 }
 $pyInstallerArgs += (Join-Path $root "main.py")
 
-& $PythonExe @pyInstallerArgs
+Invoke-Native $PythonExe $pyInstallerArgs
 
 New-Item -ItemType Directory -Force -Path $portableDist | Out-Null
 Copy-Item (Join-Path $pyiDist "OpenClawLauncher\\*") $portableDist -Recurse -Force
@@ -88,5 +131,7 @@ Copy-DirectoryRobust (Join-Path $root "tools") (Join-Path $portableDist "tools")
 Copy-Item (Join-Path $root "README.txt") $portableDist -Force
 Copy-Item (Join-Path $root "version.json") $portableDist -Force
 Copy-DirectoryRobust (Join-Path $root "state\\provider-templates") (Join-Path $portableDist "state\\provider-templates")
-& $PythonExe (Join-Path $root "scripts\\prune-portable-runtime.py") --runtime-path (Join-Path $portableDist "runtime\\openclaw")
-& $PythonExe (Join-Path $root "scripts\\generate-update-manifest.py") --package-root $portableDist
+Invoke-Native $PythonExe @((Join-Path $root "scripts\\prune-portable-runtime.py"), "--runtime-path", (Join-Path $portableDist "runtime\\openclaw"))
+Copy-Item (Join-Path $root "runtime\\openclaw\\package.json") (Join-Path $portableDist "runtime\\openclaw\\package.json") -Force
+Assert-OpenClawRuntimeManifest (Join-Path $portableDist "runtime\\openclaw")
+Invoke-Native $PythonExe @((Join-Path $root "scripts\\generate-update-manifest.py"), "--package-root", $portableDist)

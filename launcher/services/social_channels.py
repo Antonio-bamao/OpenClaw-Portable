@@ -354,6 +354,17 @@ class SocialChannelService:
         return ChannelValidationResult(True, "pending_enable", "", self._utc_now_iso())
 
     def build_wechat_runtime_projection(self, config: WechatChannelConfig) -> SocialRuntimeProjection:
+        channel_config: dict[str, object] = {
+            "enabled": config.enabled,
+        }
+        account_ids = self._load_wechat_account_ids()
+        if account_ids:
+            default_account_id = account_ids[0]
+            channel_config["defaultAccount"] = default_account_id
+            channel_config["accounts"] = {
+                account_id: {"enabled": config.enabled}
+                for account_id in account_ids
+            }
         return SocialRuntimeProjection(
             runtime_env={},
             runtime_config_patch={
@@ -365,9 +376,7 @@ class SocialChannelService:
                     }
                 },
                 "channels": {
-                    "openclaw-weixin": {
-                        "enabled": config.enabled,
-                    }
+                    "openclaw-weixin": channel_config
                 },
             },
         )
@@ -422,8 +431,19 @@ class SocialChannelService:
     def build_wechat_view_state(self) -> WechatChannelState:
         self.refresh_wechat_runtime_status()
         config = self.load_wechat_config()
-        if config.installed and not self.wechat_runtime_plugin_available():
+        plugin_available = self.wechat_runtime_plugin_available()
+        if config.installed and not plugin_available:
             self._clear_stale_wechat_install_state("未找到微信插件文件，请重新安装微信 ClawBot 通道插件。")
+        elif plugin_available:
+            status = self.load_wechat_status()
+            if not config.installed or status.state in {"missing_runtime_plugin", "install_failed", "unconfigured"}:
+                self.save_wechat_config(replace(config, installed=True))
+                self.save_wechat_status(
+                    SocialChannelStatus(
+                        state="enabled" if config.enabled else "pending_login",
+                        last_action_at=self._utc_now_iso(),
+                    )
+                )
         config = self.load_wechat_config()
         status = self.load_wechat_status()
         label, detail = self._status_text(
@@ -614,12 +634,26 @@ class SocialChannelService:
 
     def wechat_runtime_plugin_available(self) -> bool:
         candidates = (
-            self.paths.state_dir / "extensions" / "openclaw-weixin" / "openclaw.plugin.json",
-            self.paths.state_dir / "extensions" / "openclaw-weixin" / "package.json",
-            self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.ts",
-            self.paths.state_dir / "extensions" / "openclaw-weixin" / "index.js",
-            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@tencent-weixin" / "openclaw-weixin" / "package.json",
-            self.paths.state_dir / ".openclaw" / "npm" / "node_modules" / "@tencent-weixin" / "openclaw-weixin" / "dist" / "index.js",
+            self.paths.state_dir / "extensions" / "openclaw-weixin" / "dist" / "src" / "auth" / "login-qr.js",
+            self.paths.state_dir
+            / "npm"
+            / "node_modules"
+            / "@tencent-weixin"
+            / "openclaw-weixin"
+            / "dist"
+            / "src"
+            / "auth"
+            / "login-qr.js",
+            self.paths.state_dir
+            / ".openclaw"
+            / "npm"
+            / "node_modules"
+            / "@tencent-weixin"
+            / "openclaw-weixin"
+            / "dist"
+            / "src"
+            / "auth"
+            / "login-qr.js",
         )
         return any(candidate.exists() for candidate in candidates)
 
@@ -685,6 +719,7 @@ if (!stateDir) {{
 }}
 
 const pluginRoots = [
+  path.join(stateDir, "npm", "node_modules", "@tencent-weixin", "openclaw-weixin"),
   path.join(stateDir, ".openclaw", "npm", "node_modules", "@tencent-weixin", "openclaw-weixin"),
   path.join(stateDir, "extensions", "openclaw-weixin"),
 ];
@@ -693,9 +728,43 @@ if (!pluginRoot) {{
   throw new Error("微信 ClawBot 插件未安装，请先在启动器里重新安装插件。");
 }}
 
+const ensureOpenClawSdkShim = () => {{
+  const sdkDir = path.join(process.cwd(), "dist", "plugin-sdk");
+  if (!fs.existsSync(path.join(sdkDir, "account-id.js"))) {{
+    throw new Error("OpenClaw 运行时缺少 plugin-sdk/account-id.js，请重新安装或更新便携包。");
+  }}
+  const shimRoot = path.join(pluginRoot, "node_modules", "openclaw");
+  const shimSdkDir = path.join(shimRoot, "plugin-sdk");
+  fs.mkdirSync(shimSdkDir, {{ recursive: true }});
+  const sdkFiles = fs
+    .readdirSync(sdkDir, {{ withFileTypes: true }})
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
+    .map((entry) => entry.name);
+  fs.writeFileSync(
+    path.join(shimRoot, "package.json"),
+    `${{JSON.stringify({{
+      type: "module",
+      exports: {{
+        "./plugin-sdk/*": "./plugin-sdk/*.js",
+      }},
+    }}, null, 2)}}\\n`,
+    "utf-8",
+  );
+  for (const fileName of sdkFiles) {{
+    const sourcePath = path.join(sdkDir, fileName);
+    fs.writeFileSync(
+      path.join(shimSdkDir, fileName),
+      `export * from ${{JSON.stringify(pathToFileURL(sourcePath).href)}};\\n`,
+      "utf-8",
+    );
+  }}
+}};
+ensureOpenClawSdkShim();
+
 const importFile = (filePath) => import(pathToFileURL(filePath).href);
 const loginModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "login-qr.js"));
 const accountsModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "accounts.js"));
+const pairingModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "pairing.js")).catch(() => ({{}}));
 const sdkModule = await importFile(path.join(process.cwd(), "dist", "plugin-sdk", "account-id.js"));
 
 const statusPath = {json.dumps(str(status_path))};
@@ -747,6 +816,9 @@ accountsModule.saveWeixinAccount(normalizedId, {{
 }});
 accountsModule.registerWeixinAccountId(normalizedId);
 if (wait.userId) {{
+  if (typeof pairingModule.registerUserInFrameworkStore === "function") {{
+    await pairingModule.registerUserInFrameworkStore({{ accountId: normalizedId, userId: wait.userId }});
+  }}
   accountsModule.clearStaleAccountsForUserId(normalizedId, wait.userId);
 }}
 
@@ -773,6 +845,40 @@ console.log("\\n微信已连接成功，可以回到 OpenClaw Portable 点击“
                 return payload
         return {}
 
+    def _load_wechat_account_ids(self) -> list[str]:
+        account_ids: list[str] = []
+
+        def append_account_id(raw_value: object) -> None:
+            if not isinstance(raw_value, str):
+                return
+            account_id = raw_value.strip()
+            if not account_id or account_id in account_ids:
+                return
+            account_ids.append(account_id)
+
+        runtime_status = self._load_wechat_runtime_status()
+        if self._runtime_status_is_logged_in(runtime_status):
+            append_account_id(runtime_status.get("accountId") or runtime_status.get("account_id"))
+
+        index_path = self.paths.state_dir / "openclaw-weixin" / "accounts.json"
+        try:
+            account_index = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            account_index = []
+        if isinstance(account_index, list):
+            for value in account_index:
+                append_account_id(value)
+
+        accounts_dir = self.paths.state_dir / "openclaw-weixin" / "accounts"
+        try:
+            account_files = sorted(accounts_dir.glob("*.json"))
+        except OSError:
+            account_files = []
+        for account_file in account_files:
+            append_account_id(account_file.stem)
+
+        return account_ids
+
     def _runtime_status_is_logged_in(self, payload: dict[str, object]) -> bool:
         for key in ("loggedIn", "authenticated", "connected", "ready"):
             value = payload.get(key)
@@ -788,7 +894,7 @@ console.log("\\n微信已连接成功，可以回到 OpenClaw Portable 点击“
         return normalized in {"login_failed", "failed", "error"} or bool(self._runtime_status_error_message(payload))
 
     def _runtime_status_error_message(self, payload: dict[str, object]) -> str:
-        for key in ("lastError", "last_error", "error", "message"):
+        for key in ("lastError", "last_error", "error"):
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()

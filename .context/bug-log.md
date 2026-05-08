@@ -2,6 +2,23 @@
 
 > 所有会影响推进、质量、节奏或判断的异常都要记录，包括代码、环境、依赖、测试、打包和设计误判。
 
+## 2026-05-08 - Packaged WeChat npm plugin still fails to register after v2026.05.3 rebuild
+
+- 现象：用户用最新便携目录复测微信 ClawBot，手机端扫码后仍显示“暂无法连接 OpenClaw”，发消息没有回复；launcher 启动日志显示 gateway ready，但 stderr 报 `openclaw-weixin failed during register ... Error: Unable to resolve plugin runtime module`。
+- 触发条件：`@tencent-weixin/openclaw-weixin` 已安装在 `dist/OpenClaw-Portable/state/npm/node_modules/@tencent-weixin/openclaw-weixin` 后，从 packaged OpenClaw runtime 启动 gateway 并自动发现外部 npm 插件。
+- 影响：OpenClaw 主 gateway 可启动，但微信插件没有注册成功，所以微信通道实际不可用；用户会误以为扫码已经连接，随后消息无响应并自动断开。
+- 复测确认：用户在 `2026-05-08` 再次复测后确认“这次终于好了”；该问题按真实使用反馈已闭环。
+- 已修复内容：本轮修复 QR 登录 `accountId` 未投影、确认扫码后未重启投影、运行中渠道变更没有先停 gateway 再重投影、打包产物 `runtime/openclaw/package.json` 被裁成过度精简 manifest，以及缺少“已安装外部 npm 微信插件后的注册路径”验证。
+- 根因：实际触发点是 OpenClaw loader 在 gateway register 阶段调用 `resolvePluginRuntimeModulePath()`；该函数需要先定位 `package.json.name == "openclaw"` 的 runtime root，再解析 `dist/plugins/runtime/index.js`。当前 packaged dist 的 `runtime/openclaw/package.json` 仍是旧的 SDK shim（只含 `./plugin-sdk/*`），导致宿主根目录定位失败，最终报 `Unable to resolve plugin runtime module`。
+- 解决方案：`scripts/build-launcher.ps1` 在 prune 后复制源码侧完整 `runtime/openclaw/package.json` 到 packaged runtime，并用 `Assert-OpenClawRuntimeManifest` 断言 `name/bin/exports` 与 `dist/plugins/runtime/index.js` 仍可用；保留现场中手动同步完整 manifest 后，gateway smoke 不再出现 register failure。
+- 验证：`python scripts\verify-wechat-plugin-runtime.py --package-root dist\OpenClaw-Portable --timeout-seconds 45 --post-ready-wait-seconds 3 --output tmp\wechat-plugin-runtime-smoke.json` 返回 `ok=true`；`python -m unittest discover -s tests` 通过 `308` 项测试。
+- 防复发清单：
+  - 任何 release 包都必须由新版 `scripts/build-launcher.ps1` / `scripts/build-release-assets.ps1` 生成，不能手工拼 runtime，也不能让 `runtime/openclaw/package.json` 退化为 plugin-sdk shim。
+  - 打包后必须检查 `dist/OpenClaw-Portable/runtime/openclaw/package.json` 的 `name` 为 `openclaw`，并存在 `dist/plugins/runtime/index.js`。
+  - 只要验证微信外部插件，就必须保留或准备 `state/npm/node_modules/@tencent-weixin/openclaw-weixin`，再跑 `python scripts\verify-wechat-plugin-runtime.py --package-root dist\OpenClaw-Portable`；不能只跑 clean dist 的 `verify-delivery-flow.py`。
+  - 看到 `Unable to resolve plugin runtime module` 时，第一时间检查 packaged runtime manifest，不要优先怀疑微信二维码、账号、网络或 `openclaw/plugin-sdk/*` import。
+- 状态：已解决并经用户真实复测确认。
+
 ## qfluentwidgets 商业授权风险
 - 现象：最初计划使用 qfluentwidgets 提升桌面端高级感，但核对授权后发现商业化分发存在额外许可证要求。
 - 触发条件：项目从演示原型转向可售卖 U 盘产品时，开始核对第三方 UI 组件库授权条款。

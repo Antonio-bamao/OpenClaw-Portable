@@ -12,7 +12,8 @@ from launcher.services.release_assets import (
     build_release_update_document,
     build_release_assets,
 )
-from launcher.services.update_signature import generate_update_signing_keypair, write_update_signature
+from launcher.services.update_manifest import DEFAULT_UPDATE_ENTRY_NAMES, write_update_manifest
+from launcher.services.update_signature import DEFAULT_UPDATE_SIGNING_KEY_ID, generate_update_signing_keypair, write_update_signature
 
 
 def make_workspace_temp_dir() -> Path:
@@ -36,6 +37,23 @@ def write_text_long(path: Path, content: str) -> None:
     os.makedirs(long_path(path.parent), exist_ok=True)
     with open(long_path(path), "w", encoding="utf-8") as handle:
         handle.write(content)
+
+
+def write_minimal_release_package(package_root: Path, version: str = "v2026.04.2") -> tuple[str, str]:
+    write_text_long(package_root / "OpenClawLauncher.exe", "launcher")
+    write_text_long(package_root / "_internal" / "base_library.zip", "python")
+    write_text_long(package_root / "runtime" / "node" / "node.exe", "node")
+    write_text_long(package_root / "runtime" / "openclaw" / "openclaw.mjs", "openclaw")
+    write_text_long(package_root / "runtime" / "openclaw" / "package.json", "{}")
+    write_text_long(package_root / "assets" / "guide.html", "guide")
+    write_text_long(package_root / "tools" / "reset-config.bat", "tool")
+    write_text_long(package_root / "state" / "provider-templates" / "qwen.json", "{}")
+    write_text_long(package_root / "README.txt", "hello")
+    write_text_long(package_root / "version.json", json.dumps({"version": version}))
+    write_update_manifest(package_root, entry_names=DEFAULT_UPDATE_ENTRY_NAMES)
+    private_key_b64, public_key_b64 = generate_update_signing_keypair()
+    write_update_signature(package_root, private_key_b64=private_key_b64)
+    return private_key_b64, public_key_b64
 
 
 class ReleaseAssetsTests(unittest.TestCase):
@@ -67,18 +85,14 @@ class ReleaseAssetsTests(unittest.TestCase):
         try:
             package_root = temp_dir / "OpenClaw-Portable"
             output_dir = temp_dir / "release"
-            package_root.mkdir(parents=True, exist_ok=True)
-            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
-            (package_root / "update-manifest.json").write_text(json.dumps({"manifestVersion": 1}), encoding="utf-8")
-            (package_root / "README.txt").write_text("hello", encoding="utf-8")
-            private_key_b64, _ = generate_update_signing_keypair()
-            write_update_signature(package_root, private_key_b64=private_key_b64)
+            _, public_key_b64 = write_minimal_release_package(package_root)
 
             archive_path, update_json_path = build_release_assets(
                 package_root=package_root,
                 output_dir=output_dir,
                 repository="Antonio-bamao/OpenClaw-Portable",
                 notes=["note a"],
+                signature_public_keys={DEFAULT_UPDATE_SIGNING_KEY_ID: public_key_b64},
             )
 
             self.assertTrue(archive_path.exists())
@@ -100,11 +114,7 @@ class ReleaseAssetsTests(unittest.TestCase):
         try:
             package_root = temp_dir / "OpenClaw-Portable"
             output_dir = temp_dir / "release"
-            package_root.mkdir(parents=True, exist_ok=True)
-            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
-            (package_root / "update-manifest.json").write_text(json.dumps({"manifestVersion": 1}), encoding="utf-8")
-            private_key_b64, _ = generate_update_signing_keypair()
-            write_update_signature(package_root, private_key_b64=private_key_b64)
+            _, public_key_b64 = write_minimal_release_package(package_root)
             (package_root / "state" / "provider-templates" / "qwen.json").parent.mkdir(parents=True, exist_ok=True)
             (package_root / "state" / "provider-templates" / "qwen.json").write_text("{}", encoding="utf-8")
             (package_root / "state" / "openclaw.json").write_text("{}", encoding="utf-8")
@@ -115,6 +125,47 @@ class ReleaseAssetsTests(unittest.TestCase):
                     output_dir=output_dir,
                     repository="Antonio-bamao/OpenClaw-Portable",
                     notes=["note a"],
+                    signature_public_keys={DEFAULT_UPDATE_SIGNING_KEY_ID: public_key_b64},
+                )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_build_release_assets_rejects_unsigned_or_mismatched_manifest(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            output_dir = temp_dir / "release"
+            _, public_key_b64 = write_minimal_release_package(package_root)
+            (package_root / "README.txt").write_text("changed after signing", encoding="utf-8")
+            write_update_manifest(package_root, entry_names=DEFAULT_UPDATE_ENTRY_NAMES)
+
+            with self.assertRaisesRegex(ValueError, "数字签名校验失败"):
+                build_release_assets(
+                    package_root=package_root,
+                    output_dir=output_dir,
+                    repository="Antonio-bamao/OpenClaw-Portable",
+                    signature_public_keys={DEFAULT_UPDATE_SIGNING_KEY_ID: public_key_b64},
+                )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_build_release_assets_rejects_incomplete_portable_package(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            package_root = temp_dir / "OpenClaw-Portable"
+            output_dir = temp_dir / "release"
+            package_root.mkdir(parents=True, exist_ok=True)
+            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
+            write_update_manifest(package_root)
+            private_key_b64, public_key_b64 = generate_update_signing_keypair()
+            write_update_signature(package_root, private_key_b64=private_key_b64)
+
+            with self.assertRaisesRegex(ValueError, "missing required paths"):
+                build_release_assets(
+                    package_root=package_root,
+                    output_dir=output_dir,
+                    repository="Antonio-bamao/OpenClaw-Portable",
+                    signature_public_keys={DEFAULT_UPDATE_SIGNING_KEY_ID: public_key_b64},
                 )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -125,11 +176,7 @@ class ReleaseAssetsTests(unittest.TestCase):
         try:
             package_root = temp_dir / "OpenClaw-Portable"
             output_dir = temp_dir / "release"
-            package_root.mkdir(parents=True, exist_ok=True)
-            (package_root / "version.json").write_text(json.dumps({"version": "v2026.04.2"}), encoding="utf-8")
-            (package_root / "update-manifest.json").write_text(json.dumps({"manifestVersion": 1}), encoding="utf-8")
-            private_key_b64, _ = generate_update_signing_keypair()
-            write_update_signature(package_root, private_key_b64=private_key_b64)
+            _, public_key_b64 = write_minimal_release_package(package_root)
             deep_runtime_file = (
                 package_root
                 / "runtime"
@@ -145,11 +192,15 @@ class ReleaseAssetsTests(unittest.TestCase):
                 / "httpRequest.js"
             )
             write_text_long(deep_runtime_file, "module.exports = {}\n")
+            write_update_manifest(package_root, entry_names=DEFAULT_UPDATE_ENTRY_NAMES)
+            private_key_b64, public_key_b64 = generate_update_signing_keypair()
+            write_update_signature(package_root, private_key_b64=private_key_b64)
 
             archive_path, _ = build_release_assets(
                 package_root=package_root,
                 output_dir=output_dir,
                 repository="Antonio-bamao/OpenClaw-Portable",
+                signature_public_keys={DEFAULT_UPDATE_SIGNING_KEY_ID: public_key_b64},
             )
 
             with zipfile.ZipFile(archive_path, "r") as archive:
