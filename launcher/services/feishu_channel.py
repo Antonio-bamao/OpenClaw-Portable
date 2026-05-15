@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, fields, replace
@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from launcher.core.paths import PortablePaths
 from launcher.models import FeishuChannelState
+from launcher.services.social_channels import OpenClawChannelCommandRunner
 
 
 @dataclass(frozen=True)
@@ -42,8 +43,16 @@ class FeishuRuntimeProjection:
 
 
 class FeishuChannelService:
-    def __init__(self, paths: PortablePaths, secret_loader=None, secret_saver=None) -> None:
+    def __init__(
+        self,
+        paths: PortablePaths,
+        command_runner: OpenClawChannelCommandRunner | None = None,
+        *,
+        secret_loader=None,
+        secret_saver=None,
+    ) -> None:
         self.paths = paths
+        self.command_runner = command_runner
         self._secret_loader = secret_loader
         self._secret_saver = secret_saver
 
@@ -161,6 +170,29 @@ class FeishuChannelService:
         if not openclaw_dir.exists():
             return True
         return any(candidate.exists() for candidate in candidates)
+
+    def feishu_install_commands(self) -> list[list[str]]:
+        return [["plugins", "install", "@openclaw/feishu@latest"]]
+
+    def install_feishu_plugin(self) -> None:
+        if not self.command_runner:
+            return
+        commands = self.feishu_install_commands()
+        if not commands:
+            return
+        self.save_status(replace(self.load_status(), state="installing", last_error=""))
+        for command in commands:
+            result = self.command_runner.run_node_script(command)
+            if not result.ok:
+                self.save_status(
+                    replace(
+                        self.load_status(),
+                        state="install_failed",
+                        last_error=f"安装飞书插件失败: {result.error_message or result.output}",
+                    )
+                )
+                return
+        self.save_status(replace(self.load_status(), state="unconfigured", last_error=""))
 
     def refresh_runtime_status(
         self,
@@ -289,6 +321,8 @@ class FeishuChannelService:
         )
         labels = {
             "unconfigured": ("未配置", "填写 App ID 和 App Secret 后，先测试连接再启用飞书私聊。"),
+            "installing": ("安装中", "正在下载并安装飞书插件，请稍候。"),
+            "install_failed": ("安装失败", status.last_error or "飞书插件安装失败，请重试。"),
             "invalid_config": ("配置无效", status.last_error or "配置无效，请检查 App ID / App Secret。"),
             "pending_enable": ("待启用", pending_enable_detail),
             "connecting": ("连接中", "OpenClaw 正在准备飞书私聊链路。"),
@@ -308,6 +342,7 @@ class FeishuChannelService:
             app_secret=config.app_secret,
             bot_app_name=config.bot_app_name,
             enabled=config.enabled,
+            installed=self.feishu_runtime_plugin_available(),
             status_label=label,
             status_detail=detail,
             last_validated_at=config.last_validated_at,

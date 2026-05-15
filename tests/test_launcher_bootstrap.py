@@ -255,6 +255,7 @@ class LauncherUiSmokeTests(unittest.TestCase):
             app_secret="secret",
             bot_app_name="Support Bot",
             enabled=True,
+            installed=True,
             status_label="已连接",
             status_detail="飞书私聊链路已就绪，可接收私聊消息。",
         )

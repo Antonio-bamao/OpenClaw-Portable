@@ -131,6 +131,22 @@ Copy-DirectoryRobust (Join-Path $root "tools") (Join-Path $portableDist "tools")
 Copy-Item (Join-Path $root "README.txt") $portableDist -Force
 Copy-Item (Join-Path $root "version.json") $portableDist -Force
 Copy-DirectoryRobust (Join-Path $root "state\\provider-templates") (Join-Path $portableDist "state\\provider-templates")
+
+Write-Host "Downloading @openclaw/feishu plugin for portable bundle..."
+$feishuExtDir = Join-Path $portableDist "runtime\\openclaw\\dist\\extensions\\feishu"
+New-Item -ItemType Directory -Force -Path $feishuExtDir | Out-Null
+$previousLocation = Get-Location
+Set-Location $feishuExtDir
+Invoke-Native "npm" @("pack", "@openclaw/feishu@latest")
+$tarball = Get-ChildItem -Filter "*.tgz" | Select-Object -First 1
+if ($tarball) {
+    tar -xf $tarball.Name
+    Copy-Item "package\\*" -Destination "." -Recurse -Force
+    Remove-Item "package" -Recurse -Force
+    Remove-Item $tarball.Name -Force
+}
+Set-Location $previousLocation
+
 Invoke-Native $PythonExe @((Join-Path $root "scripts\\prune-portable-runtime.py"), "--runtime-path", (Join-Path $portableDist "runtime\\openclaw"))
 Copy-Item (Join-Path $root "runtime\\openclaw\\package.json") (Join-Path $portableDist "runtime\\openclaw\\package.json") -Force
 Assert-OpenClawRuntimeManifest (Join-Path $portableDist "runtime\\openclaw")

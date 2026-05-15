@@ -152,6 +152,7 @@ class OpenClawLauncherApplication:
             )
             self.main_window.bind_feishu_handlers(
                 on_save=self._handle_save_feishu_channel,
+                on_install=self._handle_install_feishu_channel,
                 on_test=self._handle_test_feishu_channel,
                 on_enable=self._handle_enable_feishu_channel,
                 on_disable=self._handle_disable_feishu_channel,
@@ -519,6 +520,13 @@ class OpenClawLauncherApplication:
         self._run_background_action(
             "test_feishu_channel",
             self.controller.test_feishu_channel,
+            self._apply_feishu_channel_state,
+        )
+
+    def _handle_install_feishu_channel(self) -> None:
+        self._run_background_action(
+            "install_feishu_channel",
+            self.controller.install_feishu_channel,
             self._apply_feishu_channel_state,
         )
 

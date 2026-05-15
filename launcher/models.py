@@ -21,6 +21,7 @@ class FeishuChannelState:
     app_secret: str
     bot_app_name: str
     enabled: bool
+    installed: bool
     status_label: str
     status_detail: str
     last_validated_at: str | None = None

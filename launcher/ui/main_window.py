@@ -224,8 +224,9 @@ class OpenClawLauncherWindow(QMainWindow):
         self.factory_reset_button.clicked.connect(on_factory_reset)
         self.reconfigure_button.clicked.connect(on_reconfigure)
 
-    def bind_feishu_handlers(self, *, on_save, on_test, on_enable, on_disable, on_open_help) -> None:
+    def bind_feishu_handlers(self, *, on_save, on_install, on_test, on_enable, on_disable, on_open_help) -> None:
         self.save_feishu_button.clicked.connect(on_save)
+        self.install_feishu_button.clicked.connect(on_install)
         self.test_feishu_button.clicked.connect(on_test)
         self.enable_feishu_button.clicked.connect(on_enable)
         self.disable_feishu_button.clicked.connect(on_disable)
@@ -297,7 +298,9 @@ class OpenClawLauncherWindow(QMainWindow):
         self.feishu_bot_name_input.setText(state.bot_app_name)
         self.feishu_status_label.setText(state.status_label)
         self.feishu_status_detail_label.setText(state.status_detail)
-        self.enable_feishu_button.setEnabled(not state.enabled)
+        self.install_feishu_button.setEnabled(not state.installed)
+        self.install_feishu_button.setVisible(not state.installed)
+        self.enable_feishu_button.setEnabled(state.installed and not state.enabled)
         self.disable_feishu_button.setEnabled(state.enabled)
 
     def apply_wechat_channel_state(self, state: WechatChannelState) -> None:
@@ -356,6 +359,8 @@ class OpenClawLauncherWindow(QMainWindow):
 
         elif action == "test_feishu_channel":
             button.setText("正在测试..." if busy else "测试连接")
+        elif action == "install_feishu_channel":
+            button.setText("正在安装..." if busy else "安装飞书插件")
         elif action == "enable_feishu_channel":
             button.setText("正在启用..." if busy else "启用飞书私聊")
         elif action == "install_wechat_channel":
@@ -565,6 +570,7 @@ class OpenClawLauncherWindow(QMainWindow):
         feishu_layout.addWidget(self.feishu_status_label)
         feishu_layout.addWidget(self.feishu_status_detail_label)
         self.save_feishu_button = make_button("保存飞书配置")
+        self.install_feishu_button = make_button("安装飞书插件")
         self.test_feishu_button = make_button("测试连接", primary=True)
         self.enable_feishu_button = make_button("启用飞书私聊")
         self.disable_feishu_button = make_button("停用")
@@ -573,12 +579,13 @@ class OpenClawLauncherWindow(QMainWindow):
             _make_action_grid(
                 (
                     self.save_feishu_button,
+                    self.install_feishu_button,
                     self.test_feishu_button,
                     self.enable_feishu_button,
                     self.disable_feishu_button,
                     self.open_feishu_help_button,
                 ),
-                columns=5,
+                columns=6,
             )
         )
         self.channel_detail_stack.addWidget(self.feishu_channel_detail)
@@ -696,6 +703,9 @@ class OpenClawLauncherWindow(QMainWindow):
 
         self._buttons_by_action.update(
             {
+                "install_feishu_channel": self.install_feishu_button,
+                "test_feishu_channel": self.test_feishu_button,
+                "enable_feishu_channel": self.enable_feishu_button,
                 "install_wechat_channel": self.install_wechat_button,
                 "login_wechat_channel": self.login_wechat_button,
                 "confirm_wechat_channel": self.confirm_wechat_button,
@@ -709,6 +719,9 @@ class OpenClawLauncherWindow(QMainWindow):
         )
         self._default_button_texts.update(
             {
+                self.install_feishu_button: self.install_feishu_button.text(),
+                self.test_feishu_button: self.test_feishu_button.text(),
+                self.enable_feishu_button: self.enable_feishu_button.text(),
                 self.install_wechat_button: self.install_wechat_button.text(),
                 self.login_wechat_button: self.login_wechat_button.text(),
                 self.confirm_wechat_button: self.confirm_wechat_button.text(),

@@ -72,6 +72,20 @@ class FakeController:
 
     def import_update_package(self, package_root: Path) -> str:
         self.calls.append(f"import_update_package:{package_root}")
+    def load_view_state(self) -> LauncherViewState:
+        self.calls.append("load_view_state")
+        return self.final_state
+
+    def export_diagnostics_bundle(self) -> str:
+        self.calls.append("export_diagnostics_bundle")
+        return "C:/tmp/openclaw-diagnostics.zip"
+
+    def reset_factory_state(self) -> None:
+        self.calls.append("reset_factory_state")
+        return True
+
+    def import_update_package(self, package_root: Path) -> str:
+        self.calls.append(f"import_update_package:{package_root}")
         return "v2026.04.2"
 
     def restore_update_backup(self, backup_root: Path) -> str:
@@ -93,21 +107,22 @@ class FakeController:
             app_secret=app_secret,
             bot_app_name=bot_app_name,
             enabled=False,
+            installed=True,
             status_label="待启用",
             status_detail="saved",
         )
 
     def test_feishu_channel(self) -> FeishuChannelState:
         self.calls.append("test_feishu_channel")
-        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "tested")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, True, "待启用", "tested")
 
     def enable_feishu_channel(self) -> FeishuChannelState:
         self.calls.append("enable_feishu_channel")
-        return FeishuChannelState("cli_xxx", "secret", "Support Bot", True, "连接中", "enabled")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", True, True, "连接中", "enabled")
 
     def disable_feishu_channel(self) -> FeishuChannelState:
         self.calls.append("disable_feishu_channel")
-        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, "待启用", "disabled")
+        return FeishuChannelState("cli_xxx", "secret", "Support Bot", False, True, "待启用", "disabled")
 
     def should_auto_start_runtime(self) -> bool:
         self.calls.append("should_auto_start_runtime")

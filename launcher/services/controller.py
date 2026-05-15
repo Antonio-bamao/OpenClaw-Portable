@@ -55,10 +55,16 @@ class LauncherController:
         self.local_update_service = local_update_service or LocalUpdateImportService(paths)
         self.restore_update_backup_service = restore_update_backup_service or RestoreUpdateBackupService(paths)
         self.online_update_service = online_update_service or OnlineUpdateService(paths)
-        self.feishu_channel_service = FeishuChannelService(paths, secret_loader=self._load_vault_secret, secret_saver=self._save_vault_secret)
+        command_runner = OpenClawChannelCommandRunner(paths, node_command=node_command)
+        self.feishu_channel_service = FeishuChannelService(
+            paths,
+            command_runner=command_runner,
+            secret_loader=self._load_vault_secret,
+            secret_saver=self._save_vault_secret,
+        )
         self.social_channel_service = SocialChannelService(
             paths,
-            OpenClawChannelCommandRunner(paths, node_command=node_command),
+            command_runner,
             secret_loader=self._load_vault_secret,
             secret_saver=self._save_vault_secret,
         )
@@ -180,6 +186,15 @@ class LauncherController:
         result = self.local_update_service.import_package(package_root)
         self._prepared = False
         return result.imported_version
+
+    def install_feishu_channel(self):
+        self._apply_channel_runtime_mutation(
+            lambda: (
+                self.feishu_channel_service.install_feishu_plugin(),
+                self._reproject_feishu_runtime_if_configured(),
+            )
+        )
+        return self.load_feishu_channel_state()
 
     def load_feishu_channel_state(self) -> FeishuChannelState:
         if not self.store.is_first_run():
