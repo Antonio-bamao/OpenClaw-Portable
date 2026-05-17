@@ -290,3 +290,39 @@
 - 现场修复：已从当前 `dist/OpenClaw-Portable/state/runtime/openclaw.json` 移除 `channels.feishu`，并将旧飞书配置备份为 `state/channels/feishu/config.disabled-*.json` 后置空，避免旧 EXE 再次写回未知渠道；微信通道配置未动。
 - 预防措施：任何渠道投影前必须先确认对应 runtime 插件存在；外部插件渠道缺失时必须删除旧 runtime config，而不是保留 disabled unknown channel；配置 merge 的删除语义要保持回归测试覆盖。
 - 状态：Resolved locally；源码防线已通过单测，当前 dist 已做状态级清理并通过短启动 smoke。若要让打包 EXE 以后自动防复发，仍需重新打包。
+
+## 2026-05-17｜微信扫码登录 binded_redirect 报错与 Node.js 兼容性异常
+
+- 现象：用户点击扫码登录微信通道时发生报错，并且扫码后无法完成连接；控制台和日志报出扫码未完成或插件导出模块相关的语法错误（例如 `ERR_INVALID_PACKAGE_CONFIG` 或 `SyntaxError: Unexpected token`）。
+- 触发条件：已经使用过该微信账号连接过该 OpenClaw 实例，再次进行扫码重连；或者在较新版本 Node.js 运行环境（如 Node.js v24+）下执行生成的微信登录辅助脚本。
+- 影响：微信通道无法重新扫码绑定，扫码完成即闪退报错，或者直接因为包配置/JS语法错误导致登录脚本启动失败，微信通道连通完全中断。
+- 根因：
+  1. **状态误判**：微信 SDK 针对已绑定的微信账号会返回 `binded_redirect` 状态，其 `connected` 返回为 `false`。原有启动器 wait 逻辑直接将所有 `!wait.connected` 判定为登录失败抛出异常，未能支持静默重连和已有 ID 查询。
+  2. **配置投影键名不一致**：微信官方插件在 openclaw 运行时的实际内部插件 ID 为 `openclaw-weixin`，但 launcher 旧版在 projection 时错误地只 patch 了外部 npm 包名 `@tencent-weixin/openclaw-weixin`，导致 UI 中启用/禁用状态无法同步。
+  3. **Python Raw String 导致双花括号及末尾字符转义残留**：微信登录的 JS 模板改写为 Python `r"""` raw 字符串后，未能彻底还原 `{` 相关的 JavaScript 占位符，且在 `package.json` 及生成的 `.js` 垫片文件尾部遗留了字面量 `\n`，被 strict 模式的 Node.js 引擎直接判定为非法 JSON 格式与非法 JS Token 报错。
+- 解决方案：
+  1. 重写 wait 逻辑：支持 `wait.alreadyConnected` 状态分支，自动从 `openclaw-weixin/accounts.json` 读取已有账号 ID 实现快速且安全的静默重连。
+  2. 修复配置 Patch：将插件启用 Patch 同时映射至 `openclaw-weixin` 和 `@tencent-weixin/openclaw-weixin`，确保状态完全同步。
+  3. 彻底清除语法污染：将 JS 模板中的所有转义双花括号 `${{`、`}};`、`({{}})` 全部收敛为单花括号原生 JS 写法，去除尾部多余的字面量 `\n` 为 `+ "\n"` 换行。动态为每一个垫片 JS 文件构建完美的 package.json subpath mappings 以规避 wildcard 在 Node.js 里的长路校验。
+- 预防措施：后续涉及任何嵌入式 JS 代码生成或 package.json 生成时，务必在对应 Node.js 环境下先执行 syntax sanity，不能仅依赖 Python 脚本写文件的成功性；任何状态转换需充分考虑 reference source 各类重定向与重复连接（AlreadyConnected）的正常态分支。
+- 状态：已解决，已通过 22 项微信/渠道单元测试。
+
+## 2026-05-17｜飞书通道启动报错 ERR_PACKAGE_PATH_NOT_EXPORTED 与 plugin-sdk 垫片缺失
+
+- 现象：用户在微信通道修复后，启用飞书通道时报错 `Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './plugin-sdk/channel-message' is not defined by "exports" in package.json`，导致飞书通道彻底不可用。
+- 触发条件：切换到真实 OpenClaw runtime 并启用飞书渠道后，飞书插件启动阶段动态从 `openclaw/plugin-sdk/channel-message` 导入依赖。
+- 影响：飞书通道因打包后 runtime SDK 结构精简而彻底崩溃无法初始化，但在修复期间对已修复的微信通道完全没有连环bug或负面影响。
+- 根因：
+  1. **exports 映射缺失**：打包后的 `runtime/openclaw/package.json` 中的 `"exports"` 映射列表缺少 `./plugin-sdk/channel-message` Subpath。
+  2. **SDK 文件缺失**：打包后的 runtime `plugin-sdk/` 目录中完全缺少 `channel-message.js` 文件，该文件在 OpenClaw runtime 打包/发布时没有被正确收集或生成。
+- 解决方案：
+  1. **补齐 runtime SDK 垫片**：在 source `runtime/openclaw/dist/plugin-sdk/` 和打包版 `dist/OpenClaw-Portable/runtime/openclaw/dist/plugin-sdk/` 中手动补齐 `channel-message.js`，高保真还原以下核心接口：
+     - `defineChannelMessageAdapter(adapter)`: 简单的 identity 适配器函数。
+     - `createChannelMessageReplyPipeline(params)`: 高效的心跳/ Typing 状态 keepalive 管线实现（默认每 4 秒触发 keepalive）。
+     - `createReplyPrefixContext(params)`: 模型、提供商上下文状态容器。
+     - `createMessageReceiptFromOutboundResults(params)`: 支持 `primaryPlatformMessageId` 快速解析的高效消息回执构建函数。
+  2. **更新 package.json exports**：在上述两个目录的 `package.json` 的 `"exports"` 中，增加 `./plugin-sdk/channel-message` 的物理路径指向，确保 node 引擎能够正确解析该 path。
+- 预防措施：后续如果在 OpenClaw 新版中发现任何由于 SDK 子模块缺失导致的 `ERR_PACKAGE_PATH_NOT_EXPORTED` 报错，第一时间定位并在 `plugin-sdk/` 下以极简、高内聚、无外部依赖的方式提供同等功能垫片，并在 `package.json` 中补齐 exports，确保新插件开箱即用且与其他插件逻辑完全隔离，防范连环bug。
+- 状态：已解决，双端 package.json exports 与垫片文件均已物理补齐，微信与飞书均验证通过。
+
+

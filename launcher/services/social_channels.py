@@ -372,6 +372,9 @@ class SocialChannelService:
                     "entries": {
                         "openclaw-weixin": {
                             "enabled": config.enabled,
+                        },
+                        "@tencent-weixin/openclaw-weixin": {
+                            "enabled": config.enabled,
                         }
                     }
                 },
@@ -708,130 +711,163 @@ class SocialChannelService:
 
     def _wechat_login_script_source(self) -> str:
         status_path = self.paths.state_dir / "channels" / "openclaw-weixin" / "status.json"
-        return f"""
+        js_template = r"""
 import fs from "node:fs";
 import path from "node:path";
-import {{ pathToFileURL }} from "node:url";
+import { pathToFileURL } from "node:url";
 
-const stateDir = process.env.OPENCLAW_STATE_DIR || process.env.OPENCLAW_HOME;
-if (!stateDir) {{
-  throw new Error("OPENCLAW_STATE_DIR is not set.");
-}}
-
+const stateDir = __STATE_DIR__;
 const pluginRoots = [
   path.join(stateDir, "npm", "node_modules", "@tencent-weixin", "openclaw-weixin"),
   path.join(stateDir, ".openclaw", "npm", "node_modules", "@tencent-weixin", "openclaw-weixin"),
   path.join(stateDir, "extensions", "openclaw-weixin"),
 ];
 const pluginRoot = pluginRoots.find((candidate) => fs.existsSync(path.join(candidate, "dist", "src", "auth", "login-qr.js")));
-if (!pluginRoot) {{
-  throw new Error("微信 ClawBot 插件未安装，请先在启动器里重新安装插件。");
-}}
+if (!pluginRoot) {
+  throw new Error("无法定位微信插件根目录，请确保已安装 @tencent-weixin/openclaw-weixin 插件。");
+}
 
-const ensureOpenClawSdkShim = () => {{
+const ensureOpenClawSdkShim = () => {
   const sdkDir = path.join(process.cwd(), "dist", "plugin-sdk");
-  if (!fs.existsSync(path.join(sdkDir, "account-id.js"))) {{
+  if (!fs.existsSync(path.join(sdkDir, "account-id.js"))) {
     throw new Error("OpenClaw 运行时缺少 plugin-sdk/account-id.js，请重新安装或更新便携包。");
-  }}
+  }
   const shimRoot = path.join(pluginRoot, "node_modules", "openclaw");
   const shimSdkDir = path.join(shimRoot, "plugin-sdk");
-  fs.mkdirSync(shimSdkDir, {{ recursive: true }});
+  fs.mkdirSync(shimSdkDir, { recursive: true });
   const sdkFiles = fs
-    .readdirSync(sdkDir, {{ withFileTypes: true }})
+    .readdirSync(sdkDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
     .map((entry) => entry.name);
+  const shimPackageJson = path.join(shimRoot, "package.json");
+  if (fs.existsSync(shimPackageJson)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(shimPackageJson, "utf-8"));
+      if (existing.name === "openclaw") return;
+    } catch (e) {}
+  }
+  const exportsMap = {
+    "./plugin-sdk/*": "./plugin-sdk/*"
+  };
+  for (const fileName of sdkFiles) {
+    const baseName = fileName.replace(/\.js$/, "");
+    exportsMap[`./plugin-sdk/${baseName}`] = `./plugin-sdk/${fileName}`;
+  }
   fs.writeFileSync(
-    path.join(shimRoot, "package.json"),
-    `${{JSON.stringify({{
+    shimPackageJson,
+    JSON.stringify({
+      name: "openclaw",
       type: "module",
-      exports: {{
-        "./plugin-sdk/*": "./plugin-sdk/*.js",
-      }},
-    }}, null, 2)}}\\n`,
+      exports: exportsMap,
+    }, null, 2) + "\n",
     "utf-8",
   );
-  for (const fileName of sdkFiles) {{
+  for (const fileName of sdkFiles) {
     const sourcePath = path.join(sdkDir, fileName);
     fs.writeFileSync(
       path.join(shimSdkDir, fileName),
-      `export * from ${{JSON.stringify(pathToFileURL(sourcePath).href)}};\\n`,
+      `export * from ${JSON.stringify(pathToFileURL(sourcePath).href)};\n`,
       "utf-8",
     );
-  }}
-}};
+  }
+};
 ensureOpenClawSdkShim();
 
 const importFile = (filePath) => import(pathToFileURL(filePath).href);
 const loginModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "login-qr.js"));
 const accountsModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "accounts.js"));
-const pairingModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "pairing.js")).catch(() => ({{}}));
+const pairingModule = await importFile(path.join(pluginRoot, "dist", "src", "auth", "pairing.js")).catch(() => ({}));
 const sdkModule = await importFile(path.join(process.cwd(), "dist", "plugin-sdk", "account-id.js"));
 
-const statusPath = {json.dumps(str(status_path))};
-const writeStatus = (payload) => {{
-  fs.mkdirSync(path.dirname(statusPath), {{ recursive: true }});
-  fs.writeFileSync(statusPath, `${{JSON.stringify(payload, null, 2)}}\\n`, "utf-8");
-}};
+const statusPath = __STATUS_PATH__;
+const writeStatus = (payload) => {
+  fs.mkdirSync(path.dirname(statusPath), { recursive: true });
+  fs.writeFileSync(statusPath, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+};
 
 console.log("正在生成微信扫码二维码...");
-const start = await loginModule.startWeixinLoginWithQr({{
+const start = await loginModule.startWeixinLoginWithQr({
   botType: loginModule.DEFAULT_ILINK_BOT_TYPE,
   force: true,
   verbose: true,
-}});
-if (!start.qrcodeUrl) {{
-  writeStatus({{ connected: false, state: "login_failed", lastError: start.message || "二维码生成失败。" }});
+});
+if (!start.qrcodeUrl) {
+  writeStatus({ connected: false, state: "login_failed", lastError: start.message || "二维码生成失败。" });
   throw new Error(start.message || "二维码生成失败。");
-}}
+}
 
 console.log(start.message || "用手机微信扫描以下二维码，以继续连接：");
 await loginModule.displayQRCode(start.qrcodeUrl);
-writeStatus({{
+writeStatus({
   connected: false,
   state: "pending_login",
   message: start.message || "等待扫码确认。",
   lastQrAt: new Date().toISOString(),
-}});
+});
 
-const wait = await loginModule.waitForWeixinLogin({{
+const wait = await loginModule.waitForWeixinLogin({
   sessionKey: start.sessionKey,
   timeoutMs: 480000,
   verbose: true,
-}});
-if (!wait.connected || !wait.botToken || !wait.accountId) {{
-  writeStatus({{
+});
+if (wait.alreadyConnected) {
+  const indexPath = path.join(stateDir, "openclaw-weixin", "accounts.json");
+  let accountId = undefined;
+  if (fs.existsSync(indexPath)) {
+    try {
+      const ids = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+      if (Array.isArray(ids) && ids.length > 0) {
+        accountId = ids[0];
+      }
+    } catch (e) {}
+  }
+  if (!accountId) {
+    accountId = "default";
+  }
+  writeStatus({
+    connected: true,
+    loggedIn: true,
+    ready: true,
+    accountId: accountId,
+    lastLoginAt: new Date().toISOString(),
+    message: wait.message || "已连接过此 OpenClaw，无需重复连接。",
+  });
+  console.log("\n微信已连接成功，可以回到 OpenClaw Portable 点击“确认已扫码”。");
+} else if (!wait.connected || !wait.botToken || !wait.accountId) {
+  writeStatus({
     connected: false,
     state: "login_failed",
     lastError: wait.message || "扫码未完成。",
     updatedAt: new Date().toISOString(),
-  }});
+  });
   throw new Error(wait.message || "扫码未完成。");
-}}
+} else {
+  const normalizedId = sdkModule.normalizeAccountId(wait.accountId);
+  accountsModule.saveWeixinAccount(normalizedId, {
+    token: wait.botToken,
+    baseUrl: wait.baseUrl,
+    userId: wait.userId,
+  });
+  accountsModule.registerWeixinAccountId(normalizedId);
+  if (wait.userId) {
+    if (typeof pairingModule.registerUserInFrameworkStore === "function") {
+      await pairingModule.registerUserInFrameworkStore({ accountId: normalizedId, userId: wait.userId });
+    }
+    accountsModule.clearStaleAccountsForUserId(normalizedId, wait.userId);
+  }
 
-const normalizedId = sdkModule.normalizeAccountId(wait.accountId);
-accountsModule.saveWeixinAccount(normalizedId, {{
-  token: wait.botToken,
-  baseUrl: wait.baseUrl,
-  userId: wait.userId,
-}});
-accountsModule.registerWeixinAccountId(normalizedId);
-if (wait.userId) {{
-  if (typeof pairingModule.registerUserInFrameworkStore === "function") {{
-    await pairingModule.registerUserInFrameworkStore({{ accountId: normalizedId, userId: wait.userId }});
-  }}
-  accountsModule.clearStaleAccountsForUserId(normalizedId, wait.userId);
-}}
-
-writeStatus({{
-  connected: true,
-  loggedIn: true,
-  ready: true,
-  accountId: normalizedId,
-  lastLoginAt: new Date().toISOString(),
-  message: wait.message || "已将此 OpenClaw 连接到微信。",
-}});
-console.log("\\n微信已连接成功，可以回到 OpenClaw Portable 点击“确认已扫码”。");
+  writeStatus({
+    connected: true,
+    loggedIn: true,
+    ready: true,
+    accountId: normalizedId,
+    lastLoginAt: new Date().toISOString(),
+    message: wait.message || "已将此 OpenClaw 连接到微信。",
+  });
+  console.log("\n微信已连接成功，可以回到 OpenClaw Portable 点击“确认已扫码”。");
+}
 """
+        return js_template.replace("__STATE_DIR__", json.dumps(str(self.paths.state_dir))).replace("__STATUS_PATH__", json.dumps(str(status_path)))
 
     def _load_wechat_runtime_status(self) -> dict[str, object]:
         candidates = (

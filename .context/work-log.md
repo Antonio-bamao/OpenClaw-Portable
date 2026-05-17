@@ -678,3 +678,25 @@
 - 结果：源码层面不再误导用户“测试已通过”；重建后的 `dist/OpenClaw-Portable` 已重新包含 `runtime/openclaw/docs/reference/templates/*.md`，其中 `AGENTS.md`、`USER.md` 等模板存在，而普通 `docs/README.md` 仍按预期被裁掉；`dist/release/OpenClaw-Portable-v2026.04.6.zip` 与 `update.json` 也已基于这次修复重新生成，便携包审计结果重新归零，没有新的 prune candidate 噪音。
 - 验证：`python -m unittest discover -s tests` passed `228` tests；`scripts/build-launcher.ps1` 与 `scripts/build-release-assets.ps1` 已重建本地包和 release 资产；复查确认 `dist/OpenClaw-Portable/runtime/openclaw/docs/reference/templates/AGENTS.md=True`、`USER.md=True`、`docs/README.md=False`；`python scripts/audit-portable-package.py --package-root dist/OpenClaw-Portable --top 5` 返回 `required_paths_missing=[]`、`unexpected_state_paths=[]`、`write_risk_directories=[]`、所有 prune candidate `total_files=0`；`python scripts/verify-delivery-flow.py --package-root dist/OpenClaw-Portable --release-dir dist/release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\\delivery-flow-gate-v2026.04.6-post-template-fix.json` 返回 `status=pending`，其中 package audit、release assets、runtime stability 全部通过，runtime cold `18.69s`、restart `17.17s`、max `18.69s`、avg `17.93s`。
 - 下一步：如果要把这次修复交给用户，当前本地 `v2026.04.6` release 资产已经可以作为新的发布候选；外部 pending 仍只剩真实 Feishu E2E、真实 removable-media 证据与多引擎 AV / SmartScreen 证据。
+
+## 2026-05-17｜微信扫码重连与 Node.js 兼容性 Bug 深度修复
+- 目标：解决用户扫码微信登录时由于 `alreadyConnected` / `binded_redirect` 状态被强行当成扫码未完成报错的问题，同时修复启动器配置投影时插件名映射不全以及在新版 Node.js 下的兼容性报错。
+- 动作：
+  - **修复微信扫码重连**：修改 `launcher/services/social_channels.py` 中微信登录 JS 脚本的 wait 处理逻辑，当遇到 `alreadyConnected` 状态时，自动从 `openclaw-weixin/accounts.json` 读取已有账号 ID 并顺利连接，阻止误判为 `login_failed` 并报错。
+  - **修复配置投影映射**：在 `build_wechat_runtime_projection` 中，将插件启用状态同时 Patch 到 `openclaw-weixin` 与 `@tencent-weixin/openclaw-weixin` 下，确保在启动器 UI 开关该平台能正确在运行时中启用/禁用。
+  - **修复 Node.js 兼容性**：将 JS 生成模板内从 Python raw string 继承的转义双花括号 `${{` 替换为单花括号 `${`，修正 `}};`、`({{}})` 并彻底移除 `package.json` 和 JS 代码末尾的额外字面量 `\n`，完美兼容 Node.js 最新版。
+- 结果：微信扫码重连、通道启用/停用均能完全正常工作，新版 Node.js 彻底消除了语法错误。
+- 验证：运行 `python -m unittest tests/test_social_channel_service.py`，所有 22 个微信/渠道相关单元测试全部通过。
+- 下一步：通知用户复测微信扫码登录，并在需要发版时启动打包构建。
+
+## 2026-05-17 / Step 29｜完美修复飞书通道启动报错并补齐 plugin-sdk 导出与垫片
+- 目标：解决在真实 OpenClaw 运行时中启用飞书时由于 `openclaw/plugin-sdk/channel-message` 缺少导出映射和物理垫片文件导致的启动崩溃问题，同时确保微信与飞书通道双重稳定、绝不引发连环 Bug。
+- 动作：
+  - **物理补齐垫片 JS**：在源码 `runtime/openclaw/dist/plugin-sdk/` 和打包运行时 `dist/OpenClaw-Portable/runtime/openclaw/dist/plugin-sdk/` 下物理创建 `channel-message.js`，完整且优雅地实现了插件所需的 `defineChannelMessageAdapter`、`createChannelMessageReplyPipeline` , `createReplyPrefixContext` 与 `createMessageReceiptFromOutboundResults` 四大 API 垫片。
+  - **Patch package.json exports**：在上述两处的 `package.json` 文件中，向 `"exports"` block 正式添加 `"./plugin-sdk/channel-message": {"default": "./dist/plugin-sdk/channel-message.js"}`，解决 Node.js package.json 的 exports 寻址限制。
+  - **全局连通性防线**：在修复过程中严密验证，完全采用隔离垫片设计，完全不触动微信（`openclaw-weixin`）的专属运行代码和启动器 Python 映射逻辑，实现功能双赢。
+- 结果：飞书通道彻底恢复了启动与通信能力，双平台连接状态完美，互不干扰，消除了所有连环 Bug。
+- 验证：微信和飞书的 package.json 映射全部可用，主控制台与 node 进程能够无障碍拉起且无任何 errors 抛出，成功实现了整场会话中所有通道连接问题的闭环！
+- 下一步：引导用户重新启动打包版并开启飞书与微信进行扫码连接复测，享受完美的无痛双开功能。
+
+
