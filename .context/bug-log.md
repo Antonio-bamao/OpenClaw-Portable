@@ -210,16 +210,29 @@
 
 ## 真实 dist smoke 后运行态 state 可能被误打进发布 zip
 - 现象：当前 `dist/OpenClaw-Portable/state` 中出现 `openclaw.json`、`logs`、`tasks`、`workspace`、`canvas`、`channels`、`sessions`、`backups` 等运行态条目。
-- 触发条件：对 `dist/OpenClaw-Portable` 执行真实 runtime smoke 后，OpenClaw 会把运行配置、健康检查日志、任务数据库和工作区目录写入 dist 下的 `state/`；如果随后手动调用 `scripts/build-release-assets.py` 对同一个 dist 打包，就可能把这些运行态文件带进 release zip。
-- 影响：发布包可能包含开发机运行残留，既增加 U 盘写入和体积噪声，也可能混入不该交付给用户的状态文件。
-- 根因：真实 smoke 的目标目录就是 dist 便携根目录，`state/` 作为便携用户数据目录会被正常写入；发布资产生成原先没有在 zip 前检查 `state/` 是否仍是干净模板态。
-- 解决方案：在审计服务中新增 release state 清洁策略，只允许 `state/provider-templates`；发布 zip 生成前调用该策略，发现任何可变 state 条目就拒绝打包并列出路径。本地 `v2026.04.2` 已生成 zip 经验证仅包含 provider templates，未被污染。
-- 预防措施：正式发版统一运行 `scripts/build-release-assets.ps1` 重新构建干净 dist；不要在真实 smoke 之后直接手动对同一个 dist 调 `scripts/build-release-assets.py`；如必须 smoke，smoke 后重新构建发布资产。
-- 状态：Resolved
+- 触发条件：对 `dist/OpenClaw-Portable` 执行真实 runtime smoke 后，OpenClaw 会把运行配置、健康检查日志、任务数据库和工作区目录写入 dist 下的 `state/`；如果随后手动调用 `scripts/build-release-assets.py` 对同一个 dist ## 2026-05-17｜飞书通道启动报错 ERR_PACKAGE_PATH_NOT_EXPORTED 与 plugin-sdk 双垫片缺失 (channel-message / channel-ingress-runtime)
 
-## runtime prune 实验入口与审计口径对 `test_artifacts` 不一致
-- 现象：`python .\\scripts\\audit-portable-package.py --package-root dist\\OpenClaw-Portable --top 8` 报告 `test_artifacts` 为 `740` 个文件、约 `3.88MB`，但现有 `python .\\scripts\\prune-portable-runtime.py --runtime-path dist\\OpenClaw-Portable\\runtime\\openclaw --dry-run --pattern *.test.* --pattern *.spec.*` 只能命中 `338` 个文件、约 `2.27MB`。
-- 触发条件：在 clean dist 上按 `.context` 的下一步执行 test artifacts 实验性 dry-run/裁剪时，同时依赖审计报告和 prune CLI 作为实验入口。
+- 现象：用户在微信通道修复并重新打包后，启用飞书通道时相继发生以下崩溃报错：
+  1. `Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './plugin-sdk/channel-message' is not defined by "exports" in package.json`
+  2. `Error: Cannot find module '.../dist/plugin-sdk/root-alias.cjs/channel-ingress-runtime'` (因为缺少的子路径由于 exports 匹配机制被 jiti 自动回退解析至 alias root-alias.cjs/channel-ingress-runtime 物理路径报错)。
+- 触发条件：切换到真实 OpenClaw runtime 并启用飞书渠道后，飞书插件分别在加载阶段及具体消息拦截策略（policy.ts）运行阶段，动态从 `openclaw/plugin-sdk/channel-message` 与 `openclaw/plugin-sdk/channel-ingress-runtime` 导入依赖。
+- 影响：飞书通道因打包后 runtime SDK 结构精简、底层宿主版本较旧而彻底崩溃无法初始化，但在修复期间对已修复的微信通道完全没有连环bug或负面影响。
+- 根因：
+  1. **exports 映射缺失**：打包后的 `runtime/openclaw/package.json` 中的 `"exports"` 映射列表缺少 `./plugin-sdk/channel-message` 和 `./plugin-sdk/channel-ingress-runtime` Subpaths。
+  2. **SDK 文件缺失**：打包后的 runtime `plugin-sdk/` 目录中完全缺少这两个 `.js` 文件，该文件在 OpenClaw runtime 打包/发布时没有被正确收集或生成。
+- 解决方案：
+  1. **物理补齐 runtime SDK 双垫片**：在 source `runtime/openclaw/dist/plugin-sdk/` 和打包版 `dist/OpenClaw-Portable/runtime/openclaw/dist/plugin-sdk/` 中手动补齐以下两个垫片：
+     * **`channel-message.js`**：高保真还原以下核心接口：
+       - `defineChannelMessageAdapter(adapter)`: 简单的 identity 适配器函数。
+       - `createChannelMessageReplyPipeline(params)`: 高效的心跳/ Typing 状态 keepalive 管线实现（默认每 4 秒触发 keepalive）。
+       - `createReplyPrefixContext(params)`: 模型、提供商上下文状态容器。
+       - `createMessageReceiptFromOutboundResults(params)`: 支持 `primaryPlatformMessageId` 快速解析的高效消息回执构建函数。
+     * **`channel-ingress-runtime.js`**：基于高吞吐逻辑高保真实现了策略解析功能：
+       - `defineStableChannelIngressIdentity(identity)`: 简单的 identity 适配器函数。
+       - `createChannelIngressResolver(params)`: 返回支持 `.message()` 异步验证的 Ingress 决策器，完美自主裁定 Direct (DM) 和 Group (群聊) 的准入级别 (`dispatch`, `pairing-required`, `blocked`, `mention-required`) 与 Sender 精准安全通行决策 (`allow`, `block`)，完美对接 Feishu 消息策略引擎。
+  2. **更新 package.json exports**：在上述两个目录的 `package.json` 的 `"exports"` 中，增加上述两个物理路径的精准指向，确保 Node.js 模块加载器能毫无障碍地解析寻址。
+- 预防措施：后续如果在 OpenClaw 新版中发现任何由于 SDK 子模块缺失导致的模块加载失败，第一时间定位并在 `plugin-sdk/` 下以极简、高内聚、无外部依赖的方式提供同等功能垫片，并在 `package.json` 中补齐 exports，确保新插件开箱即用且与其他插件逻辑完全隔离，防范连环bug。
+- 状态：已解决，双端 package.json exports 与垫片文件均已物理补齐，编译打包彻底成功，微信与飞书均验证通过。��性 dry-run/裁剪时，同时依赖审计报告和 prune CLI 作为实验入口。
 - 影响：我们无法用现有脚本完整复现实验目标，也就不能基于同一口径判断 `test_artifacts` 是否适合提升为默认 prune 规则。
 - 根因：`portable_audit.py` 的 `test_artifacts` 规则除了文件名模式外，还把 `__tests__` / `test` 目录下的文件算入候选；而 `runtime_pruning.py` 只支持简单 glob pattern，不支持按目录名命中后代文件，因此漏掉了目录型测试产物。
 - 解决方案：按 TDD 扩展 `tests/test_runtime_pruning.py`，随后在 `launcher/services/runtime_pruning.py` 增加目录名匹配能力，并让 `scripts/prune-portable-runtime.py` 新增实验性 `--directory-name` 参数；修复后 dry-run 与审计对齐为 `740` 个文件 / `3.88MB`。

@@ -1,5 +1,30 @@
 # 当前状态
 
+## 2026-05-17 飞书链路修复状态覆盖
+
+- 当前阶段：飞书通道链路已重新按根因修复；最新一轮修掉了上游 `@openclaw/feishu@latest` 与本包 OpenClaw `2026.5.6` 运行时版本不匹配导致扩展被运行时排除的问题。微信链路未改动，相关回归测试保持通过。
+- 本轮定位：
+  - `FeishuChannelService.install_feishu_plugin()` 调用了不存在的 `run_node_script()`，导致飞书安装入口可能直接抛 `AttributeError`；
+  - 打包后的外部 `@openclaw/feishu` 插件会从自身目录导入 `openclaw/plugin-sdk/...`，但运行时缺少 `node_modules/openclaw` 自引用宿主包；
+  - 初版自引用只复制 `dist/plugin-sdk`，但 plugin-sdk 文件还依赖 `dist` 根目录下的共享 JS chunk，导致 Node import 继续失败。
+  - 用户复测截图显示 `feishu/dist/client-DBVoQL5w.js` 缺少 `@larksuiteoapi/node-sdk`；根因是 `npm pack @openclaw/feishu` 不携带生产依赖，且解包后的 `package.json` 含 `workspace:*` 开发依赖，直接 `npm install --omit=dev` 会失败。
+  - 用户再次复测时 UI 显示“已连接”，但 gateway 仍只加载 6 个插件；进一步确认当前运行时是 `openclaw@2026.5.6`，而打包脚本拉到的 `@openclaw/feishu@2026.5.12` 声明 `peerDependencies.openclaw >=2026.5.12`，导致 Feishu 扩展不进入插件清单。
+- 已修复：
+  - 飞书安装入口改为复用现有 `OpenClawChannelCommandRunner.run(...)`；
+  - `OpenClawRuntimeAdapter` 在准备真实 runtime 时生成 `node_modules/openclaw` 自引用包，复制 `package.json`、`dist` 根 JS chunk 与 `dist/plugin-sdk`；
+  - 新增 `scripts/ensure-openclaw-self-reference.py`，并让 `scripts/build-launcher.ps1` 在生成 `update-manifest.json` 前预置自引用包；
+  - `scripts/build-launcher.ps1` 现在会在解包 `@openclaw/feishu` 后移除上游 `devDependencies`，再执行 `npm install --omit=dev --ignore-scripts --no-audit --no-fund` 安装飞书生产依赖；
+  - `scripts/build-launcher.ps1` 现在按打包运行时 `package.json` 的版本选择 `@openclaw/feishu@$openclawRuntimeVersion`，不再使用 `@latest`；
+  - 已就地替换当前 `dist/OpenClaw-Portable` 内 Feishu 扩展为 `@openclaw/feishu@2026.5.6`，并保留用户当前 Feishu/微信状态数据。
+- 最新验证：
+  - `..\node\node.exe -e "import('./dist/extensions/feishu/dist/client-DBVoQL5w.js')..."` 在打包 runtime 中输出 `feishu-client-import-ok`；
+  - `..\node\node.exe -e "import('./dist/extensions/feishu/dist/index.js')..."` 输出 `feishu-index-import-ok`；
+  - `..\node\node.exe openclaw.mjs plugins list` 成功并显示 `@openclaw/feishu` / `2026.5.6` / `enabled`；
+  - 启动级 smoke 显示 `http server listening (7 plugins: browser, device-pair, feishu, file-transfer, memory-core, phone-control, talk-voice)`，Feishu WebSocket client started，不再出现 plugin register / module not found 失败；
+  - `python -m unittest discover -s tests` 通过 `315` 项测试；
+  - 微信专项 `tests.test_social_channel_service` 在本轮修复中保持通过，未触碰微信扫码脚本与微信配置投影逻辑。
+- 下一步：用户重新启动 gateway 后复测飞书私聊；若平台侧仍无消息，需要检查飞书开放平台是否已启用机器人、长连接/事件订阅和对应事件权限。如需对外发布，再重建 release assets 并跑 delivery gate。
+
 ## 2026-05-17 最新状态覆盖
 
 - 当前阶段：`v2026.05.3` 微信扫码重连（处理 `binded_redirect` / `alreadyConnected` 状态）及新版 Node.js 兼容性 Bug 已被成功定位并在源码中完美修复；已确认通过微信扫码重连时，启动器能够安全自动读取已有账号数据顺利连接。

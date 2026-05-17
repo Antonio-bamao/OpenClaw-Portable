@@ -135,9 +135,16 @@ Copy-DirectoryRobust (Join-Path $root "state\\provider-templates") (Join-Path $p
 Write-Host "Downloading @openclaw/feishu plugin for portable bundle..."
 $feishuExtDir = Join-Path $portableDist "runtime\\openclaw\\dist\\extensions\\feishu"
 New-Item -ItemType Directory -Force -Path $feishuExtDir | Out-Null
+$openclawRuntimeManifestPath = Join-Path $portableDist "runtime\\openclaw\\package.json"
+$openclawRuntimeManifest = Get-Content -LiteralPath $openclawRuntimeManifestPath -Raw | ConvertFrom-Json
+$openclawRuntimeVersion = [string]$openclawRuntimeManifest.version
+if (-not $openclawRuntimeVersion) {
+  throw "Packaged OpenClaw runtime package.json is missing a version; cannot select compatible @openclaw/feishu package."
+}
+$feishuPackageSpec = "@openclaw/feishu@$openclawRuntimeVersion"
 $previousLocation = Get-Location
 Set-Location $feishuExtDir
-Invoke-Native "npm" @("pack", "@openclaw/feishu@latest")
+Invoke-Native "npm" @("pack", $feishuPackageSpec)
 $tarball = Get-ChildItem -Filter "*.tgz" | Select-Object -First 1
 if ($tarball) {
     tar -xf $tarball.Name
@@ -145,9 +152,15 @@ if ($tarball) {
     Remove-Item "package" -Recurse -Force
     Remove-Item $tarball.Name -Force
 }
+$feishuManifestPath = Join-Path $feishuExtDir "package.json"
+$feishuManifest = Get-Content -LiteralPath $feishuManifestPath -Raw | ConvertFrom-Json
+$feishuManifest.PSObject.Properties.Remove("devDependencies")
+$feishuManifest | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $feishuManifestPath -Encoding UTF8
+Invoke-Native "npm" @("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")
 Set-Location $previousLocation
 
 Invoke-Native $PythonExe @((Join-Path $root "scripts\\prune-portable-runtime.py"), "--runtime-path", (Join-Path $portableDist "runtime\\openclaw"))
 Copy-Item (Join-Path $root "runtime\\openclaw\\package.json") (Join-Path $portableDist "runtime\\openclaw\\package.json") -Force
 Assert-OpenClawRuntimeManifest (Join-Path $portableDist "runtime\\openclaw")
+Invoke-Native $PythonExe @((Join-Path $root "scripts\\ensure-openclaw-self-reference.py"), "--runtime-path", (Join-Path $portableDist "runtime\\openclaw"))
 Invoke-Native $PythonExe @((Join-Path $root "scripts\\generate-update-manifest.py"), "--package-root", $portableDist)

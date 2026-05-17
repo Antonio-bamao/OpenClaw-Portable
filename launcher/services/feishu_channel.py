@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 
 from launcher.core.paths import PortablePaths
 from launcher.models import FeishuChannelState
-from launcher.services.social_channels import OpenClawChannelCommandRunner
+from launcher.services.social_channels import ChannelCommandResult, OpenClawChannelCommandRunner
 
 
 @dataclass(frozen=True)
@@ -174,15 +174,17 @@ class FeishuChannelService:
     def feishu_install_commands(self) -> list[list[str]]:
         return [["plugins", "install", "@openclaw/feishu@latest"]]
 
-    def install_feishu_plugin(self) -> None:
+    def install_feishu_plugin(self) -> ChannelCommandResult:
         if not self.command_runner:
-            return
+            return ChannelCommandResult(ok=False, error_message="OpenClaw command runner is not configured.")
         commands = self.feishu_install_commands()
         if not commands:
-            return
+            return ChannelCommandResult(ok=True)
         self.save_status(replace(self.load_status(), state="installing", last_error=""))
+        last_result = ChannelCommandResult(ok=True)
         for command in commands:
-            result = self.command_runner.run_node_script(command)
+            result = self.command_runner.run(command)
+            last_result = result
             if not result.ok:
                 self.save_status(
                     replace(
@@ -191,8 +193,9 @@ class FeishuChannelService:
                         last_error=f"安装飞书插件失败: {result.error_message or result.output}",
                     )
                 )
-                return
+                return result
         self.save_status(replace(self.load_status(), state="unconfigured", last_error=""))
+        return last_result
 
     def refresh_runtime_status(
         self,

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from launcher.core.paths import PortablePaths
+from launcher.services.social_channels import ChannelCommandResult
 from launcher.services.feishu_channel import FeishuChannelConfig, FeishuChannelService, FeishuChannelStatus
 
 
@@ -22,6 +23,16 @@ def mark_feishu_bundled_plugin_available(paths: PortablePaths) -> None:
     plugin_manifest = paths.runtime_dir / "openclaw" / "dist" / "extensions" / "feishu" / "openclaw.plugin.json"
     plugin_manifest.parent.mkdir(parents=True, exist_ok=True)
     plugin_manifest.write_text('{"id":"feishu"}\n', encoding="utf-8")
+
+
+class FakeFeishuCommandRunner:
+    def __init__(self, result: ChannelCommandResult | None = None) -> None:
+        self.result = result or ChannelCommandResult(ok=True, output="installed")
+        self.calls: list[list[str]] = []
+
+    def run(self, args: list[str], timeout_seconds: int = 180) -> ChannelCommandResult:
+        self.calls.append(args)
+        return self.result
 
 
 class FeishuChannelServiceTests(unittest.TestCase):
@@ -240,6 +251,21 @@ class FeishuChannelServiceTests(unittest.TestCase):
 
             self.assertEqual(projected.runtime_env, {})
             self.assertEqual(projected.runtime_config_patch, {"channels": {"feishu": None}})
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_install_feishu_plugin_uses_openclaw_command_runner(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            runner = FakeFeishuCommandRunner()
+            service = FeishuChannelService(paths, command_runner=runner)
+
+            service.install_feishu_plugin()
+
+            self.assertEqual(runner.calls, [["plugins", "install", "@openclaw/feishu@latest"]])
+            self.assertEqual(service.load_status().state, "unconfigured")
+            self.assertEqual(service.load_status().last_error, "")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

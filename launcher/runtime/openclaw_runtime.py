@@ -385,6 +385,7 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
         extensions_dir = openclaw_dir / "dist" / "extensions"
         if not extensions_dir.exists():
             return
+        self._ensure_openclaw_self_reference(openclaw_dir)
         target_node_modules_dir = openclaw_dir / "node_modules"
         visited_packages: set[str] = set()
         for extension_dir in extensions_dir.iterdir():
@@ -398,6 +399,29 @@ class OpenClawRuntimeAdapter(RuntimeAdapter):
                     target_node_modules_dir=target_node_modules_dir,
                     visited_packages=visited_packages,
                 )
+
+    def _ensure_openclaw_self_reference(self, openclaw_dir: Path) -> None:
+        package_json = openclaw_dir / "package.json"
+        plugin_sdk_dir = openclaw_dir / "dist" / "plugin-sdk"
+        if not package_json.exists() or not plugin_sdk_dir.exists():
+            return
+
+        shim_root = openclaw_dir / "node_modules" / "openclaw"
+        shim_dist_dir = shim_root / "dist"
+        shim_root.mkdir(parents=True, exist_ok=True)
+        shim_dist_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_long_path(package_json), _long_path(shim_root / "package.json"))
+
+        index_js = openclaw_dir / "dist" / "index.js"
+        dist_dir = openclaw_dir / "dist"
+        for dist_file in dist_dir.iterdir():
+            if dist_file.is_file():
+                shutil.copy2(_long_path(dist_file), _long_path(shim_dist_dir / dist_file.name))
+
+        shim_plugin_sdk_dir = shim_dist_dir / "plugin-sdk"
+        if shim_plugin_sdk_dir.exists():
+            shutil.rmtree(_long_path(shim_plugin_sdk_dir), ignore_errors=True)
+        _copy_runtime_tree(plugin_sdk_dir, shim_plugin_sdk_dir)
 
     def _bridge_runtime_dependency_tree(
         self,

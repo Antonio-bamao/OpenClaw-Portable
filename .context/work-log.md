@@ -700,3 +700,24 @@
 - 下一步：引导用户重新启动打包版并开启飞书与微信进行扫码连接复测，享受完美的无痛双开功能。
 
 
+
+## 2026-05-17 / Step 30｜修复飞书通道链路并保护微信链路不回归
+- 目标：修复飞书通道链路并保护微信链路不回归
+- 动作：按 .context 复核最新日志后，定位飞书安装调用不存在的 run_node_script、外部飞书插件无法解析 openclaw 自引用包、以及 self-reference 缺少 dist 根 chunk 三个根因；用 TDD 补充飞书安装、OpenClaw self-reference、构建脚本回归测试；修复 FeishuChannelService 安装入口、OpenClawRuntimeAdapter self-reference 生成、build-launcher 打包步骤，并重建 dist/OpenClaw-Portable。
+- 结果：当前打包版已包含 @openclaw/feishu@2026.5.12、node_modules/openclaw 自引用宿主包、完整 plugin-sdk 与 dist 根 chunk；飞书插件 channel 模块可在打包运行时中直接 import。微信相关 social channel 逻辑未改动。
+- 验证：RED/GREEN: test_install_feishu_plugin_uses_openclaw_command_runner、test_prepare_creates_openclaw_self_reference_for_external_extensions、test_build_launcher_prepares_openclaw_self_reference_before_manifest；最终验证：node import feishu-channel-import-ok；python scripts/audit-portable-package.py --package-root dist/OpenClaw-Portable --top 5 无 warnings；python -m unittest discover -s tests 通过 314 项。
+- 下一步：让用户用新的 dist/OpenClaw-Portable/OpenClawLauncher.exe 复测飞书启用与真实私聊；若要对外发版，再运行 release-assets 构建与 delivery gate。
+
+## 2026-05-17 / Step 31｜补齐飞书插件生产依赖，修复 @larksuiteoapi/node-sdk 缺失报错
+- 目标：补齐飞书插件生产依赖，修复 @larksuiteoapi/node-sdk 缺失报错
+- 动作：根据用户截图复现到 feishu/dist/client-DBVoQL5w.js 入口，确认 npm pack 只携带 @openclaw/feishu 插件文件而不携带 dependencies；按 TDD 修改 build-launcher.ps1，在解包飞书插件后移除 devDependencies 中的 workspace:* 开发依赖，再执行 npm install --omit=dev --ignore-scripts --no-audit --no-fund 安装生产依赖，并重建 dist/OpenClaw-Portable。
+- 结果：当前打包版 dist/OpenClaw-Portable/runtime/openclaw/dist/extensions/feishu/node_modules 已包含 @larksuiteoapi/node-sdk、zod、typebox 等飞书生产依赖；用户截图中的 Cannot find module '@larksuiteoapi/node-sdk' 对应入口已通过导入验证。
+- 验证：Test-Path 确认 @larksuiteoapi/node-sdk、zod、typebox 均存在；node import('./dist/extensions/feishu/dist/client-DBVoQL5w.js') 输出 feishu-client-import-ok；node import('./dist/extensions/feishu/dist/channel-plugin-api.js') 输出 feishu-channel-plugin-import-ok；node openclaw.mjs plugins list 成功；python scripts/audit-portable-package.py --package-root dist/OpenClaw-Portable --top 5 无 warnings；python -m unittest discover -s tests 通过 315 项。
+- 下一步：用户重新打开新的 dist/OpenClaw-Portable/OpenClawLauncher.exe 复测飞书启动；如还有下一层真实凭据或平台侧错误，再按新的日志继续定位。
+
+## 2026-05-17 / Step 32｜修复飞书插件与 OpenClaw 宿主版本不匹配
+- 目标：解释并修复用户复测时 UI 显示“已连接”但 gateway 仍未加载 Feishu 的问题，避免继续把飞书平台操作误判成用户错误。
+- 动作：确认用户 App ID / App Secret 已保存到本地安全库，真实 runtime 配置 `state/runtime/openclaw.json` 已包含 `channels.feishu`；随后发现插件清单里没有 Feishu，根因是打包脚本使用 `@openclaw/feishu@latest` 拉到 `2026.5.12`，而当前运行时是 `openclaw@2026.5.6`，上游插件声明要求 `openclaw >=2026.5.12`。按 TDD 修改 `scripts/build-launcher.ps1`，改为读取打包 runtime 的 `package.json` 版本并安装 `@openclaw/feishu@$openclawRuntimeVersion`；同时就地把当前 dist 内 Feishu 扩展替换为兼容的 `@openclaw/feishu@2026.5.6`，不触碰微信链路目录。
+- 结果：当前打包版插件清单已重新显示 `@openclaw/feishu`，版本 `2026.5.6`，状态 enabled；`channels status --json` 在 gateway 未运行时也能看到 `configuredChannels=["feishu"]`；启动级 smoke 显示 gateway 加载 7 个插件且包含 feishu，Feishu WebSocket client started。
+- 验证：`npm view @openclaw/feishu versions --json` 确认存在 `2026.5.6`；`python -m unittest tests.test_build_launcher_script.BuildLauncherScriptTests.test_build_launcher_installs_feishu_production_dependencies` 先 RED 后 GREEN；`python -m unittest discover -s tests` 通过 315 项；`node import('./dist/extensions/feishu/dist/index.js')` 输出 `feishu-index-import-ok`；`openclaw.mjs plugins list` 显示 `@openclaw/feishu 2026.5.6 enabled`；启动级 smoke 显示 `http server listening (7 plugins: browser, device-pair, feishu, file-transfer, memory-core, phone-control, talk-voice)`。
+- 下一步：用户需要重启/启动 gateway 后再测飞书私聊；如果仍收不到消息，下一层应检查飞书开放平台是否启用机器人、长连接/事件订阅与对应消息事件权限。

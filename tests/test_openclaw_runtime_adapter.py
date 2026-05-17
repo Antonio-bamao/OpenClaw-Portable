@@ -442,6 +442,51 @@ class OpenClawRuntimeAdapterTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_prepare_creates_openclaw_self_reference_for_external_extensions(self) -> None:
+        temp_dir = make_workspace_temp_dir()
+        try:
+            paths = PortablePaths.for_root(temp_dir / "OpenClaw-Portable", temp_base=temp_dir / "system-temp")
+            source_runtime = paths.runtime_dir / "openclaw"
+            plugin_sdk = source_runtime / "dist" / "plugin-sdk"
+            plugin_sdk.mkdir(parents=True, exist_ok=True)
+            (source_runtime / "openclaw.mjs").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            (source_runtime / "package.json").write_text(
+                json.dumps(
+                    {
+                        "name": "openclaw",
+                        "type": "module",
+                        "exports": {
+                            ".": "./dist/index.js",
+                            "./plugin-sdk/string-coerce-runtime": {
+                                "default": "./dist/plugin-sdk/string-coerce-runtime.js"
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (source_runtime / "dist" / "index.js").write_text("export const host = true;\n", encoding="utf-8")
+            (source_runtime / "dist" / "string-coerce-Bje8XVt9.js").write_text(
+                "export const normalizeLowercaseStringOrEmpty = (value) => String(value ?? '').trim().toLowerCase();\n",
+                encoding="utf-8",
+            )
+            (plugin_sdk / "string-coerce-runtime.js").write_text(
+                "export { normalizeLowercaseStringOrEmpty } from '../string-coerce-Bje8XVt9.js';\n",
+                encoding="utf-8",
+            )
+            (source_runtime / "dist" / "extensions" / "feishu").mkdir(parents=True, exist_ok=True)
+
+            adapter = OpenClawRuntimeAdapter()
+            adapter.prepare(make_config(reserve_free_port()), paths)
+
+            shim_root = source_runtime / "node_modules" / "openclaw"
+            self.assertTrue((shim_root / "package.json").exists())
+            self.assertTrue((shim_root / "dist" / "index.js").exists())
+            self.assertTrue((shim_root / "dist" / "string-coerce-Bje8XVt9.js").exists())
+            self.assertTrue((shim_root / "dist" / "plugin-sdk" / "string-coerce-runtime.js").exists())
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     @unittest.skipUnless(os.name == "nt", "Windows long-path behavior")
     def test_prepare_bridges_long_extension_runtime_dependency_paths(self) -> None:
         temp_dir = make_workspace_temp_dir()

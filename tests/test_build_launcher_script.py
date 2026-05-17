@@ -33,6 +33,31 @@ class BuildLauncherScriptTests(unittest.TestCase):
         self.assertIn('"./cli-entry"', content)
         self.assertIn('runtime\\\\openclaw\\\\package.json', content)
 
+    def test_build_launcher_prepares_openclaw_self_reference_before_manifest(self) -> None:
+        script = Path("scripts") / "build-launcher.ps1"
+
+        content = script.read_text(encoding="utf-8")
+
+        self.assertIn("ensure-openclaw-self-reference.py", content)
+        self.assertLess(
+            content.index("ensure-openclaw-self-reference.py"),
+            content.index("generate-update-manifest.py"),
+        )
+
+    def test_build_launcher_installs_feishu_production_dependencies(self) -> None:
+        script = Path("scripts") / "build-launcher.ps1"
+
+        content = script.read_text(encoding="utf-8")
+
+        self.assertIn("$feishuPackageSpec = \"@openclaw/feishu@$openclawRuntimeVersion\"", content)
+        self.assertNotIn('"@openclaw/feishu@latest"', content)
+        self.assertIn('PSObject.Properties.Remove("devDependencies")', content)
+        self.assertIn('Invoke-Native "npm" @("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")', content)
+        self.assertLess(
+            content.index('Invoke-Native "npm" @("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")'),
+            content.index("prune-portable-runtime.py"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
