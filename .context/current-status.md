@@ -1,5 +1,20 @@
 # 当前状态
 
+## 2026-05-17 v2026.05.4 GitHub Release 发布状态
+
+- 当前阶段：`v2026.05.4` 已完成源码提交、tag 推送、GitHub Release 创建与资产上传；`latest/download/update.json` 已指向 `v2026.05.4` 并返回 200。
+- 发布内容：本版包含飞书 / Lark 私聊链路修复、飞书插件生产依赖补齐、飞书插件与宿主 OpenClaw `2026.5.6` 版本对齐、首次私聊 pairing 流程说明与记录，同时保留微信扫码重连修复，不改动微信链路。
+- 已上传资产：
+  - `OpenClaw-Portable-v2026.05.4.zip`：`184480474` bytes，GitHub Release 下载返回 200；
+  - `update.json`：`311` bytes，GitHub Release 下载返回 200；
+  - 自动更新入口 `https://github.com/Antonio-bamao/OpenClaw-Portable/releases/latest/download/update.json` 跳转到 `v2026.05.4/update.json` 并返回 200。
+- 最新验证：
+  - `python -m unittest discover -s tests` 通过 `315` 项测试；
+  - `python scripts\audit-portable-package.py --package-root dist\OpenClaw-Portable --top 5` 无 warnings；
+  - `python scripts\verify-delivery-flow.py --package-root dist\OpenClaw-Portable --release-dir dist\release --cold-runs 1 --restart-runs 1 --timeout-seconds 90 --output tmp\delivery-flow-gate-v2026.05.4.json` 本地可验证项通过，状态仍为 `pending`，仅剩外部平台 / 实机 / 安全信誉类证据；
+  - zip 内确认包含 `runtime/openclaw/dist/extensions/feishu/dist/index.js`、`runtime/openclaw/dist/extensions/feishu/node_modules/@larksuiteoapi/node-sdk/package.json` 与 Feishu 插件 `package.json`。
+- 发布备注：本机没有 `gh` CLI；Release 通过 GitHub API 和 Git Credential Manager 创建，资产上传时 PowerShell 大文件上传曾无进度卡住，已改用 `curl.exe` 完成上传，未打印 token。
+
 ## 2026-05-17 飞书链路修复状态覆盖
 
 - 当前阶段：用户已确认飞书私聊链路可用；首次私聊出现的 `access not configured / Pairing code` 已确认为正常配对保护，不是报错，并已用 `openclaw pairing approve feishu 8EW8K8KY` 批准当前 Feishu 用户。微信链路未改动，相关回归测试保持通过。

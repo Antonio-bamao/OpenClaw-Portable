@@ -728,3 +728,11 @@
 - 结果：用户确认飞书私聊可用；当前记录明确说明“填 App ID / Secret 是正确操作”“密钥空字段是本地安全库托管”“Pairing code 是正常授权流程”；微信链路保持原有修复，不在飞书修复中被修改。
 - 验证：`openclaw pairing approve feishu 8EW8K8KY` 输出 `Approved feishu sender ou_f424db1cc5f594660863cad310150824`，并写入 `state/runtime/openclaw.json` 备份与新配置；此前全量 `python -m unittest discover -s tests` 已通过 315 项，飞书启动 smoke 已显示 `7 plugins` 且包含 `feishu`。
 - 下一步：如后续重新打包/发布，需要确保 release assets 使用已修复的 `scripts/build-launcher.ps1`，并在发布前复跑飞书插件版本、生产依赖、gateway `7 plugins` 和微信扫码重连回归。
+
+## 2026-05-17 / Step 34｜发布 v2026.05.4 并验证 GitHub Release 更新入口
+
+- 目标：把飞书 / Lark 私聊链路、飞书生产依赖、飞书插件宿主版本匹配与微信扫码重连保护收口为公开可下载的 `v2026.05.4` 便携版，并确认 GitHub Release 与自动更新入口都可访问。
+- 动作：将 `version.json` 升到 `v2026.05.4`，运行单元测试后重建 `dist\OpenClaw-Portable`、`dist\release\OpenClaw-Portable-v2026.05.4.zip` 与 `dist\release\update.json`；提交 `chore: prepare v2026.05.4 release`，创建并推送 tag `v2026.05.4`；在本机没有 `gh` CLI 的情况下，通过 GitHub API 与 Git Credential Manager 创建 Release 并上传资产。首次 PowerShell 大文件上传无进度卡住，随后改用 `curl.exe` 上传 zip，避免继续等待不可见进度。
+- 结果：GitHub Release `v2026.05.4` 已发布，`update.json` 与 `OpenClaw-Portable-v2026.05.4.zip` 均已上传；`latest/download/update.json` 已跳转到 `v2026.05.4/update.json`，自动更新入口恢复到最新版本。
+- 验证：`python -m unittest discover -s tests` 通过 `315` 项；package audit 无 warnings；delivery gate 本地可验证项通过；zip 内容确认包含 Feishu 插件入口和 `@larksuiteoapi/node-sdk` 生产依赖；GitHub Release 直链 `update.json` 返回 200 且大小 `311` bytes，zip 返回 200 且大小 `184480474` bytes，`latest/download/update.json` 返回 200。
+- 下一步：后续若继续发版，优先使用带进度的上传方式或安装 `gh` CLI，避免 PowerShell 上传大附件时看起来像“运行十几分钟没动”。
