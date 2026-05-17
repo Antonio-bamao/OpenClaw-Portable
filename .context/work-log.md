@@ -721,3 +721,10 @@
 - 结果：当前打包版插件清单已重新显示 `@openclaw/feishu`，版本 `2026.5.6`，状态 enabled；`channels status --json` 在 gateway 未运行时也能看到 `configuredChannels=["feishu"]`；启动级 smoke 显示 gateway 加载 7 个插件且包含 feishu，Feishu WebSocket client started。
 - 验证：`npm view @openclaw/feishu versions --json` 确认存在 `2026.5.6`；`python -m unittest tests.test_build_launcher_script.BuildLauncherScriptTests.test_build_launcher_installs_feishu_production_dependencies` 先 RED 后 GREEN；`python -m unittest discover -s tests` 通过 315 项；`node import('./dist/extensions/feishu/dist/index.js')` 输出 `feishu-index-import-ok`；`openclaw.mjs plugins list` 显示 `@openclaw/feishu 2026.5.6 enabled`；启动级 smoke 显示 `http server listening (7 plugins: browser, device-pair, feishu, file-transfer, memory-core, phone-control, talk-voice)`。
 - 下一步：用户需要重启/启动 gateway 后再测飞书私聊；如果仍收不到消息，下一层应检查飞书开放平台是否启用机器人、长连接/事件订阅与对应消息事件权限。
+
+## 2026-05-17 / Step 33｜飞书首次私聊配对完成并收口双链路更新日志
+- 目标：在用户确认“现在可以了”后，把微信与飞书两条链路的修复过程、最终状态和容易误判的安全配对提示完整记录下来，避免以后重复踩坑。
+- 动作：根据用户飞书聊天截图确认 `OpenClaw: access not configured` 不是链路报错，而是 Feishu 默认 `dmPolicy=pairing` 的首次私聊准入保护；执行 `openclaw pairing approve feishu 8EW8K8KY` 批准当前 Feishu sender，并把运行时配置写入 allow/owner 准入。随后更新 `.context/current-status.md`、`.context/work-log.md` 和 `.context/bug-log.md`，把微信扫码重连、飞书插件打包/依赖/版本匹配、以及飞书首次配对的结论拆开记录。
+- 结果：用户确认飞书私聊可用；当前记录明确说明“填 App ID / Secret 是正确操作”“密钥空字段是本地安全库托管”“Pairing code 是正常授权流程”；微信链路保持原有修复，不在飞书修复中被修改。
+- 验证：`openclaw pairing approve feishu 8EW8K8KY` 输出 `Approved feishu sender ou_f424db1cc5f594660863cad310150824`，并写入 `state/runtime/openclaw.json` 备份与新配置；此前全量 `python -m unittest discover -s tests` 已通过 315 项，飞书启动 smoke 已显示 `7 plugins` 且包含 `feishu`。
+- 下一步：如后续重新打包/发布，需要确保 release assets 使用已修复的 `scripts/build-launcher.ps1`，并在发布前复跑飞书插件版本、生产依赖、gateway `7 plugins` 和微信扫码重连回归。

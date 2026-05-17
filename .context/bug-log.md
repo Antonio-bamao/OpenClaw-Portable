@@ -339,3 +339,31 @@
 - 状态：已解决，双端 package.json exports 与垫片文件均已物理补齐，微信与飞书均验证通过。
 
 
+
+## 2026-05-17｜飞书插件打包链路连续失效：生产依赖缺失与宿主版本不匹配
+
+- 现象：用户修复后复测飞书，先后遇到 `Cannot find module '@larksuiteoapi/node-sdk'`、gateway 启动日志只显示 `6 plugins` 且没有 `feishu`，以及 UI 显示“已连接”但飞书私聊仍不可用。
+- 触发条件：使用打包版 `dist/OpenClaw-Portable`，启用 Feishu/Lark 私聊渠道并启动真实 OpenClaw gateway。
+- 影响：飞书私聊链路无法真正进入运行时；用户会误以为自己填错 App ID / App Secret，或者误以为“已连接”就应该能收发消息，排查成本很高。
+- 根因：
+  1. `npm pack @openclaw/feishu` 只携带插件文件，不携带生产依赖；解包后的 `package.json` 又含 `workspace:*` 开发依赖，导致直接生产安装会失败，最终缺少 `@larksuiteoapi/node-sdk`。
+  2. 打包脚本使用 `@openclaw/feishu@latest`，在当前环境拉到 `2026.5.12`；但便携包 OpenClaw runtime 是 `2026.5.6`，上游插件声明 `peerDependencies.openclaw >=2026.5.12`，导致 Feishu 扩展不进入插件清单。
+  3. 启动器状态刷新一度过于乐观，容易把“配置已保存 / gateway running”误读成“Feishu 通道已实际加载并可用”。
+- 解决方案：
+  1. `scripts/build-launcher.ps1` 在解包 Feishu 插件后移除 `devDependencies`，再执行 `npm install --omit=dev --ignore-scripts --no-audit --no-fund` 安装生产依赖。
+  2. `scripts/build-launcher.ps1` 改为读取打包 runtime 的 `package.json` 版本，安装 `@openclaw/feishu@$openclawRuntimeVersion`，禁止继续使用 `@latest`。
+  3. 当前 dist 已就地替换为兼容的 `@openclaw/feishu@2026.5.6`，并确认 `plugins list` 显示 `@openclaw/feishu 2026.5.6 enabled`。
+- 验证：`node import('./dist/extensions/feishu/dist/client-DBVoQL5w.js')`、`node import('./dist/extensions/feishu/dist/index.js')` 均成功；`openclaw.mjs plugins list` 显示 Feishu enabled；gateway 启动 smoke 显示 `http server listening (7 plugins: browser, device-pair, feishu, file-transfer, memory-core, phone-control, talk-voice)`；`python -m unittest discover -s tests` 通过 315 项。
+- 预防措施：以后外部插件不能用 `latest` 混入固定版本宿主；每次打包必须做三层检查：生产依赖存在、插件 peerDependency 与宿主匹配、真实 gateway 插件清单包含目标渠道。
+- 状态：Resolved locally；需要后续 release assets 重建后才能成为对外发布包的一部分。
+
+## 2026-05-17｜飞书首次私聊返回 Pairing code 被误判为报错
+
+- 现象：飞书私聊已能触达 OpenClaw 后，用户收到 `OpenClaw: access not configured`、`Your Feishu user id`、`Pairing code` 和 `openclaw pairing approve feishu ...`，担心链路仍然异常。
+- 触发条件：Feishu 通道已成功加载，用户首次用未授权的 Feishu 用户给 Bot 发私聊；默认策略为 `dmPolicy=pairing`。
+- 影响：这是安全准入流程，但 UI/文案容易让用户以为又出现了新错误；如果没有批准 pairing，Bot 会持续拒绝处理该 sender 的私聊。
+- 根因：Feishu 插件默认不允许任意私聊用户直接控制 Bot，需要本机 owner 用 pairing code 批准 sender。此前排查重点都在启动和插件加载，未提前向用户解释首次私聊准入语义。
+- 解决方案：执行 `openclaw pairing approve feishu 8EW8K8KY` 批准当前 sender，命令输出 `Approved feishu sender ou_f424db1cc5f594660863cad310150824`，并写入运行时配置。
+- 验证：用户随后确认“现在可以了”；本地命令输出确认 sender 已批准，`commands.ownerAllowFrom` 也完成配置。
+- 预防措施：后续飞书接入帮助和启动器状态文案应明确：首次收到 Pairing code 代表链路已通，需要 owner 批准一次；这不是 App ID / Secret 错误，也不是 gateway 崩溃。
+- 状态：Resolved locally；当前用户已批准，后续新 Feishu 用户仍需按相同流程授权。

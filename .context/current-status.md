@@ -2,13 +2,14 @@
 
 ## 2026-05-17 飞书链路修复状态覆盖
 
-- 当前阶段：飞书通道链路已重新按根因修复；最新一轮修掉了上游 `@openclaw/feishu@latest` 与本包 OpenClaw `2026.5.6` 运行时版本不匹配导致扩展被运行时排除的问题。微信链路未改动，相关回归测试保持通过。
+- 当前阶段：用户已确认飞书私聊链路可用；首次私聊出现的 `access not configured / Pairing code` 已确认为正常配对保护，不是报错，并已用 `openclaw pairing approve feishu 8EW8K8KY` 批准当前 Feishu 用户。微信链路未改动，相关回归测试保持通过。
 - 本轮定位：
   - `FeishuChannelService.install_feishu_plugin()` 调用了不存在的 `run_node_script()`，导致飞书安装入口可能直接抛 `AttributeError`；
   - 打包后的外部 `@openclaw/feishu` 插件会从自身目录导入 `openclaw/plugin-sdk/...`，但运行时缺少 `node_modules/openclaw` 自引用宿主包；
   - 初版自引用只复制 `dist/plugin-sdk`，但 plugin-sdk 文件还依赖 `dist` 根目录下的共享 JS chunk，导致 Node import 继续失败。
   - 用户复测截图显示 `feishu/dist/client-DBVoQL5w.js` 缺少 `@larksuiteoapi/node-sdk`；根因是 `npm pack @openclaw/feishu` 不携带生产依赖，且解包后的 `package.json` 含 `workspace:*` 开发依赖，直接 `npm install --omit=dev` 会失败。
   - 用户再次复测时 UI 显示“已连接”，但 gateway 仍只加载 6 个插件；进一步确认当前运行时是 `openclaw@2026.5.6`，而打包脚本拉到的 `@openclaw/feishu@2026.5.12` 声明 `peerDependencies.openclaw >=2026.5.12`，导致 Feishu 扩展不进入插件清单。
+  - 飞书真正接通后的第一条私聊返回 `OpenClaw: access not configured`，根因是 Feishu 插件默认 `dmPolicy=pairing`，需要 owner 批准 sender，属于安全设计而非链路失败。
 - 已修复：
   - 飞书安装入口改为复用现有 `OpenClawChannelCommandRunner.run(...)`；
   - `OpenClawRuntimeAdapter` 在准备真实 runtime 时生成 `node_modules/openclaw` 自引用包，复制 `package.json`、`dist` 根 JS chunk 与 `dist/plugin-sdk`；
@@ -21,9 +22,10 @@
   - `..\node\node.exe -e "import('./dist/extensions/feishu/dist/index.js')..."` 输出 `feishu-index-import-ok`；
   - `..\node\node.exe openclaw.mjs plugins list` 成功并显示 `@openclaw/feishu` / `2026.5.6` / `enabled`；
   - 启动级 smoke 显示 `http server listening (7 plugins: browser, device-pair, feishu, file-transfer, memory-core, phone-control, talk-voice)`，Feishu WebSocket client started，不再出现 plugin register / module not found 失败；
+  - `openclaw pairing approve feishu 8EW8K8KY` 输出 `Approved feishu sender ...`，运行时配置已写入 allow/owner 准入；
   - `python -m unittest discover -s tests` 通过 `315` 项测试；
   - 微信专项 `tests.test_social_channel_service` 在本轮修复中保持通过，未触碰微信扫码脚本与微信配置投影逻辑。
-- 下一步：用户重新启动 gateway 后复测飞书私聊；若平台侧仍无消息，需要检查飞书开放平台是否已启用机器人、长连接/事件订阅和对应事件权限。如需对外发布，再重建 release assets 并跑 delivery gate。
+- 下一步：继续保持飞书/微信双链路回归记录；如需对外发布，再重建 release assets 并跑 delivery gate。
 
 ## 2026-05-17 最新状态覆盖
 
