@@ -58,6 +58,19 @@ class BuildLauncherScriptTests(unittest.TestCase):
             content.index("prune-portable-runtime.py"),
         )
 
+    def test_build_launcher_installs_qqbot_production_dependencies(self) -> None:
+        script = Path("scripts") / "build-launcher.ps1"
+
+        content = script.read_text(encoding="utf-8")
+
+        self.assertIn("$qqbotPackageSpec = \"@openclaw/qqbot@$openclawRuntimeVersion\"", content)
+        self.assertNotIn('"@openclaw/qqbot@latest"', content)
+        self.assertIn('$qqbotExtDir = Join-Path $portableDist "runtime\\\\openclaw\\\\dist\\\\extensions\\\\qqbot"', content)
+        self.assertLess(
+            content.index("$qqbotPackageSpec"),
+            content.index("prune-portable-runtime.py"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

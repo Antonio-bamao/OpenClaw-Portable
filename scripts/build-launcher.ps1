@@ -159,6 +159,27 @@ $feishuManifest | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $feishuMan
 Invoke-Native "npm" @("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")
 Set-Location $previousLocation
 
+Write-Host "Downloading @openclaw/qqbot plugin for portable bundle..."
+$qqbotExtDir = Join-Path $portableDist "runtime\\openclaw\\dist\\extensions\\qqbot"
+New-Item -ItemType Directory -Force -Path $qqbotExtDir | Out-Null
+$qqbotPackageSpec = "@openclaw/qqbot@$openclawRuntimeVersion"
+$previousLocation = Get-Location
+Set-Location $qqbotExtDir
+Invoke-Native "npm" @("pack", $qqbotPackageSpec)
+$tarball = Get-ChildItem -Filter "*.tgz" | Select-Object -First 1
+if ($tarball) {
+    tar -xf $tarball.Name
+    Copy-Item "package\\*" -Destination "." -Recurse -Force
+    Remove-Item "package" -Recurse -Force
+    Remove-Item $tarball.Name -Force
+}
+$qqbotManifestPath = Join-Path $qqbotExtDir "package.json"
+$qqbotManifest = Get-Content -LiteralPath $qqbotManifestPath -Raw | ConvertFrom-Json
+$qqbotManifest.PSObject.Properties.Remove("devDependencies")
+$qqbotManifest | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $qqbotManifestPath -Encoding UTF8
+Invoke-Native "npm" @("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund")
+Set-Location $previousLocation
+
 Invoke-Native $PythonExe @((Join-Path $root "scripts\\prune-portable-runtime.py"), "--runtime-path", (Join-Path $portableDist "runtime\\openclaw"))
 Copy-Item (Join-Path $root "runtime\\openclaw\\package.json") (Join-Path $portableDist "runtime\\openclaw\\package.json") -Force
 Assert-OpenClawRuntimeManifest (Join-Path $portableDist "runtime\\openclaw")
